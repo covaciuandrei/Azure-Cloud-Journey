@@ -16,9 +16,8 @@ directly. AZ-104 is currently the only available exam.
 ## What is included
 
 - A React and TypeScript interface with a blue Coursebook layout.
-- The active original networking pilot: **8 modules, 21 lessons and 86 checkpoints**.
-- A gated full AZ-104 course framework for **5 domains, 21 modules, 59 lessons
-  and 82 official objectives**, pending authored content and independent review.
+- An original AZ-104 course covering **5 domains, 21 modules, 59 lessons,
+  241 checkpoints and all 82 listed official objectives**.
 - First-principles explanations, worked examples, diagrams, glossary entries
   and references to official documentation.
 - Interactive subnet, route and NSG teaching tools.
@@ -28,8 +27,10 @@ directly. AZ-104 is currently the only available exam.
 - Firebase rules and guarded administration/publication tooling.
 
 This is an independent study application, not an official Microsoft course.
-The learning pilot covers networking, not every AZ-104 domain, and does not
-guarantee exam coverage or perfect accuracy.
+The course maps the published objectives effective **April 17, 2026**, with
+source and editorial reviews dated **September 20, 2026**. The official bullets
+are illustrative, related topics can appear, and this course does not guarantee
+exam coverage, readiness or perfect accuracy.
 
 ## Run the public-source demo
 
@@ -45,7 +46,7 @@ npm run demo
 Open **http://127.0.0.1:5174/**.
 
 The explicit demo uses 10 original synthetic practice questions and the active
-authored course selected in `content/course.json` (currently networking). It needs no Firebase credentials, does not fetch the
+authored course selected in `content/course.json` (the full AZ-104 course). It needs no Firebase credentials, does not fetch the
 production question bank, and does not connect to production accounts. It is
 visibly marked as a demo. Sample questions are software demonstrations, not
 claimed exam questions. Forty-question exams and offline downloads are disabled
@@ -77,8 +78,8 @@ is separate from the public repository and is not redistributed here. Its
 historical copies remain available in the owner's existing environment for
 saved-session compatibility.
 
-`content/networking/` contains newly authored teaching material, not copied
-Microsoft lesson text. Official references are linked for verification.
+`content/networking/` and `content/az104/` contain original teaching material,
+not copied Microsoft lesson text. Official references are linked for verification.
 
 Do not copy a Firebase credential file, the private working directory or a full
 production content export into Git. The repository check examines tracked Git
@@ -93,13 +94,27 @@ staged changes before publication.
 
 ## Learning
 
-The networking pilot follows the eight modules of the
-[official AZ-104 networking path](https://learn.microsoft.com/en-us/training/paths/az-104-manage-virtual-networks/):
-virtual networks, network security groups, Azure DNS, peering, routing, Load
-Balancer, Application Gateway and Network Watcher.
+The course covers the complete published
+[AZ-104 objective outline](https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104):
 
-The lessons assume a PC-literate student who still needs networking foundations
-explained. A fictional school application connects the examples. Worked
+| Domain | Modules | Lessons | Checkpoints | Mapped objectives |
+| --- | ---: | ---: | ---: | ---: |
+| Identity and governance | 3 | 8 | 32 | 15 |
+| Storage | 3 | 9 | 36 | 17 |
+| Compute | 4 | 13 | 54 | 24 |
+| Networking | 8 | 21 | 87 | 13 |
+| Monitoring and recovery | 3 | 8 | 32 | 13 |
+
+The existing networking path is retained, including its foundational IP/DNS
+reasoning. New chapters cover identity and licensing, access and governance,
+storage security and recovery, ARM/Bicep, VMs, containers, App Service,
+monitoring, backup and Site Recovery. All 346 registered first-party reference
+URLs were checked, and domain reviewers independently examined the teaching,
+worked applications and every scored answer explanation. Source availability
+checks alone are not treated as factual approval.
+
+The lessons assume a PC-literate student who needs the underlying concepts
+explained before memorizing product settings. A fictional school application connects the examples. Worked
 examples explain both the action and its reason; checkpoints explain every
 answer choice.
 
@@ -107,18 +122,19 @@ The course includes a searchable overview, bookmarks, lesson continuation,
 module navigation and an on-page section index. Core/supporting labels describe
 teaching priority, not predicted exam-question frequency.
 
-When independently reviewed and activated, the full course adds ordered domain
-navigation, domain-specific practice links and inspectable objective-to-section
-and checkpoint evidence. The networking pilot does not claim to cover the
-full exam while it remains active.
+The overview groups all five domains, links their practice topics, and exposes
+objective-to-section and checkpoint evidence. Dated previews, retirement plans,
+SKU differences and conflicting upstream documentation are explicitly scoped.
 
 **Learning progress is device-only**, with separate guest and Firebase UID
 records. A Studied marker is self-reported reading, not a mastery rating.
 Checkpoint results are separate from practice-exam scores. Changed lesson
 revisions require renewed review without rewriting historical practice scores.
 Both course versions retain the `az104-networking-course:v1` browser namespace.
-Expanding the course does not change existing lesson IDs or revision hashes,
-so existing bookmarks, studied markers and checkpoint results survive activation.
+All existing lesson IDs are retained. Eighteen networking lesson revisions are
+unchanged, preserving their study/check results. Three networking lessons gained
+required configuration examples and therefore correctly require renewed review:
+private access, Bastion, and Layer 4 load balancing. Their bookmarks remain.
 
 Optional Azure labs are instructions only and have not been executed by the
 application. They describe prerequisites, possible costs, expected observations
@@ -198,11 +214,12 @@ download does not erase progress.
 
 ## Course authoring
 
-`content/course.json` is the tracked activation switch. Its initial value is
-`{"schemaVersion":1,"activeCourse":"networking"}`. Builds, demo exports and source
+`content/course.json` is the tracked activation switch. Its reviewed active value is
+`{"schemaVersion":1,"activeCourse":"az104"}`. Builds, demo exports and source
 checks use the active course; they do not substitute an incomplete course when
-publication fails. Missing planned AZ-104 files do not affect the networking
-build. Only the coordinator activates `"az104"` after review.
+publication fails. The `"networking"` value remains supported for legacy
+publication and compatibility tests. Full-course activation requires all module
+and metadata approvals, not just structurally valid content.
 
 Existing networking lessons remain under `content/networking/modules/`.
 New modules use the exact IDs, lesson order, source paths, official module URLs
