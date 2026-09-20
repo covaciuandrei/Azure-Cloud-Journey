@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { CleanReleaseIdSchema } from "./cleanBank.js";
+import { MAX_COURSE_BYTES } from "./courseCatalog.js";
 
 export const OFFLINE_PROTOCOL = "az104-offline-v1";
 export const OFFLINE_MANIFEST_URL = "/data/offline-manifest.json";
+export const OFFLINE_COURSE_MAX_BYTES = MAX_COURSE_BYTES;
+const courseUrl = /^\/courses\/c_[a-f0-9]{64}\/(?:networking|az104)\.json$/;
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const questionId = z.string().regex(/^q_[a-f0-9]{64}$/);
 export const OfflineFileSchema = z.object({
@@ -17,6 +20,9 @@ export const OfflineFileSchema = z.object({
   commentCount: z.number().int().positive().optional(),
 }).strict().superRefine((file, context) => {
   let expected: string | undefined;
+  if (courseUrl.test(file.url) && file.bytes > OFFLINE_COURSE_MAX_BYTES) {
+    context.addIssue({ code: "custom", message: "Course content exceeds the 4 MiB offline limit." });
+  }
   if (file.questionIds && (file.kind !== "image" || new Set(file.questionIds).size !== file.questionIds.length)) {
     context.addIssue({ code: "custom", message: "Only images may declare unique question owners." });
   }
@@ -30,7 +36,7 @@ export const OfflineFileSchema = z.object({
   } else if (!file.releaseId) {
     if (!file.part && !file.questionId && !file.commentCount &&
         (["/data/manifest.json", "/data/topics.json", "/data/learning.json", "/data/eligibility.json", "/data/course.json"].includes(file.url) ||
-          /^\/courses\/c_[a-f0-9]{64}\/networking\.json$/.test(file.url))) expected = file.url;
+          courseUrl.test(file.url))) expected = file.url;
   } else if (file.part === "catalog" && !file.questionId && !file.commentCount) {
     expected = `/content/${file.releaseId}/catalog.json`;
   } else if (file.questionId && file.part === "question" && !file.commentCount) {

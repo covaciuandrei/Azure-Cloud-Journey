@@ -2,7 +2,6 @@ import { useId, useState } from "react";
 import {
   chooseRoute, containsAddress, evaluateRules, subnetDetails, type DemoFlow, type DemoRoute, type DemoRule,
 } from "../../domain/networkingTools.js";
-import "./interactive.css";
 
 function SubnetExplorer() {
   const inputId = useId();

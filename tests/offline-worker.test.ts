@@ -48,7 +48,7 @@ interface Fixture {
   imageShas: string[];
 }
 
-function buildFixture(seed = "current"): Fixture {
+function buildFixture(seed = "current", courseId: "networking" | "az104" = "networking"): Fixture {
   const files = new Map<string, Buffer>();
   const manifestFiles: Array<Record<string, unknown>> = [];
   const releaseId = `r_${hex(`release-${seed}`)}`;
@@ -67,7 +67,7 @@ function buildFixture(seed = "current"): Fixture {
   addFile("/data/topics.json", Buffer.from(JSON.stringify({ version: seed })), { kind: "data" });
   addFile("/data/learning.json", Buffer.from(JSON.stringify({ releaseId })), { kind: "data" });
   addFile("/data/course.json", Buffer.from(JSON.stringify({ releaseId: `c_${hex(seed)}` })), { kind: "data" });
-  addFile(`/courses/c_${hex(seed)}/networking.json`, Buffer.from(JSON.stringify({ fixture: "networking-course", seed })), { kind: "data" });
+  addFile(`/courses/c_${hex(seed)}/${courseId}.json`, Buffer.from(JSON.stringify({ fixture: `${courseId}-course`, seed })), { kind: "data" });
   addFile(`/content/${releaseId}/catalog.json`, Buffer.from(JSON.stringify({ releaseId, questions: 604 })), {
     kind: "data", releaseId, part: "catalog",
   });
@@ -429,6 +429,102 @@ test("valid selection downloads the current release plus only the requested lega
   assert.ok(server.fetchLog.includes(`/courses/c_${hex("select")}/networking.json`));
   const lesson = await worker.fetchRequest(`/courses/c_${hex("select")}/networking.json`, { headers: { "X-AZ104-Offline": "1" } });
   assert.equal(lesson.response?.status, 200);
+});
+
+test("legacy networking and full AZ-104 course paths serve verified cache-only bytes across worker restarts", async () => {
+  for (const courseId of ["networking", "az104"] as const) {
+    const seed = `course-${courseId}`;
+    const fixture = buildFixture(seed, courseId);
+    const coursePath = `/courses/c_${hex(seed)}/${courseId}.json`;
+    const server = createServer();
+    const storage = createCacheStorage();
+    const fetcher = createFakeFetch(fixture.files, server);
+    let networkCalls = 0;
+    const countedFetch = (input: unknown) => { networkCalls++; return fetcher(input); };
+    const worker = createWorker(storage, countedFetch);
+    await (await worker.download(seed)).event.wait;
+    assert.equal((await worker.status()).ready, true);
+    const callsAfterDownload = networkCalls;
+    const restarted = createWorker(storage, countedFetch);
+    for (const offline of [false, true]) {
+      server.offline = offline;
+      for (const path of [coursePath, "/data/course.json"]) {
+        const response = (await restarted.fetchRequest(path, { headers: { "X-AZ104-Offline": "1" } })).response;
+        assert.equal(response?.status, 200);
+        assert.deepEqual(await bytesOf(response), fixture.files.get(path));
+      }
+      for (const path of [
+        `/courses/c_${hex("missing-course")}/${courseId}.json`,
+        `/courses/c_${hex(seed)}/foreign.json`,
+        `/courses/c_${hex(seed)}/${courseId === "az104" ? "networking" : "az104"}.json`,
+      ]) {
+        const response = (await restarted.fetchRequest(path, { headers: { "X-AZ104-Offline": "1" } })).response;
+        assert.equal(response?.status, 503);
+      }
+      assert.equal(networkCalls, callsAfterDownload, "cache-only hits and misses must never reach the network");
+    }
+  }
+});
+
+test("course manifests reject foreign filenames, traversal and over-4-MiB declarations before downloading files", async () => {
+  const fixture = buildFixture("course-allowlist");
+  const root = `/courses/c_${hex("course-allowlist")}`;
+  const invalid = [
+    ...[
+      `${root}/foreign.json`, `${root}/az104.json.bak`, `${root}/../az104.json`,
+      `${root}/nested/az104.json`, `${root}/./az104.json`, `${root}/%2e%2e/az104.json`,
+      `${root}\\az104.json`, `${root}/az104.json?download=1`, `${root}/az104.json#course`,
+      `https://example.test${root}/az104.json`, `//example.test${root}/az104.json`,
+      "/courses/c_bad/az104.json",
+    ].map((url) => ({ url, bytes: 10 })),
+    ...["networking", "az104"].map((name) => ({ url: `${root}/${name}.json`, bytes: 4 * 1024 * 1024 + 1 })),
+  ];
+  for (const entry of invalid) {
+    const files = new Map(fixture.files);
+    files.set(MANIFEST_PATH, Buffer.from(JSON.stringify({
+      ...fixture.manifest,
+      files: [...fixture.manifest.files, { kind: "data", sha256: hex("rejected-course"), ...entry }],
+    })));
+    const server = createServer();
+    const worker = createWorker(createCacheStorage(), createFakeFetch(files, server));
+    const { event, client } = await worker.download("reject-course");
+    await event.wait;
+    assert.match((client.received[0] as { error: string }).error, /unsafe|allowed|limit/, entry.url);
+    assert.equal((await worker.status()).ready, false);
+    assert.deepEqual(server.fetchLog, [], "invalid descriptors must not start any file downloads");
+  }
+});
+
+test("both course downloads stop oversized response streams at the declared 4-MiB bound", async () => {
+  for (const courseId of ["networking", "az104"] as const) {
+    const fixture = buildFixture(`course-stream-${courseId}`, courseId);
+    const coursePath = fixture.manifest.files.find((file) => String(file.url).startsWith("/courses/"))!.url as string;
+    fixture.manifest.files.find((file) => file.url === coursePath)!.bytes = 4 * 1024 * 1024;
+    fixture.files.set(MANIFEST_PATH, Buffer.from(JSON.stringify(fixture.manifest)));
+    const fetcher = createFakeFetch(fixture.files, createServer());
+    let cancelled = 0;
+    let pulled = 0;
+    const worker = createWorker(createCacheStorage(), async (input) => {
+      if (new URL(typeof input === "string" ? input : (input as { url: string }).url, ORIGIN).pathname !== coursePath) {
+        return fetcher(input);
+      }
+      let chunks = 0;
+      return new Response(new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled++;
+          controller.enqueue(new Uint8Array(1024 * 1024));
+          if (++chunks === 10) controller.close();
+        },
+        cancel() { cancelled++; },
+      }));
+    });
+    await (await worker.download("oversized-stream")).event.wait;
+    const state = await worker.status();
+    assert.equal(state.ready, false);
+    assert.match(state.error, /size mismatch/);
+    assert.equal(cancelled, 3, "each bounded retry must cancel the oversized stream");
+    assert.ok(pulled < 30, "the worker must not buffer all ten chunks on each retry");
+  }
 });
 
 test("an unknown legacy reference fails visibly instead of silently downloading nothing", async () => {

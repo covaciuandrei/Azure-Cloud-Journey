@@ -1,6 +1,8 @@
 import { Icon } from "../components/Icon.js";
+import type { Course } from "../../domain/course.js";
 
-export function ExamSelection({ onSelect }: { onSelect: () => void }) {
+export function ExamSelection({ onSelect, course = null }: { onSelect: () => void; course?: Course | null }) {
+  const full = course?.id === "az104";
   return <section className="exam-selection" aria-labelledby="exam-selection-title">
     <header className="exam-selection-heading">
       <span className="workspace-eyebrow">AZURE CLOUD JOURNEY</span>
@@ -15,9 +17,9 @@ export function ExamSelection({ onSelect }: { onSelect: () => void }) {
         </div>
         <span className="exam-code">AZ-104</span>
         <h2 id="az104-title">Azure Administrator</h2>
-        <p>A dedicated workspace for your Azure administration study, from networking concepts to exam-style practice.</p>
+        <p>A dedicated workspace for your Azure administration study, from {full ? "all five official domains" : "guided concepts"} to exam-style practice.</p>
         <ul className="exam-capabilities">
-          <li><Icon name="book" size={18} /><span><strong>Learn with context</strong>Guided networking lessons and worked examples</span></li>
+          <li><Icon name="book" size={18} /><span><strong>Learn with context</strong>{full ? "Guided lessons across five domains and worked examples" : "Guided networking lessons and worked examples"}</span></li>
           <li><Icon name="grid" size={18} /><span><strong>Put your knowledge to work</strong>Topic-based questions and timed mock exams</span></li>
           <li><Icon name="history" size={18} /><span><strong>Keep moving forward</strong>Saved sessions, results and learning progress</span></li>
         </ul>
@@ -37,7 +39,10 @@ export function ExamSelection({ onSelect }: { onSelect: () => void }) {
       </aside>
     </div>
     <div className="exam-selection-notes">
-      <p><Icon name="book" size={18} /><span><strong>A focused learning pilot.</strong> Guided lessons currently cover networking, not every AZ-104 domain.</span></p>
+      <p><Icon name="book" size={18} /><span>{full
+        ? <><strong>Five domains, one course.</strong> {course.modules.length} modules and {course.modules.reduce((sum, module) => sum + module.lessons.length, 0)} lessons with mapped objectives. No guarantee of exam coverage or readiness.</>
+        : course ? <><strong>A focused learning pilot.</strong> Guided lessons currently cover networking, not every AZ-104 domain.</>
+          : <><strong>Know your learning scope.</strong> Open the course to see its published domains and lessons.</>}</span></p>
       <p><Icon name="download" size={18} /><span><strong>Your pace, your place.</strong> Start as a guest and use Offline &amp; data to download your study materials.</span></p>
     </div>
   </section>;

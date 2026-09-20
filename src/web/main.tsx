@@ -2,6 +2,8 @@ import { Component, StrictMode, type ErrorInfo, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./ui/App.js";
 import { DemoNotice } from "./components/DemoNotice.js";
+import "./course/interactive.css";
+import "./course/course.css";
 import "./ui/styles.css";
 import "./ui/coursebook-shell.css";
 import "./ui/practice-redesign.css";

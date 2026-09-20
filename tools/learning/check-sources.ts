@@ -6,18 +6,25 @@ import { LearningExplanationSchema } from "../../src/domain/learning.js";
 import { TOPIC_IDS } from "../../src/domain/topics.js";
 import { z } from "zod";
 
-if (process.argv.slice(2).some((argument) => !["--drafts", "--eligibility", "--course"].includes(argument))) throw new Error("Usage: check-sources.ts [--drafts | --eligibility | --course]");
-const drafts = process.argv.includes("--drafts");
-const eligibility = process.argv.includes("--eligibility");
-const course = process.argv.includes("--course");
+const args = process.argv.slice(2);
+const drafts = args.includes("--drafts");
+const eligibility = args.includes("--eligibility");
+const course = args.includes("--course");
 if ([drafts, eligibility, course].filter(Boolean).length > 1) throw new Error("Choose one source-check scope.");
+if (!course && (args.length > 1 || args.some((argument) => !["--drafts", "--eligibility"].includes(argument)))) {
+  throw new Error("Usage: check-sources.ts [--drafts | --eligibility | --course [--all | --module <id> | --domain <id>]]");
+}
 const records = [];
 if (course) {
-  const { loadCourseModules } = await import("../course/validate.js");
-  const { modules } = await loadCourseModules();
+  const { loadCourseModules, parseCourseSelection } = await import("../course/validate.js");
+  const targets = args.filter((argument) => argument !== "--course");
+  const options = targets.length === 1 && targets[0] === "--all" ? { course: "az104" as const } : parseCourseSelection(targets);
+  const { modules, curriculum, full } = await loadCourseModules(process.cwd(), options);
   records.push(...modules.map((module) => ({
     sources: [...module.sources, { id: "official-module", url: module.sourceModuleUrl, title: module.title, supports: module.summary }],
   })));
+  records.push({ sources: [{ url: curriculum.pathUrl }, { url: full?.objectives.guideUrl ??
+    "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104" }] });
 } else if (eligibility) {
   const { EligibilityPolicySchema } = await import("../../src/domain/eligibility.js");
   const pointer = await readData(".data/eligibility/current.json", z.object({ policyId: z.string().regex(/^e_[a-f0-9]{64}$/) }).strict());

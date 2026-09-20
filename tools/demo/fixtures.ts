@@ -101,12 +101,12 @@ export function createDemoBank() {
           : `This entry does not match the value "${correct}" supplied by the fictional card. Its plausibility as a label does not change the given facts.`,
       })),
       answerParts: [],
-      takeaway: "Use this sample to explore shuffled choices, feedback, saved browser progress, and review. It is not an assessment of certification readiness; the separate networking course contains the actual authored teaching.",
+      takeaway: "Use this sample to explore shuffled choices, feedback, saved browser progress, and review. It is not an assessment of certification readiness; the separate authored course contains the actual teaching.",
       caveat: "Original synthetic demonstration only. The documentation link is background reading for the accompanying course, not evidence that these invented labels describe a real service.",
       sources: [{
         url: "https://learn.microsoft.com/en-us/training/paths/az-104-manage-virtual-networks/",
         title: "Networking learning path, background reading",
-        supports: "Background for the separate networking course only. The sample answer is established entirely by its fictional prompt.",
+        supports: "Background for the separate authored course only. The sample answer is established entirely by its fictional prompt.",
       }],
     });
   });

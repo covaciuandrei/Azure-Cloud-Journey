@@ -1,10 +1,15 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { gzipSync } from "node:zlib";
 import { applicationDefault } from "firebase-admin/app";
 import { z } from "zod";
+import { CoursePointerSchema } from "../../src/domain/course.js";
+import { OFFLINE_COURSE_MAX_BYTES } from "../../src/domain/offline.js";
+import { loadCoursePublication } from "../course/publication.js";
 import { isMain, writeData } from "../review/data.js";
-import { regularFiles } from "../web/bank.js";
+import { assertSafeDirectory, childPath, json, regularFiles } from "../web/bank.js";
 import { inspectAuthentication } from "./auth-setup.js";
 import { projectId } from "./preflight.js";
 import {
@@ -23,10 +28,50 @@ const HostingSchema = z.object({
   }).passthrough(),
 }).passthrough();
 
-export async function deployHostingWithAdc(apply: boolean, feature: "accounts" | "offline" | "topics" | "learning" | "eligibility" | "course" | "design" | "journey" = "accounts") {
-  const reportDirectory = feature === "journey" ? ".data/journey/rollout" : feature === "design" ? ".data/coursebook/rollout" : feature === "course" ? ".data/course/rollout" :
+export async function validateHostingCourse(workspace = process.cwd(), outputDir = "dist") {
+  const publication = await loadCoursePublication(workspace);
+  await assertSafeDirectory(workspace, outputDir);
+  const root = childPath(workspace, outputDir);
+  const readBounded = async (path: string, limit: number) => {
+    await assertSafeDirectory(root, dirname(path));
+    const absolute = childPath(root, path);
+    const info = await lstat(absolute);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Unsafe Hosting course file: ${path}`);
+    if (info.size > limit) throw new Error(`Hosting course file exceeds its size limit: ${path}`);
+    const file = await open(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const bytes = Buffer.alloc(limit + 1);
+      let length = 0;
+      while (length < bytes.length) {
+        const result = await file.read(bytes, length, bytes.length - length, null);
+        if (!result.bytesRead) break;
+        length += result.bytesRead;
+      }
+      if (length > limit) throw new Error(`Hosting course file exceeds its size limit: ${path}`);
+      return bytes.subarray(0, length);
+    } finally { await file.close(); }
+  };
+  const pointerBytes = await readBounded("data/course.json", 8000);
+  const pointer = CoursePointerSchema.parse(JSON.parse(pointerBytes.toString("utf8")));
+  if (!pointerBytes.equals(Buffer.from(json(publication.pointer)))) {
+    throw new Error("Hosting course pointer differs from the active approved publication.");
+  }
+  const courseBytes = await readBounded(pointer.url, OFFLINE_COURSE_MAX_BYTES);
+  if (hash(courseBytes) !== pointer.sha256 || !courseBytes.equals(Buffer.from(json(publication.course)))) {
+    throw new Error("Hosting course content differs from the active approved publication.");
+  }
+  return { id: publication.course.id, pointer, digest: hash(Buffer.concat([pointerBytes, courseBytes])) };
+}
+
+export async function deployHostingWithAdc(apply: boolean, feature: "accounts" | "offline" | "topics" | "learning" | "eligibility" | "course" | "design" | "journey" | "az104" = "accounts") {
+  const reportDirectory = feature === "az104" ? ".data/full-course/rollout" :
+    feature === "journey" ? ".data/journey/rollout" : feature === "design" ? ".data/coursebook/rollout" : feature === "course" ? ".data/course/rollout" :
     feature === "eligibility" ? ".data/eligibility/rollout" : feature === "learning" ? ".data/learning/rollout" :
     feature === "topics" ? ".data/topics" : feature === "offline" ? ".data/offline-rollout" : ".data/auth-rollout";
+  const course = await validateHostingCourse();
+  if (feature === "az104" && course.id !== "az104") {
+    throw new Error("The --az104 Hosting feature requires the active approved AZ-104 course package (id: az104).");
+  }
   const plan = await buildCleanStoragePlan();
   const local = await validateHostingTree(plan);
   const identity = await hostingBuildIdentity();
@@ -46,7 +91,10 @@ export async function deployHostingWithAdc(apply: boolean, feature: "accounts" |
     }
     entries.push({ path: `/${path}`, hash: value.hash, rawHash, compressedBytes: value.bytes });
   }
-  const summary = { projectId, ...identity, configDigest, files: entries.length, bytes: local.bytes, planDigest: plan.digest };
+  const summary = {
+    projectId, ...identity, configDigest, files: entries.length, bytes: local.bytes, planDigest: plan.digest,
+    courseId: course.id, courseReleaseId: course.pointer.releaseId, courseDigest: course.digest,
+  };
   if (!apply) return { status: "planned", ...summary };
   const unlock = await acquireUploadLock(process.cwd());
   try {
@@ -63,7 +111,9 @@ export async function deployHostingWithAdc(apply: boolean, feature: "accounts" |
     await checkHostingDeployment();
     const assertUnchanged = async () => {
       const current = await hostingBuildIdentity();
+      const currentCourse = await validateHostingCourse();
       if (current.distDigest !== identity.distDigest || current.sourceDigest !== identity.sourceDigest ||
+          currentCourse.digest !== course.digest ||
           hash(await readFile("firebase.json")) !== configDigest) {
         throw new Error("Build inputs changed during deployment; refusing to release a mixed build.");
       }
@@ -88,7 +138,8 @@ export async function deployHostingWithAdc(apply: boolean, feature: "accounts" |
         headers: config.headers.map((item) => ({ glob: item.source, headers: Object.fromEntries(item.headers.map(({ key, value }) => [key, value])) })),
         rewrites: config.rewrites.map((item) => ({ glob: item.source, path: item.destination })),
       },
-      labels: { feature: feature === "journey" ? "azure-cloud-journey" : feature === "design" ? "blue-coursebook" : feature === "course" ? "networking-course" : feature === "eligibility" ? "current-question-bank" : feature === "learning" ? "learning-explanations" :
+      labels: { feature: feature === "az104" ? "complete-az104-course" :
+        feature === "journey" ? "azure-cloud-journey" : feature === "design" ? "blue-coursebook" : feature === "course" ? `${course.id}-course` : feature === "eligibility" ? "current-question-bank" : feature === "learning" ? "learning-explanations" :
         feature === "topics" ? "topic-filters" : feature === "offline" ? "offline-download" : "accounts-and-firestore" },
     });
     if (!version.name.startsWith(`sites/${projectId}/versions/`)) throw new Error("Unexpected Hosting version identity.");
@@ -146,9 +197,10 @@ export async function deployHostingWithAdc(apply: boolean, feature: "accounts" |
     if ((current.releases?.[0]?.name ?? null) !== baselineRelease) throw new Error("Another Hosting release appeared concurrently; it was not overwritten.");
     const release = await request<{ name: string }>(
       `sites/${projectId}/releases?versionName=${encodeURIComponent(version.name)}`, "POST",
-      { message: feature === "journey" ? "Azure Cloud Journey branding and AZ-104 exam selection; content and progress preserved" :
+      { message: feature === "az104" ? "Complete AZ-104 authored course across all five exam domains and 21 modules with offline support; question bank, accounts and grading preserved" :
+        feature === "journey" ? "Azure Cloud Journey branding and AZ-104 exam selection; content and progress preserved" :
         feature === "design" ? "Blue Coursebook interface for learning, practice and exams; study content and progress preserved" :
-        feature === "course" ? "Networking learning pilot with worked examples, interactive tools, checkpoints and offline support" :
+        feature === "course" ? "Authored course with worked examples, interactive tools, checkpoints and offline support" :
         feature === "eligibility" ? "Current-only question bank with historical session compatibility" :
         feature === "learning" ? "Student explanations, documentation-backed answer guidance and versioned grading" :
         feature === "topics" ? "Classified AZ-104 topics and topic-filtered practice, exams and library" :
@@ -167,9 +219,9 @@ export async function deployHostingWithAdc(apply: boolean, feature: "accounts" |
 }
 
 if (isMain(import.meta.url)) {
-  if (process.argv.slice(2).some((arg) => !["--apply", "--offline", "--topics", "--learning", "--eligibility", "--course", "--design", "--journey"].includes(arg))) throw new Error("Usage: deploy-hosting-adc.ts [--apply] [--offline | --topics | --learning | --eligibility | --course | --design | --journey]");
-  if (["--offline", "--topics", "--learning", "--eligibility", "--course", "--design", "--journey"].filter((flag) => process.argv.includes(flag)).length > 1) throw new Error("Choose a single deployment feature.");
+  if (process.argv.slice(2).some((arg) => !["--apply", "--offline", "--topics", "--learning", "--eligibility", "--course", "--design", "--journey", "--az104"].includes(arg))) throw new Error("Usage: deploy-hosting-adc.ts [--apply] [--offline | --topics | --learning | --eligibility | --course | --design | --journey | --az104]");
+  if (["--offline", "--topics", "--learning", "--eligibility", "--course", "--design", "--journey", "--az104"].filter((flag) => process.argv.includes(flag)).length > 1) throw new Error("Choose a single deployment feature.");
   console.log(JSON.stringify(await deployHostingWithAdc(process.argv.includes("--apply"),
-    process.argv.includes("--journey") ? "journey" : process.argv.includes("--design") ? "design" : process.argv.includes("--course") ? "course" : process.argv.includes("--eligibility") ? "eligibility" : process.argv.includes("--learning") ? "learning" : process.argv.includes("--topics") ? "topics" :
+    process.argv.includes("--az104") ? "az104" : process.argv.includes("--journey") ? "journey" : process.argv.includes("--design") ? "design" : process.argv.includes("--course") ? "course" : process.argv.includes("--eligibility") ? "eligibility" : process.argv.includes("--learning") ? "learning" : process.argv.includes("--topics") ? "topics" :
       process.argv.includes("--offline") ? "offline" : "accounts"), null, 2));
 }

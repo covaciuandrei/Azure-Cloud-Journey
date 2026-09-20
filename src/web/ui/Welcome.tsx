@@ -12,6 +12,7 @@ export function Welcome({ course, progress, questionCount, onLearn, onPractice }
   const lessons = course?.modules.flatMap((module) => module.lessons) ?? [];
   const last = lessons.find((lesson) => lesson.id === progress.lastLessonId);
   const studied = lessons.filter((lesson) => currentLessonProgress(progress, lesson).studiedAt !== null).length;
+  const full = course?.id === "az104";
   return <section className="study-welcome">
     <header className="welcome-heading">
       <span className="workspace-eyebrow">AZ-104 / AZURE ADMINISTRATOR</span>
@@ -28,10 +29,11 @@ export function Welcome({ course, progress, questionCount, onLearn, onPractice }
       <article className="welcome-learn">
         <div className="welcome-card-top"><span className="welcome-card-icon"><Icon name="book" size={24} /></span><span className="workspace-eyebrow">LEARN THE REASONING</span></div>
         <h2>Learn AZ-104</h2>
-        <p>Start with packets and IP addresses. Build up to DNS, routing, security and troubleshooting through the same school-network story.</p>
+        <p>{full ? "Learn identity and governance, storage, compute, networking, and monitoring and recovery through the same school-application story."
+          : "Start with packets and IP addresses. Build up to DNS, routing, security and troubleshooting through the same school-network story."}</p>
         <ul className="welcome-features"><li><Icon name="check" size={16} />Worked examples from first principles</li><li><Icon name="check" size={16} />Interactive tools and explained checkpoints</li><li><Icon name="check" size={16} />An outline that keeps your place clear</li></ul>
-        <div className="welcome-card-footer"><span>{course ? `${course.modules.length} modules / ${lessons.length} lessons` : "Networking learning pilot"}</span>
-          <button className="button button-primary" onClick={() => onLearn()}>Open networking course<Icon name="arrow" size={17} /></button></div>
+        <div className="welcome-card-footer"><span>{course ? `${course.modules.length} modules / ${lessons.length} lessons` : "Learning materials loading"}</span>
+          <button className="button button-primary" onClick={() => onLearn()}>{full ? "Open AZ-104 course" : course ? "Open networking course" : "Open learning materials"}<Icon name="arrow" size={17} /></button></div>
       </article>
       <article className="welcome-practice">
         <div className="welcome-card-top"><span className="welcome-card-icon"><Icon name="grid" size={24} /></span><span className="workspace-eyebrow">PUT IT INTO PRACTICE</span></div>
@@ -43,7 +45,10 @@ export function Welcome({ course, progress, questionCount, onLearn, onPractice }
       </article>
     </div>
     <div className="welcome-notes">
-      <div><Icon name="book" size={20} /><p><strong>Start with understanding.</strong> This learning pilot covers networking, not every AZ-104 domain. Official references are linked throughout.</p></div>
+      <div><Icon name="book" size={20} /><p><strong>Start with understanding.</strong> {full
+        ? "The course maps all five official domains to lessons and worked applications. It does not guarantee exam coverage or readiness."
+        : course ? "This learning pilot covers networking, not every AZ-104 domain. Official references are linked throughout."
+          : "Open the course to see its published scope and official references."}</p></div>
       <div><Icon name="download" size={20} /><p><strong>Study at your own pace.</strong> Use Offline &amp; data to save the app for later. Learning checkpoints stay separate from exam statistics.</p></div>
     </div>
   </section>;

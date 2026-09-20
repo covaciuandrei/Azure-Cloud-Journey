@@ -81,6 +81,7 @@ test("demo export needs only public source files, preserves private outputs, and
     await mkdir(resolve(root, "dist"), { recursive: true });
     await mkdir(resolve(root, ".data/clean-bank"), { recursive: true });
     await cp("content/networking", resolve(root, "content/networking"), { recursive: true });
+    await cp("content/course.json", resolve(root, "content/course.json"));
     await cp("public/favicon.svg", resolve(root, "public/favicon.svg"));
     const sentinels = ["public/data/sentinel.json", "dist/sentinel.txt", ".data/clean-bank/sentinel.txt"];
     for (const path of sentinels) await writeFile(resolve(root, path), "leave unchanged");

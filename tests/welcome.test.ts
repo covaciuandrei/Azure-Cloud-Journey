@@ -9,7 +9,7 @@ import { courseFixture } from "./course-fixture.js";
 
 const noAction = () => {};
 test("exam selection offers only the available AZ-104 workspace with honest learning scope", () => {
-  const html = renderToStaticMarkup(createElement(ExamSelection, { onSelect: noAction }));
+  const html = renderToStaticMarkup(createElement(ExamSelection, { onSelect: noAction, course: courseFixture() }));
   assert.match(html, /AZURE CLOUD JOURNEY/);
   assert.match(html, /Azure Administrator/);
   assert.match(html, /Available to study/);
@@ -52,7 +52,7 @@ test("missing content does not produce fake counts or an invalid resume target",
   const html = renderToStaticMarkup(createElement(Welcome, {
     course: null, progress, questionCount: undefined, onLearn: noAction, onPractice: noAction,
   }));
-  assert.match(html, /Networking learning pilot/);
+  assert.match(html, /Learning materials loading/);
   assert.match(html, /Topic-based practice/);
   assert.doesNotMatch(html, /Continue learning|0 active questions|0 modules/);
 });

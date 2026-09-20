@@ -1,18 +1,11 @@
 import { z } from "zod";
-
-export const NETWORKING_MODULE_IDS = [
-  "virtual-networks", "network-security-groups", "azure-dns", "vnet-peering",
-  "routing", "load-balancer", "application-gateway", "network-watcher",
-] as const;
-export const CourseModuleIdSchema = z.enum(NETWORKING_MODULE_IDS);
-const id = z.string().regex(/^[a-z][a-z0-9-]{2,79}$/);
-const text = z.string().trim().min(1).max(8000).refine((value) =>
-  !/\u2014|&mdash;|&#8212;|&#x2014;/i.test(value), "Do not use em dashes.");
-const officialUrl = z.string().url().refine((value) => {
-  const url = new URL(value);
-  return url.protocol === "https:" && !url.username && !url.password &&
-    (url.hostname === "microsoft.com" || url.hostname.endsWith(".microsoft.com"));
-}, "Use an official Microsoft reference.");
+import {
+  AZ104_MODULE_IDS, COURSE_DOMAIN_IDS, CourseDomainIdSchema, CourseModuleIdSchema, NETWORKING_MODULE_IDS,
+  courseId as id, courseText as text, officialCourseUrl as officialUrl,
+} from "./courseCatalog.js";
+import { CourseDomainSchema, DomainCoverageSchema, validateCoverageReferences } from "./courseCoverage.js";
+import { TopicSelectionSchema } from "./topics.js";
+export { NETWORKING_MODULE_IDS, CourseModuleIdSchema } from "./courseCatalog.js";
 export const CourseSourceSchema = z.object({
   id, url: officialUrl, title: text, supports: text,
 }).strict();
@@ -98,8 +91,11 @@ export type CourseLesson = z.infer<typeof CourseLessonSchema>;
 export const CourseModuleSchema = AuthoredModuleSchema.extend({
   lessons: z.array(CourseLessonSchema).min(2).max(4),
 });
-export type CourseModule = z.infer<typeof CourseModuleSchema>;
-export const CourseSchema = z.object({
+const FullCourseModuleSchema = CourseModuleSchema.extend({
+  domainId: CourseDomainIdSchema, practiceTopics: TopicSelectionSchema.refine((topics) => topics.length > 0),
+});
+export type CourseModule = z.infer<typeof CourseModuleSchema> | z.infer<typeof FullCourseModuleSchema>;
+export const LegacyCourseSchema = z.object({
   schemaVersion: z.literal(1), id: z.literal("networking"), title: text,
   releaseId: z.string().regex(/^c_[a-f0-9]{64}$/), reviewedAt: z.string().date(),
   pathUrl: officialUrl, examGuideUrl: officialUrl, introduction: text,
@@ -112,13 +108,62 @@ export const CourseSchema = z.object({
   }
 });
 export type Course = z.infer<typeof CourseSchema>;
-export const CoursePointerSchema = z.object({
+const LegacyCoursePointerSchema = z.object({
   schemaVersion: z.literal(1), releaseId: z.string().regex(/^c_[a-f0-9]{64}$/),
   url: z.string().regex(/^courses\/c_[a-f0-9]{64}\/networking\.json$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   modules: z.literal(8), lessons: z.number().int().min(16).max(32),
   checkpoints: z.number().int().min(48).max(160),
 }).strict().refine((pointer) => pointer.url === `courses/${pointer.releaseId}/networking.json`);
+
+export const FullCourseSchema = z.object({
+  schemaVersion: z.literal(2), id: z.literal("az104"), title: text,
+  releaseId: z.string().regex(/^c_[a-f0-9]{64}$/), reviewedAt: z.string().date(),
+  pathUrl: officialUrl, examGuideUrl: officialUrl, introduction: text,
+  objectiveEffectiveDate: z.string().date(),
+  domains: z.array(CourseDomainSchema).length(5),
+  coverage: z.array(DomainCoverageSchema).length(5),
+  modules: z.array(FullCourseModuleSchema).length(21),
+}).strict().superRefine((course, context) => {
+  const fail = (message: string) => context.addIssue({ code: "custom", message });
+  const moduleIds = course.modules.map((module) => module.id);
+  const lessons = course.modules.flatMap((module) => module.lessons);
+  if (new Set(moduleIds).size !== AZ104_MODULE_IDS.length || AZ104_MODULE_IDS.some((id) => !moduleIds.includes(id)) ||
+      new Set(lessons.map((lesson) => lesson.id)).size !== lessons.length ||
+      course.domains.some((domain, index) => domain.id !== COURSE_DOMAIN_IDS[index]) ||
+      course.coverage.some((coverage, index) => coverage.domainId !== COURSE_DOMAIN_IDS[index]) ||
+      JSON.stringify(course.domains.flatMap((domain) => domain.moduleIds)) !== JSON.stringify(moduleIds)) {
+    fail("Full course requires all ordered domains, unique modules and lessons, and a coverage map for every domain.");
+  }
+  for (const module of course.modules) {
+    const domain = course.domains.find((domain) => domain.id === module.domainId);
+    if (!domain?.moduleIds.includes(module.id)) fail(`${module.id}: module/domain binding is invalid.`);
+    if (new Set(module.sources.map((source) => source.id)).size !== module.sources.length ||
+        new Set(module.sources.map((source) => source.url)).size !== module.sources.length) fail(`${module.id}: duplicate sources.`);
+    for (const lesson of module.lessons) {
+      if (new Set(lesson.sections.map((section) => section.id)).size !== lesson.sections.length ||
+          new Set(lesson.checkpoints.map((checkpoint) => checkpoint.id)).size !== lesson.checkpoints.length ||
+          new Set(lesson.sourceIds).size !== lesson.sourceIds.length ||
+          lesson.sourceIds.some((id) => !module.sources.some((source) => source.id === id))) {
+        fail(`${lesson.id}: section/checkpoint identities or source bindings are invalid.`);
+      }
+    }
+  }
+  for (const domain of course.domains) {
+    const coverage = course.coverage.find((item) => item.domainId === domain.id);
+    if (!coverage) continue;
+    try { validateCoverageReferences(coverage, domain, course.modules); }
+    catch (error) { fail(error instanceof Error ? error.message : "Invalid coverage references."); }
+  }
+});
+export const CourseSchema = z.union([LegacyCourseSchema, FullCourseSchema]);
+const FullCoursePointerSchema = z.object({
+  schemaVersion: z.literal(2), id: z.literal("az104"), releaseId: z.string().regex(/^c_[a-f0-9]{64}$/),
+  url: z.string().regex(/^courses\/c_[a-f0-9]{64}\/az104\.json$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/), modules: z.literal(21),
+  lessons: z.number().int().min(42).max(84), checkpoints: z.number().int().min(126).max(420),
+}).strict().refine((pointer) => pointer.url === `courses/${pointer.releaseId}/az104.json`);
+export const CoursePointerSchema = z.union([LegacyCoursePointerSchema, FullCoursePointerSchema]);
 
 export function checkpointCorrect(checkpoint: CourseCheckpoint, selectedIds: readonly string[]) {
   return selectedIds.length === checkpoint.correctIds.length &&

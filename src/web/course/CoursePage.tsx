@@ -1,23 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { checkpointCorrect, type CourseCheckpoint, type CourseLesson, type CourseModule } from "../../domain/course.js";
-import type { TopicId } from "../../domain/topics.js";
 import { shuffled } from "../engine.js";
 import { Icon } from "../components/Icon.js";
 import { CourseContent, CourseInline, lessonSearchText, lessonSectionId } from "./CourseContent.js";
 import { currentLessonProgress, type CourseProgress, type LessonProgress } from "./progress.js";
 import type { CoursePageProps } from "./types.js";
-import "./course.css";
-
-const practiceTopics: Record<CourseModule["id"], TopicId[]> = {
-  "virtual-networks": ["virtual-networks"],
-  "network-security-groups": ["network-security"],
-  "azure-dns": ["dns-load-balancing"],
-  "vnet-peering": ["virtual-networks"],
-  routing: ["virtual-networks"],
-  "load-balancer": ["dns-load-balancing"],
-  "application-gateway": ["dns-load-balancing"],
-  "network-watcher": ["monitoring"],
-};
+import { courseDomains, courseLabel, modulePracticeTopics } from "./catalog.js";
 
 function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
   return <a href={href} target="_blank" rel="noopener noreferrer">{children}<span className="sr-only"> (opens in a new tab)</span></a>;
@@ -221,6 +209,8 @@ export function CoursePage(props: CoursePageProps) {
   const [query, setQuery] = useState("");
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
   const [contentsOpen, setContentsOpen] = useState(false);
+  const [domainFilter, setDomainFilter] = useState("");
+  const domains = courseDomains(course);
   const heading = useRef<HTMLHeadingElement>(null);
   const outline = useRef<HTMLElement>(null);
   const id = useId();
@@ -240,8 +230,10 @@ export function CoursePage(props: CoursePageProps) {
   const last = entries.find((entry) => entry.lesson.id === progress.lastLessonId);
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const matching = entries.filter((entry) => terms.every((term) => entry.search.includes(term)) &&
+    (!domainFilter || domains.find((domain) => domain.id === domainFilter)?.moduleIds.includes(entry.module.id)) &&
     (!bookmarksOnly || currentLessonProgress(progress, entry.lesson).bookmarked));
-  const filtered = terms.length > 0 || bookmarksOnly;
+  const filtered = terms.length > 0 || bookmarksOnly || domainFilter !== "";
+  const clearFilters = () => { setQuery(""); setBookmarksOnly(false); setDomainFilter(""); };
   const onOpenLesson = (lessonId: string) => { setContentsOpen(false); props.onOpenLesson(lessonId); };
 
   useEffect(() => {
@@ -285,7 +277,7 @@ export function CoursePage(props: CoursePageProps) {
 
   if (!active) return <div className="course-page course-overview">
     <header className="course-overview-heading">
-      <p className="course-eyebrow"><Icon name="book" size={16} /> Networking course</p>
+      <p className="course-eyebrow"><Icon name="book" size={16} /> {courseLabel(course)}</p>
       <h1 ref={heading} tabIndex={-1}><CourseInline text={course.title} /></h1>
       <p><CourseInline text={course.introduction} /></p>
       <p className="course-meta">{course.modules.length} modules / {entries.length} lessons / {totals.minutes} minutes estimated reading
@@ -296,13 +288,32 @@ export function CoursePage(props: CoursePageProps) {
           : entries[0] && <button type="button" className="button button-primary" onClick={() => onOpenLesson(entries[0]!.lesson.id)}>Start first lesson</button>}
       </div>
       <div className="course-reference-links">
-        <ExternalLink href={course.pathUrl}>Microsoft Learn path</ExternalLink>
+        <ExternalLink href={course.pathUrl}>{course.id === "az104" ? "Azure Administrator certification" : "Microsoft Learn path"}</ExternalLink>
         <ExternalLink href={course.examGuideUrl}>Official exam objectives</ExternalLink>
       </div>
       {progress.lastLessonId && !last && <p className="course-notice">Your last lesson is not in this release. Choose a lesson from the overview.</p>}
     </header>
     {progressLine}
     {storageNote}
+    {course.schemaVersion === 2 && <section className="course-domain-overview" aria-labelledby={`${id}-domains`}>
+      <h2 id={`${id}-domains`}>Five domains of Azure administration</h2>
+      <p className="course-meta">{course.domains.reduce((sum, domain) => sum + domain.objectives.length, 0)} mapped official objectives.
+        Mapping is not a guarantee of exam coverage or readiness.</p>
+      <div className="course-domain-grid">{domains.map((domain) => {
+        const domainLessons = entries.filter((entry) => domain.moduleIds.includes(entry.module.id)).map((entry) => entry.lesson);
+        const result = resultsFor(domainLessons, progress);
+        return <article key={domain.id} className="course-domain-card">
+          <h3>{domain.title}</h3>
+          <p>{domain.moduleIds.length} modules / {domainLessons.length} lessons / {result.total} checkpoints</p>
+          <p className="course-meta">{domain.objectives.length} objectives / Official exam weight: {domain.weight.min}-{domain.weight.max}%</p>
+          <div className="course-actions">
+            <button type="button" className="button button-small" aria-pressed={domainFilter === domain.id}
+              onClick={() => setDomainFilter(domainFilter === domain.id ? "" : domain.id)}>Explore {domain.title}</button>
+            <button type="button" className="button button-small" onClick={() => onPractice([...domain.practiceTopics])}>Practice this domain</button>
+          </div>
+        </article>;
+      })}</div>
+    </section>}
     <div className="course-overview-section-heading"><h2>Explore the modules</h2><p>Follow the course in order, or return to a lesson.</p></div>
     <div className="course-filters">
       <label className="course-search" htmlFor={`${id}-search`}>Search lessons
@@ -311,14 +322,14 @@ export function CoursePage(props: CoursePageProps) {
       </label>
       <label className="course-filter-toggle"><input type="checkbox" checked={bookmarksOnly}
         onChange={(event) => setBookmarksOnly(event.target.checked)} /> Bookmarks only</label>
-      {filtered && <button type="button" className="text-button" onClick={() => { setQuery(""); setBookmarksOnly(false); }}>Clear filters</button>}
+      {filtered && <button type="button" className="text-button" onClick={clearFilters}>Clear filters</button>}
     </div>
     <p id={`${id}-search-help`} className="course-meta">Search includes lesson text, examples and checkpoint explanations. Filters do not change progress.</p>
     <p className="course-meta" role="status">{matching.length} of {entries.length} lessons shown in {new Set(matching.map((entry) => entry.module.id)).size} of {course.modules.length} modules.</p>
     <p className="course-meta">Core and supporting priorities explain the suggested study order, not how often a topic appears on an exam.</p>
     {!matching.length && <div className="course-empty"><h2>No matching lessons</h2>
       <p>{bookmarksOnly ? "Bookmark a lesson to collect it here, or turn off the bookmark filter." : "Try a different title, objective or phrase."}</p>
-      <button type="button" className="button" onClick={() => { setQuery(""); setBookmarksOnly(false); }}>Show all lessons</button>
+      <button type="button" className="button" onClick={clearFilters}>Show all lessons</button>
     </div>}
     <div className="course-modules">{course.modules.map((module, moduleIndex) => {
       const lessons = matching.filter((entry) => entry.module.id === module.id);
@@ -328,6 +339,7 @@ export function CoursePage(props: CoursePageProps) {
         <header><div className="course-module-kicker"><p className="course-eyebrow">Module {String(moduleIndex + 1).padStart(2, "0")} of {course.modules.length}</p>
           <span className={`course-badge course-badge-${module.priority}`}>{module.priority === "core" ? "Core" : "Supporting"}</span></div>
           <h2 id={`${id}-${module.id}`}><CourseInline text={module.title} /></h2>
+          {course.schemaVersion === 2 && <p className="course-meta">{domains.find((domain) => domain.moduleIds.includes(module.id))?.title}</p>}
           <p><CourseInline text={module.summary} /></p>
         </header>
         <p className="course-meta">{module.lessons.length} lessons / {moduleResults.minutes} minutes
@@ -337,7 +349,7 @@ export function CoursePage(props: CoursePageProps) {
         </details>
         <details className="course-module-objectives"><summary>Official module objectives</summary>
           <ul>{module.officialObjectives.map((objective, index) => <li key={index}><CourseInline text={objective} /></li>)}</ul>
-          <ExternalLink href={module.sourceModuleUrl}>Microsoft Learn module</ExternalLink>
+          <ExternalLink href={module.sourceModuleUrl}>Microsoft documentation</ExternalLink>
         </details>
         <ol className="course-lesson-list">{lessons.map(({ lesson, lessonIndex }) => {
           const current = currentLessonProgress(progress, lesson);
@@ -354,7 +366,7 @@ export function CoursePage(props: CoursePageProps) {
             <BookmarkButton lesson={lesson} bookmarked={current.bookmarked} onBookmark={onBookmark} />
           </li>;
         })}</ol>
-        <button type="button" className="button button-small" onClick={() => onPractice([...practiceTopics[module.id]])}>Practice this topic</button>
+        <button type="button" className="button button-small" onClick={() => onPractice(modulePracticeTopics(module))}>Practice this topic</button>
       </section>;
     })}</div>
   </div>;
@@ -379,7 +391,7 @@ export function CoursePage(props: CoursePageProps) {
           <Icon name={contentsOpen ? "close" : "menu"} size={17} />{contentsOpen ? "Hide course contents" : "Show course contents"}</button>
         <nav ref={outline} id={`${id}-contents`} className={`course-contents${contentsOpen ? " is-open" : ""}`} aria-label="Course modules and lessons">
           <div className="course-outline-heading">
-            <p className="course-eyebrow"><Icon name="book" size={16} /> Networking course</p>
+            <p className="course-eyebrow"><Icon name="book" size={16} /> {courseLabel(course)}</p>
             <h2>Course contents</h2>
             <p className="course-meta">{course.modules.length} modules / {entries.length} lessons</p>
           </div>
@@ -388,7 +400,9 @@ export function CoursePage(props: CoursePageProps) {
             <strong>{moduleResults.studied} of {module.lessons.length} studied</strong>
             <progress max={module.lessons.length} value={moduleResults.studied} aria-label="Current module lessons marked Studied" />
           </div>
-          {course.modules.map((item, index) => <details key={`${item.id}-${module.id}`} open={item.id === module.id}>
+          {domains.map((domain) => <section key={domain.id} aria-label={domain.title}>
+          {course.schemaVersion === 2 && <h3 className="course-domain-heading">{domain.title}</h3>}
+          {course.modules.map((item, index) => !domain.moduleIds.includes(item.id) ? null : <details key={`${item.id}-${module.id}`} open={item.id === module.id}>
             <summary>{index + 1}. <CourseInline text={item.title} /></summary>
             <ol>{item.lessons.map((itemLesson, itemIndex) => <li key={itemLesson.id}>
               <button type="button" aria-current={itemLesson.id === lesson.id ? "page" : undefined}
@@ -403,7 +417,7 @@ export function CoursePage(props: CoursePageProps) {
                 </span>
               </button>
             </li>)}</ol>
-          </details>)}
+          </details>)}</section>)}
         </nav>
       </aside>
       <article className="course-reader" key={`${lesson.id}-${lesson.revision}`} data-lesson-id={lesson.id} aria-labelledby={`${id}-lesson-title`}>
@@ -421,7 +435,7 @@ export function CoursePage(props: CoursePageProps) {
           <div className="course-actions">
             <button type="button" className="button" aria-pressed={current.studiedAt !== null}
               onClick={() => onStudy(lesson.id, current.studiedAt === null)}>{current.studiedAt !== null ? "Studied (undo)" : "Mark studied"}</button>
-            <button type="button" className="button" onClick={() => onPractice([...practiceTopics[module.id]])}>Practice this topic</button>
+            <button type="button" className="button" onClick={() => onPractice(modulePracticeTopics(module))}>Practice this topic</button>
           </div>
           <p className="course-meta">{lessonResults.checked} of {lessonResults.total} checkpoints checked; {lessonResults.correct} correct.
             Studied is a manual reading marker, independent of these results.</p>
@@ -430,6 +444,24 @@ export function CoursePage(props: CoursePageProps) {
         <section className="course-objectives" aria-labelledby={`${id}-objectives`}>
           <h2 id={`${id}-objectives`}>Learning objectives</h2>
           <ul>{lesson.objectives.map((objective, index) => <li key={index}><CourseInline text={objective} /></li>)}</ul>
+          {course.schemaVersion === 2 && <details className="course-details"><summary>Official objective coverage</summary>
+            <ul>{course.coverage.flatMap((coverage) => coverage.objectives.flatMap((objective) => {
+              const target = objective.lessons.find((target) => target.moduleId === module.id && target.lessonId === lesson.id);
+              if (!target) return [];
+              const label = course.domains.flatMap((domain) => domain.objectives).find((item) => item.id === objective.objectiveId)?.label;
+              return [<li key={objective.objectiveId}><strong>{objective.objectiveId}: {label}</strong>
+                <p>{target.evidence}</p>
+                <ul>{target.sectionIds.map((sectionId) => <li key={sectionId}>
+                  <SectionLink targetId={lessonSectionId(lesson.id, sectionId)}>
+                    {lesson.sections.find((section) => section.id === sectionId)!.title}
+                  </SectionLink>
+                </li>)}</ul>
+                {target.checkpointIds.length > 0 && <SectionLink targetId={`course-checkpoints-${lesson.id}`}>
+                  Checkpoints: {target.checkpointIds.map((id) => lesson.checkpoints.findIndex((checkpoint) => checkpoint.id === id) + 1).join(", ")}
+                </SectionLink>}
+              </li>];
+            }))}</ul>
+          </details>}
         </section>
         <details className="course-details course-lesson-index"><summary>In this lesson</summary>
           <nav aria-label="Lesson sections"><ol>
@@ -461,13 +493,13 @@ export function CoursePage(props: CoursePageProps) {
               <p><CourseInline text={source.supports} /></p>
             </> : <p className="course-notice">Reference unavailable: {sourceId}. Consult the official module below.</p>}</li>;
           })}</ul>
-          <ExternalLink href={module.sourceModuleUrl}>Official Microsoft Learn module</ExternalLink>
+          <ExternalLink href={module.sourceModuleUrl}>Official Microsoft documentation</ExternalLink>
         </section>
         <footer className="course-lesson-footer">
           <div className="course-actions">
             <button type="button" className="button button-primary" aria-pressed={current.studiedAt !== null}
               onClick={() => onStudy(lesson.id, current.studiedAt === null)}>{current.studiedAt !== null ? "Studied (undo)" : "Mark studied"}</button>
-            <button type="button" className="button" onClick={() => onPractice([...practiceTopics[module.id]])}>Practice this topic</button>
+            <button type="button" className="button" onClick={() => onPractice(modulePracticeTopics(module))}>Practice this topic</button>
           </div>
           <nav className="course-lesson-navigation" aria-label="Previous and next lesson">
             {previous ? <button type="button" className="button" onClick={() => onOpenLesson(previous.lesson.id)}>

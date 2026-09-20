@@ -34,6 +34,7 @@
   var MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
   var MAX_FILES = 10000;
   var MAX_FILE_BYTES = 16 * 1024 * 1024;
+  var MAX_COURSE_BYTES = 4 * 1024 * 1024;
   var MAX_TOTAL_BYTES = 256 * 1024 * 1024;
   var MAX_LEGACY_RELEASES = 20;
   var MAX_LEGACY_QUESTIONS = 606;
@@ -45,6 +46,7 @@
   var SHELL_ASSET_RE = /^\/assets\/[a-zA-Z0-9_.-]+-[a-zA-Z0-9_-]+\.(js|css)$/;
   var MEDIA_PATH_RE = /^\/content\/r_[a-f0-9]{64}\/media\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/;
   var SYNTHETIC_MEDIA_RE = /^\/offline-assets\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/;
+  var COURSE_PATH_RE = /^\/courses\/c_[a-f0-9]{64}\/(?:networking|az104)\.json$/;
 
   // ---------------------------------------------------------------------
   // Small helpers
@@ -99,6 +101,32 @@
     return new Request(new URL(path, self.location.origin).href);
   }
 
+  function boundedResponseBytes(response, maximum, message) {
+    if (!response.body) return Promise.resolve(new ArrayBuffer(0));
+    var reader = response.body.getReader();
+    var chunks = [];
+    var length = 0;
+    function next() {
+      return reader.read().then(function (result) {
+        if (result.done) {
+          var bytes = new Uint8Array(length);
+          var offset = 0;
+          chunks.forEach(function (chunk) { bytes.set(chunk, offset); offset += chunk.byteLength; });
+          return bytes.buffer;
+        }
+        length += result.value.byteLength;
+        if (length > maximum) {
+          // A cloned cache response can wait for its other branch to cancel.
+          reader.cancel().catch(function (error) { console.warn("Could not cancel oversized offline response.", error); });
+          throw new RangeError(message);
+        }
+        chunks.push(result.value);
+        return next();
+      });
+    }
+    return next().finally(function () { reader.releaseLock(); });
+  }
+
   // ---------------------------------------------------------------------
   // Manifest contract validation (mirrors src/domain/offline.ts, re-implemented
   // in plain JS because this worker has no import/build step available).
@@ -124,7 +152,7 @@
     if (!file.releaseId) {
       if (!file.part && !file.questionId && file.commentCount === undefined &&
           (["/data/manifest.json", "/data/topics.json", "/data/learning.json", "/data/eligibility.json", "/data/course.json"].indexOf(file.url) !== -1 ||
-            /^\/courses\/c_[a-f0-9]{64}\/networking\.json$/.test(file.url))) return file.url;
+            COURSE_PATH_RE.test(file.url))) return file.url;
       return undefined;
     }
     if (file.part === "catalog" && !file.questionId && file.commentCount === undefined) {
@@ -158,6 +186,9 @@
     if (typeof file.sha256 !== "string" || !SHA_RE.test(file.sha256)) fail("Offline manifest file has an invalid hash.");
     if (!Number.isInteger(file.bytes) || file.bytes <= 0 || file.bytes > MAX_FILE_BYTES) {
       fail("Offline manifest file size is invalid.");
+    }
+    if (COURSE_PATH_RE.test(file.url) && file.bytes > MAX_COURSE_BYTES) {
+      fail("Course content exceeds the 4 MiB offline limit.");
     }
     if (["shell", "data", "image"].indexOf(file.kind) === -1) fail("Offline manifest file kind is invalid.");
     if (file.releaseId !== undefined && (typeof file.releaseId !== "string" || !RELEASE_RE.test(file.releaseId))) {
@@ -608,7 +639,7 @@
       throw new Error("The offline manifest could not be reached.");
     }).then(function (response) {
       if (!response.ok) throw new Error("This app build does not provide an offline download.");
-      return response.arrayBuffer();
+      return boundedResponseBytes(response, MAX_MANIFEST_BYTES, "Offline manifest is too large.");
     }).then(function (buffer) {
       if (buffer.byteLength > MAX_MANIFEST_BYTES) throw new Error("Offline manifest is too large.");
       var candidate;
@@ -628,7 +659,7 @@
       return fetch(entry.url, { cache: "no-store", redirect: "error", credentials: "omit", signal: job.controller.signal }).then(function (response) {
         if (!response.ok) throw new Error("Offline download failed for " + entry.url + " (HTTP " + response.status + ").");
         headers = cachedHeaders(response, entry);
-        return response.arrayBuffer();
+        return boundedResponseBytes(response, entry.bytes, "Offline download size mismatch for " + entry.url + ".");
       }).then(function (buffer) {
         if (buffer.byteLength !== entry.bytes) throw new Error("Offline download size mismatch for " + entry.url + ".");
         return crypto.subtle.digest("SHA-256", buffer).then(function (digest) {
@@ -647,11 +678,14 @@
     var cacheName = entry.kind === "image" ? MEDIA_CACHE : job.state.dataCacheName;
     function verifiedBytes(response) {
       if (!response) return Promise.resolve(null);
-      return response.arrayBuffer().then(function (buffer) {
+      return boundedResponseBytes(response, entry.bytes, "Cached offline file exceeds its size limit.").then(function (buffer) {
         if (buffer.byteLength !== entry.bytes) return null;
         return crypto.subtle.digest("SHA-256", buffer).then(function (digest) {
           return toHex(digest) === entry.sha256 ? { buffer: buffer, headers: cachedHeaders(response, entry) } : null;
         });
+      }).catch(function (error) {
+        if (error instanceof RangeError) return null;
+        throw error;
       });
     }
     return openData(cacheName).then(function (cache) {

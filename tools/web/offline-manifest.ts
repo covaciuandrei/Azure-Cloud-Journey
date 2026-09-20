@@ -1,6 +1,6 @@
 import { readFile, lstat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { OfflineManifestSchema, selectOfflineFiles, type OfflineFile, type OfflineManifest } from "../../src/domain/offline.js";
+import { OFFLINE_COURSE_MAX_BYTES, OfflineManifestSchema, selectOfflineFiles, type OfflineFile, type OfflineManifest } from "../../src/domain/offline.js";
 import { mediaExtension } from "../../src/domain/cleanBank.js";
 import { assertSafeDirectory, childPath, hash, json, regularFiles } from "./bank.js";
 import { writeAtomic } from "./export.js";
@@ -16,12 +16,14 @@ export async function buildOfflineManifest(workspace = process.cwd(), outputDir 
   if (!bank.eligibility) throw new Error("The offline package requires the reviewed current question bank.");
   const names = new Set(await regularFiles(root));
   const files: OfflineFile[] = [];
-  const add = async (path: string, properties: Omit<OfflineFile, "url" | "bytes" | "sha256">) => {
+  const add = async (path: string, properties: Omit<OfflineFile, "url" | "bytes" | "sha256">, expected?: Buffer) => {
     if (!names.has(path)) throw new Error(`Missing offline file: ${path}`);
     const absolute = resolve(root, path);
     const info = await lstat(absolute);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Unsafe offline file: ${path}`);
+    if (expected && info.size > OFFLINE_COURSE_MAX_BYTES) throw new Error(`Offline course exceeds the 4 MiB size limit: ${path}`);
     const bytes = await readFile(absolute);
+    if (expected && !bytes.equals(expected)) throw new Error(`Offline course differs from the active approved publication: ${path}`);
     files.push({ url: `/${path}`, sha256: hash(bytes), bytes: bytes.length, ...properties });
   };
   const index = await readFile(resolve(root, "index.html"), "utf8");
@@ -31,7 +33,7 @@ export async function buildOfflineManifest(workspace = process.cwd(), outputDir 
   await add("data/topics.json", { kind: "data" });
   await add("data/learning.json", { kind: "data" });
   if (bank.eligibility) await add("data/eligibility.json", { kind: "data" });
-  for (const path of course.files.keys()) await add(path, { kind: "data" });
+  for (const [path, value] of course.files) await add(path, { kind: "data" }, Buffer.from(json(value)));
   for (const release of bank.releases) {
     const releaseId = release.catalog.releaseId;
     await add(`content/${releaseId}/catalog.json`, { kind: "data", releaseId, part: "catalog" });

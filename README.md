@@ -16,7 +16,9 @@ directly. AZ-104 is currently the only available exam.
 ## What is included
 
 - A React and TypeScript interface with a blue Coursebook layout.
-- An original networking course: **8 modules, 21 lessons and 86 checkpoints**.
+- The active original networking pilot: **8 modules, 21 lessons and 86 checkpoints**.
+- A gated full AZ-104 course framework for **5 domains, 21 modules, 59 lessons
+  and 82 official objectives**, pending authored content and independent review.
 - First-principles explanations, worked examples, diagrams, glossary entries
   and references to official documentation.
 - Interactive subnet, route and NSG teaching tools.
@@ -42,8 +44,8 @@ npm run demo
 
 Open **http://127.0.0.1:5174/**.
 
-The explicit demo uses 10 original synthetic practice questions and the complete
-original networking course. It needs no Firebase credentials, does not fetch the
+The explicit demo uses 10 original synthetic practice questions and the active
+authored course selected in `content/course.json` (currently networking). It needs no Firebase credentials, does not fetch the
 production question bank, and does not connect to production accounts. It is
 visibly marked as a demo. Sample questions are software demonstrations, not
 claimed exam questions. Forty-question exams and offline downloads are disabled
@@ -65,7 +67,7 @@ The built demo is written to `dist-demo/`; its preview runs at
 | In Git | Not in Git |
 | --- | --- |
 | Application source, styles, domain contracts and tests | OAuth credentials, tokens and private environment files |
-| Original authored course inputs in `content/networking/` | The downloaded third-party practice bank, comments and images |
+| Original course inputs in `content/networking/` and `content/az104/` | The downloaded third-party practice bank, comments and images |
 | Synthetic demo question generation | Generated `public/data`, `content`, `teaching` and `courses` exports |
 | Firebase rules and deployment safeguards | Browser profiles, account histories, emulator logs and caches |
 | Dependency lockfile and public-source CI | Private working artifacts, quota journals and deployment receipts |
@@ -105,10 +107,18 @@ The course includes a searchable overview, bookmarks, lesson continuation,
 module navigation and an on-page section index. Core/supporting labels describe
 teaching priority, not predicted exam-question frequency.
 
+When independently reviewed and activated, the full course adds ordered domain
+navigation, domain-specific practice links and inspectable objective-to-section
+and checkpoint evidence. The networking pilot does not claim to cover the
+full exam while it remains active.
+
 **Learning progress is device-only**, with separate guest and Firebase UID
 records. A Studied marker is self-reported reading, not a mastery rating.
 Checkpoint results are separate from practice-exam scores. Changed lesson
 revisions require renewed review without rewriting historical practice scores.
+Both course versions retain the `az104-networking-course:v1` browser namespace.
+Expanding the course does not change existing lesson IDs or revision hashes,
+so existing bookmarks, studied markers and checkpoint results survive activation.
 
 Optional Azure labs are instructions only and have not been executed by the
 application. They describe prerequisites, possible costs, expected observations
@@ -188,20 +198,91 @@ download does not erase progress.
 
 ## Course authoring
 
-Edit original source modules under `content/networking/modules/`. Curriculum
-coverage and exact module approvals are also under `content/networking/`.
-Outputs remain private/generated under `.data/course/`.
+`content/course.json` is the tracked activation switch. Its initial value is
+`{"schemaVersion":1,"activeCourse":"networking"}`. Builds, demo exports and source
+checks use the active course; they do not substitute an incomplete course when
+publication fails. Missing planned AZ-104 files do not affect the networking
+build. Only the coordinator activates `"az104"` after review.
+
+Existing networking lessons remain under `content/networking/modules/`.
+New modules use the exact IDs, lesson order, source paths, official module URLs
+and practice topics in `content/az104/curriculum.json`. Authors use the unchanged
+module schema version 1, now accepting all 21 module IDs. Read
+`content/az104/authoring-contract.json` before authoring. Outputs remain
+private/generated under `.data/course/`.
 
 ```bash
 node --import tsx tools/course/validate.ts
 node --import tsx tools/learning/check-sources.ts --course
 node --import tsx tools/course/assemble.ts
+
+# Partial authoring: unrelated domains and approvals are not required.
+node --import tsx tools/course/validate.ts --module storage-access
+node --import tsx tools/course/validate.ts --domain storage
+node --import tsx tools/learning/check-sources.ts --course --domain storage
+node --import tsx tools/learning/check-sources.ts --course --module storage-access
+
+# Require every planned module and coverage map, even before activation.
+node --import tsx tools/course/validate.ts --course az104
+node --import tsx tools/learning/check-sources.ts --course --all
 ```
 
-Review factual changes independently and update the exact approved module
-digests before assembly. Stale or missing approvals fail the build. Do not add
-copied exam material or replace meaningful qualification with a claim of
-certainty.
+Module validation checks the assigned lessons, minimum teaching depth,
+worked examples, predictions, explained checkpoints, diagrams and source IDs.
+Domain validation also requires that domain's coverage file and referenced
+modules. Full validation never skips missing files.
+
+Coverage files are `content/az104/coverage/<domain-id>.json`, with the exact shape
+in the authoring contract: `{schemaVersion:1,domainId,reviewedAt,objectives}`.
+Each objective entry is `{objectiveId,lessons}`; each lesson target is
+`{moduleId,lessonId,sectionIds,checkpointIds,evidence}`. Every one of the 82
+official objective IDs must appear exactly once in its own domain. Targets must
+resolve to real sections/checkpoints, include substantive teaching (at least
+80 prose words across the target's selected sections), and include a worked
+example across the objective's targets. Evidence requires at least 80 characters
+and 12 words explaining the teaching, application and assessment, including the
+reason for an empty checkpoint list. `mo-06` alone can additionally target
+`network-watcher`. These structural gates are not a factual review: a reviewer
+must still inspect the reasoning, relevance, sources and checkpoint keys.
+
+Legacy publication requires `content/networking/review-approvals.json`.
+Full publication requires **all five**
+`content/az104/review-approvals/<domain-id>.json` files, including networking,
+each an array of `{id,digest,note}` for exactly its assigned modules. Digests bind
+the parsed authored module; notes require at least 30 characters. No legacy
+approval fallback is allowed for the full course.
+
+The coordinator also supplies `content/az104/review-approvals/metadata.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "reviewedAt": "YYYY-MM-DD",
+  "reviewer": "coordinator",
+  "curriculumDigest": "<64 lowercase hex characters>",
+  "objectivesDigest": "<64 lowercase hex characters>",
+  "coverageDigest": "<64 lowercase hex characters>",
+  "note": "<at least 80 characters describing the independent metadata and coverage review>"
+}
+```
+
+Use `digest()` from `tools/ingest/normalize-shared.ts` over the parsed curriculum,
+the parsed objectives, and the array of parsed coverage files in curriculum
+domain order, respectively. The tools never create approvals or add timestamps
+to the digest input. Missing or stale module or metadata approvals block assembly.
+Authors must not self-approve.
+
+To activate after review, the coordinator changes only `activeCourse` to
+`"az104"`, then assembles and validates the resulting publication before
+publishing. Schema 1 `networking.json` packages and offline downloads remain
+readable. Schema 2 publishes `courses/<release-id>/az104.json`, with domain
+metadata, module practice topics and coverage evidence bound into its release
+and pointer hash. Both packages have a **4 MiB** byte limit; full pointers are
+bounded to 21 modules, 42-84 lessons and 126-420 checkpoints, while the tracked
+curriculum requires exactly its 59 lesson identities. The synthetic 59-lesson
+test package is about 1.2 MB; actual authored bytes must pass the same measured
+limit, not an extrapolated allowance. Do not add copied exam material or replace
+meaningful qualification with a claim of certainty.
 
 ## Deployment safeguards
 
@@ -228,6 +309,12 @@ node --import tsx tools/firebase/deploy-hosting-adc.ts --journey
 # Only after acceptance, identity and quota checks:
 node --import tsx tools/firebase/deploy-hosting-adc.ts --journey --apply
 ```
+
+After full-course activation and final acceptance, the coordinator instead uses
+`--az104` (and then `--az104 --apply`). This feature requires an active AZ-104
+package and writes receipts beneath `.data/full-course/rollout`, preserving
+earlier pilot and journey receipts. Its Hosting label is `complete-az104-course`;
+it does not upload learning progress or question data to Firestore.
 
 A UI-only Hosting deployment does not upload new Firestore content or private
 Storage objects. Publishing this repository does not automatically deploy the

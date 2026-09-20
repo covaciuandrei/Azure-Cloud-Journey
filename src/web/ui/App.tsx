@@ -16,6 +16,7 @@ import type { Course } from "../../domain/course.js";
 import type { TopicId } from "../../domain/topics.js";
 import { CoursePage } from "../course/CoursePage.js";
 import { loadCourse } from "../course/repository.js";
+import { courseLabel } from "../course/catalog.js";
 import { useCourseProgress } from "../course/useCourseProgress.js";
 import { parseLearningRoute } from "../course/navigation.js";
 import { Icon } from "../components/Icon.js";
@@ -71,7 +72,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
     loadCourse(base, offline.useDownload).then((value) => {
       if (current) setCourse(value);
     }).catch((reason: unknown) => {
-      if (current) setCourseError(reason instanceof Error ? reason.message : "The networking course could not be loaded.");
+      if (current) setCourseError(reason instanceof Error ? reason.message : "The course could not be loaded.");
     });
     return () => { current = false; };
   }, [offline.useDownload, courseRetry]);
@@ -140,7 +141,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
       <div className="workspace-context">{route.section === "exams" ? <span>Exam selection</span> : <>
         <button className="workspace-exam-switch" onClick={() => navigate("exams")}><Icon name="chevron-left" size={12} />Change exam</button>
         <strong className="workspace-exam-code">AZ-104</strong><Icon name="chevron-right" size={12} />
-        <span>{route.section === "learn" ? "Networking course" : route.section === "practice" ? "Practice workspace" : "Your study workspace"}</span>
+        <span>{route.section === "learn" ? courseLabel(course) : route.section === "practice" ? "Practice workspace" : "Your study workspace"}</span>
       </>}
         {(offline.useDownload || route.section === "practice") && <span className="workspace-source-badge">{offline.useDownload ? "Downloaded copy" : displayedSource === "firebase" ? "Firestore" : "Bundled snapshot"}</span>}
       </div>
@@ -183,7 +184,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
         : "Question files included with the app, served by Firebase Hosting when online."}</span></>}
       {route.section !== "practice" && <span className="source-description">{offline.useDownload
         ? "Using the downloaded copy. New content requires an online update."
-        : "Self-contained networking lessons and practice, with no live Azure resources required."}</span>}
+        : "Self-contained lessons and practice, with no live Azure resources required."}</span>}
       <div className="account-summary">
         <span>{accountStatus}</span>
         {user && <button className="button button-secondary button-small" disabled={study.profile.syncing || study.profile.conflict || offline.useDownload}
@@ -214,7 +215,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
       {study.notice && <div className="notice" role="alert"><p>{study.notice}</p>
         <button className="text-button" onClick={study.clearNotice} aria-label="Dismiss notice">Dismiss</button></div>}
       </div>
-      {route.section === "exams" ? <ExamSelection onSelect={() => navigate("welcome")} />
+      {route.section === "exams" ? <ExamSelection course={course} onSelect={() => navigate("welcome")} />
         : route.section === "welcome" ? <Welcome course={course} progress={learning.progress}
         questionCount={catalog?.counts.questions} onLearn={(id) => navigate("learn", id ?? null)} onPractice={() => openPractice()} />
         : route.section === "learn" ? courseError
@@ -226,7 +227,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
           onStudy={(lessonId, studied) => learning.dispatch({ type: "study", lessonId, studied })}
           onBookmark={(lessonId) => learning.dispatch({ type: "bookmark", lessonId })}
           onPractice={(topics) => openPractice("practice", topics)} />
-          : <p className="loading-panel" role="status">Loading the networking course...</p>
+          : <p className="loading-panel" role="status">Loading the course...</p>
         : <div className="practice-workspace">{!study.profile.ready ? <p className="loading-panel" role="status">Loading your account progress...</p> :
         view === "history" ? <History attempts={saved.history} signedIn={Boolean(user)}
           onOpen={(record) => void study.restore(record)} {...(!user ? { onClear: study.requestClearHistory } : {})} /> :
