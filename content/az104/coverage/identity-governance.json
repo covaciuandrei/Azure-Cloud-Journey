@@ -23,7 +23,7 @@
           "lessonId": "identity-tenant-users-groups",
           "sectionIds": ["user-type-and-authority", "create-and-maintain-users", "group-types-and-properties", "dynamic-membership-qualified", "worked-user-and-group-lifecycle"],
           "checkpointIds": ["identity-check-source-authority", "identity-check-dynamic"],
-          "evidence": "Separates UserType from origin and authentication, identifies per-property source of authority, and explains editable group properties, fixed identity/type, owners, and rule-driven membership. Ana's department change is made at its authoritative source, then synchronized and checked for downstream group and access consequences."
+          "evidence": "Separates UserType from origin and authentication, identifies per-property source of authority, and explains editable group properties, fixed identity/type, owners, and rule-driven membership. It distinguishes cloud, synchronized, and mail-enabled group management surfaces. Ana's department and Bogdan's assigned membership are changed at their authoritative sources, then checked in Entra for downstream consequences."
         }
       ]
     },
@@ -59,7 +59,7 @@
           "lessonId": "identity-password-reset",
           "sectionIds": ["password-change-reset-licensing", "sspr-scope-and-registration", "current-authentication-methods", "administrator-recovery-policy", "hybrid-writeback-separation", "worked-sspr-pilot"],
           "checkpointIds": ["identity-check-sspr-license", "identity-check-sspr-scope-methods", "identity-check-administrator-policy", "identity-check-writeback"],
-          "evidence": "Builds a complete nonadministrator SSPR pilot with scoped eligibility, current method administration, qualifying licensing, sufficient registration, reset execution and verification. It separately reasons through administrator policy exceptions, supported versus sign-in-only methods, and additional licensing, connector, permission and password-policy requirements for hybrid writeback."
+          "evidence": "Builds a complete nonadministrator SSPR pilot with scoped eligibility, current method administration, qualifying licensing, sufficient registration, reset execution and verification. The dated pilot distinguishes three allowed choices from two required proofs and plans the phone fallback's retirement transition. It separately reasons through administrator policy exceptions, supported versus sign-in-only methods, and additional licensing, connector, permission and password-policy requirements for hybrid writeback."
         }
       ]
     },
@@ -143,7 +143,7 @@
           "lessonId": "governance-resource-hierarchy",
           "sectionIds": ["resource-group-lifecycle", "resource-move-planning", "hierarchy-prediction"],
           "checkpointIds": ["gov-check-group-lifecycle", "gov-check-resource-move"],
-          "evidence": "Explains resource-group creation inputs, metadata location, cross-region membership, nonnested containment, lifecycle deletion and dependency review. The worked archive-versus-experiment design chooses separate retirement boundaries, while move planning covers provider support, permissions, validation, changed IDs and restoration of resource-level assignments."
+          "evidence": "Explains resource-group creation inputs, metadata location, cross-region membership, nonnested containment, lifecycle deletion and dependency review, including the whole-request block rather than partial deletion when a child has a delete lock. The worked archive-versus-experiment design chooses separate retirement boundaries, while move planning covers provider support, permissions, validation, changed IDs and restoration of resource-level assignments."
         }
       ]
     },
