@@ -156,6 +156,10 @@
             },
             {
               "type": "paragraph",
+              "text": "Use a dedicated replication cache account and check its data-protection settings. Site Recovery does not support soft delete on its cache storage account: replication creates and deletes staging logs frequently, and retaining deleted logs increases cost. This is a different resource and purpose from an Azure Backup vault's soft-delete protection. Do not reuse the production document archive or disable its safeguards to make it an ASR cache. If organizational policy requires cache settings that ASR does not support, resolve the design with the administrator before enabling replication."
+            },
+            {
+              "type": "paragraph",
               "text": "Check the VM agent and extension health, current trusted root certificates, and outbound HTTPS connectivity. Replication needs access to source-region storage, Microsoft Entra ID, ASR services, and monitoring endpoints. Use the documented service tags and required outbound port 443 rules rather than fixed guesses at service IP addresses. Automatic Mobility updates also need their documented connectivity. ASR does not require opening inbound VM ports for replication. An authenticated outbound proxy is unsupported. For a firewall-restricted cache account, allow trusted Microsoft services and all source VM subnets as specified by the matrix; do not weaken production storage indiscriminately."
             },
             {
@@ -208,7 +212,7 @@
                   "why": "A database belongs in the recovery database subnet, not whichever web subnet happens to be selected. A different address range also requires deliberate DNS and application configuration."
                 },
                 {
-                  "action": "Open Storage and View/edit storage configuration. Keep Normal Churn for these low-change managed SSD disks, select a dedicated Standard general-purpose v2 cache account in West Europe, and verify all required OS and data disks and their supported target types.",
+                  "action": "Open Storage and View/edit storage configuration. Keep Normal Churn for these low-change managed SSD disks, select a dedicated Standard general-purpose v2 cache account in West Europe with cache soft delete disabled, and verify all required OS and data disks and their supported target types.",
                   "why": "Churn means data change rate. Normal Churn and High Churn have different cache requirements. A missing database data disk cannot be repaired by recovering only the operating system. The temporary disk is never a place for required persistent records."
                 },
                 {
@@ -647,7 +651,7 @@
       "id": "recovery-support",
       "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-support-matrix",
       "title": "Azure VM regional disaster recovery support matrix",
-      "supports": "Read in full on September 20, 2026, including current regions, cache, guest OS/kernel, compute, disks, churn, and network limits. Supports recovery-support-and-placement, same-tenant cross-subscription scope, source-region cache, unsupported local/ephemeral/Arm64/confidential cases, unmanaged-disk retirement, Premium SSD v2 GA qualifications, and non-replicated VM extensions/RBAC. Traces the cache part of recovery-placement-check and support assumptions in both lessons."
+      "supports": "Read in full on September 20, 2026, including current regions, cache, guest OS/kernel, compute, disks, churn, and network limits. Supports recovery-support-and-placement, same-tenant cross-subscription scope, source-region cache and its unsupported soft-delete setting, unsupported local/ephemeral/Arm64/confidential cases, unmanaged-disk retirement, Premium SSD v2 GA qualifications, and non-replicated VM extensions/RBAC. Traces the cache part of recovery-placement-check and support assumptions in both lessons."
     },
     {
       "id": "recovery-enable-tutorial",
@@ -717,7 +721,7 @@
       "An explicitly approved disposable Azure subscription or tightly scoped lab resource groups, an agreed spending limit, and permission to configure the required vault, VM, disks, storage, network, and Automation resources.",
       "One disposable Windows Server 2022 x64 VM using a currently supported Standard-security VM size and ordinary managed SSD disks. Use fictional files only, with no school records, production credentials, shared disks, or external writable dependencies.",
       "Access and quota for the selected source and recovery regions, verified against the current ASR support matrix and the exact VM size. Use the taught West Europe and North Europe choices only if eligible.",
-      "Approved outbound service connectivity, healthy VM and Mobility extension prerequisites, current certificates, and a supported cache-storage access configuration.",
+      "Approved outbound service connectivity, healthy VM and Mobility extension prerequisites, current certificates, and a dedicated source-region cache account with supported access settings and cache soft delete disabled. Do not weaken an existing production storage account to meet this requirement.",
       "Separate recovery and isolated test VNets in the recovery region, with controlled private administrator access and no path into production. Plan any access-service charges before creating them.",
       "A written list of the lab-owned resources and resource groups so cleanup can distinguish them from shared resources. No actual failover, reprotection, or failback is necessary for this optional drill."
     ],

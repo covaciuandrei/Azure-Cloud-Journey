@@ -208,7 +208,7 @@
             "backup-restore-file-tier",
             "backup-cross-region-snapshot"
           ],
-          "evidence": "The learner selects file, share, disk or whole-VM recovery according to the protected workload and tier, then works through restoring an alternate isolated VM from a verified pre-incident point. The example checks job results, actual application data and renewed protection before use. Cross-region and cross-subscription options are qualified by workload, region, vault copy, identity and supported restore behavior rather than promised universally."
+          "evidence": "The learner selects file, share, disk or whole-VM recovery according to the protected workload and tier, distinguishes ADE guest-encryption restrictions from default platform-managed at-rest encryption, then works through restoring an alternate isolated VM from a verified pre-incident point. The example checks job results, actual application data and renewed protection before use. Cross-region and cross-subscription options are qualified by workload, region, vault copy, identity and supported restore behavior rather than promised universally."
         },
         {
           "moduleId": "azure-backup",
@@ -244,7 +244,7 @@
             "recovery-consistency-check",
             "recovery-disk-readiness-check"
           ],
-          "evidence": "The learner calculates independent RPO and RTO windows, distinguishes asynchronous replication from backup, and chooses consistent recovery points. The worked Azure-to-Azure configuration selects a suitable Recovery Services vault, source VMs, target network, cache, disks and replication policy, then verifies initial replication, current lag and readiness. Regional, agent, storage, capacity and application dependencies are checked before claiming protection."
+          "evidence": "The learner calculates independent RPO and RTO windows, distinguishes asynchronous replication from backup, and chooses consistent recovery points. The worked Azure-to-Azure configuration selects a suitable Recovery Services vault, source VMs, target network, dedicated source-region cache without unsupported cache soft delete, disks and replication policy, then verifies initial replication, current lag and readiness. Regional, agent, storage, capacity and application dependencies are checked before claiming protection."
         }
       ]
     },
