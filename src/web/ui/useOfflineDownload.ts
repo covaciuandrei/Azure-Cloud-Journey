@@ -3,6 +3,7 @@ import {
   OFFLINE_MANIFEST_URL, OFFLINE_PROTOCOL, OfflineManifestSchema, OfflineStateSchema,
   selectOfflineFiles, type OfflineReferences, type OfflineState,
 } from "../../domain/offline.js";
+import { activateOfflineWorker } from "../offline-worker-activation.js";
 
 const emptyState: OfflineState = {
   status: "empty", ready: false, buildId: null, releaseId: null,
@@ -99,34 +100,7 @@ export function useOfflineDownload() {
   }, [send, supported]);
 
   const activate = async () => {
-    const existing = await navigator.serviceWorker.getRegistration("/");
-    if (existing?.active && new URL(existing.active.scriptURL).pathname !== "/offline-worker.js") {
-      throw new Error("A different service worker manages this app.");
-    }
-    const next = await navigator.serviceWorker.register("/offline-worker.js", { scope: "/", updateViaCache: "none" });
-    const worker = next.installing ?? next.waiting ?? next.active;
-    if (!worker) throw new Error("Offline support could not be installed.");
-    if (worker.state !== "activated") {
-      await new Promise<void>((resolve, reject) => {
-        const timer = window.setTimeout(() => {
-          worker.removeEventListener("statechange", changed);
-          reject(new Error("Offline support did not activate."));
-        }, 20_000);
-        const changed = () => {
-          if (worker.state !== "activated" && worker.state !== "redundant") return;
-          clearTimeout(timer);
-          worker.removeEventListener("statechange", changed);
-          if (worker.state === "activated") resolve();
-          else reject(new Error("The offline worker update could not be installed."));
-        };
-        worker.addEventListener("statechange", changed);
-        changed();
-      });
-    }
-    registration.current = next;
-    if (!next.active || new URL(next.active.scriptURL).pathname !== "/offline-worker.js") {
-      throw new Error("Unexpected offline worker.");
-    }
+    registration.current = await activateOfflineWorker(navigator.serviceWorker);
   };
 
   const download = async (legacyRefs: OfflineReferences) => {

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-09-20",
+  "reviewer": "coordinator",
+  "curriculumDigest": "89a2756e7bdbecb27434149456c8992319e9d3462fa30ba10cf516cfb801c219",
+  "objectivesDigest": "cc47eeb43bbb4322d1cd66b85a77e3d3ed6a017ee3431434558b6e43b0d0d203",
+  "coverageDigest": "9ab3759e90b42a6bd16405814d7f8dee232fb643661f6f49f97a7e47b68f2e55",
+  "note": "The coordinator verified the current official guide effective April 17, 2026 and all 82 objective identities across five domains. Independent domain reviewers read complete lessons, worked examples, cited product documentation and every correct and incorrect checkpoint explanation; focused corrections were integrated and exact module digests approved. The curriculum contains 21 modules, 59 lessons and 241 original checkpoints. Each objective maps to substantive teaching and a worked application. Source, arithmetic and code checks are not claimed as live Azure deployment tests, and dated preview or conflicting-documentation qualifications remain explicit."
+}

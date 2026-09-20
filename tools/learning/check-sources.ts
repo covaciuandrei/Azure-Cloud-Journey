@@ -5,6 +5,7 @@ import { readData, readOptionalData, writeData } from "../review/data.js";
 import { LearningExplanationSchema } from "../../src/domain/learning.js";
 import { TOPIC_IDS } from "../../src/domain/topics.js";
 import { z } from "zod";
+import { isApprovedDocumentationUrl } from "./source-policy.js";
 
 const args = process.argv.slice(2);
 const drafts = args.includes("--drafts");
@@ -55,11 +56,12 @@ const results = new Map((existing?.results ?? []).map((result) => [result.url, r
 const failures: Array<{ url: string; error: string }> = [];
 for (const url of urls) {
   const cached = results.get(url);
-  if (cached && Date.now() - Date.parse(cached.checkedAt) < 86400_000 && cached.status === 200) continue;
+  if (cached && Date.now() - Date.parse(cached.checkedAt) < 86400_000 && cached.status === 200 &&
+      isApprovedDocumentationUrl(new URL(cached.finalUrl))) continue;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(30_000), headers: { Accept: "text/html" } });
     const finalUrl = new URL(response.url);
-    if (finalUrl.protocol !== "https:" || !(finalUrl.hostname === "microsoft.com" || finalUrl.hostname.endsWith(".microsoft.com"))) {
+    if (!isApprovedDocumentationUrl(finalUrl)) {
       throw new Error("Documentation redirected outside the approved source domains.");
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
