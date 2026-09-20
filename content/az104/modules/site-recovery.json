@@ -1,0 +1,748 @@
+{
+  "schemaVersion": 1,
+  "id": "site-recovery",
+  "title": "Site Recovery: prepare, prove, and recover",
+  "summary": "Prepare the school's Azure virtual machines for a regional outage, measure acceptable data loss and downtime, and follow a verified route through a recovery drill, failover, reprotection, and failback.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 study guide effective April 17, 2026, checked September 20, 2026, explicitly includes configuring Azure Site Recovery for Azure resources and performing a failover to a secondary region. This module teaches those objectives through Azure-to-Azure regional disaster recovery. It does not turn workflows for other replication scenarios into Azure VM instructions.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/site-recovery/site-recovery-overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Configure Azure Site Recovery for Azure resources.",
+    "Perform a failover to a secondary region by using Site Recovery."
+  ],
+  "lessons": [
+    {
+      "id": "recovery-rpo-rto-and-replication",
+      "title": "Decide what recovery must achieve, then configure replication",
+      "summary": "Separate replication from backup, calculate recovery objectives, and configure the resources and dependencies that make a second region usable.",
+      "objectives": [
+        "Calculate a data-loss window and an application recovery duration from a timeline.",
+        "Distinguish crash-consistent and application-consistent recovery points.",
+        "Check regional, operating-system, storage, network, and permission prerequisites.",
+        "Configure Azure VM replication and judge readiness from evidence rather than a completed wizard."
+      ],
+      "sections": [
+        {
+          "id": "recovery-service-boundary",
+          "title": "A second place to run, not a replacement for backup",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The fictional school runs classroom.example on a web virtual machine, or VM, with a private database VM behind it. Teachers need the application even if its Azure region becomes unavailable. Azure Site Recovery, abbreviated ASR, can continuously replicate supported Azure VM disk changes to another region and coordinate creating recovery VMs there. Failover means starting the protected workload in that recovery location. Merely enabling replication does not redirect the school's users, and an outage does not automatically trigger an ASR failover."
+            },
+            {
+              "type": "paragraph",
+              "text": "Replication follows changes, including harmful ones. If an application deletes homework records, the deletion can reach the replica. Recovery points offer a limited history, but replication is not an independent long-term backup policy or a promise to undo every attack. Keep Azure Backup or another appropriate backup design for historical restoration, retention, and protection against deletion. Choose Site Recovery for continuing operations elsewhere; choose a suitable backup restore when the requirement is recovering an earlier version of data. A serious recovery plan commonly needs both."
+            },
+            {
+              "type": "paragraph",
+              "text": "The scope here is ordinary Azure VMs recovering between Azure regions. A managed document archive, identity provider, public DNS zone, and office connection are separate dependencies, not extra VM disks automatically copied by ASR. Write down how each will remain available. Our examples use invented records, West Europe as the primary region, and North Europe as the recovery region, assuming subscription access and the required resource capabilities have been checked. They are not instructions to replicate real student information into an unapproved location."
+            }
+          ]
+        },
+        {
+          "id": "recovery-time-budgets",
+          "title": "RPO measures lost time; RTO measures waiting time",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A recovery point objective, or RPO, is the maximum acceptable age of recovered data relative to the disruption. An RPO of five minutes means the school is prepared to lose up to five minutes of recent work, not five files or five transactions. A recovery time objective, or RTO, is the maximum acceptable time until the required service is usable again. For this school, the clock starts when submissions become unavailable and stops when an authorized student can submit and read homework. Detection, decisions, VM startup, database recovery, and network changes all consume that time."
+            },
+            {
+              "type": "example",
+              "title": "Measure two different gaps on one timeline",
+              "scenario": "The school agrees on RPO five minutes and RTO twenty minutes. Submissions stop at 09:30. The selected recovery point contains committed records through 09:26. Administrators begin failover at 09:35, the VMs run at 09:42, and the complete application passes a student submission test at 09:47. Assume synchronized clocks and no recovery of later writes from another source.",
+              "steps": [
+                {
+                  "action": "Subtract 09:26 from the disruption time, 09:30: the data-loss window is four minutes.",
+                  "why": "RPO concerns how far back the recovered data goes. The 09:35 failover start does not move the moment when the original service lost availability."
+                },
+                {
+                  "action": "Subtract 09:30 from 09:47: application recovery took seventeen minutes.",
+                  "why": "The school could not use the service merely because the VMs were running at 09:42. DNS and application checks used another five minutes."
+                },
+                {
+                  "action": "Compare four with five, and seventeen with twenty; record both targets as met in this exercise.",
+                  "why": "A short failover job alone cannot prove either objective. We need the recovered data timestamp and the end-to-end service result."
+                }
+              ],
+              "result": "The exercise meets the stated objectives under its assumptions. It does not prove that every future incident will do so. A point from 09:20 would miss the RPO even if the application restarted very quickly."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "A zero-minute objective is not a guarantee",
+              "text": "Azure-to-Azure replication is asynchronous: successful writes on the source can exist before their copies are usable in the other region. An RPO target of zero does not make that delay disappear. Even a displayed zero lag at one moment does not guarantee no loss during the next outage. For a controlled switchover, stop application writes, verify shutdown and replication progress, and assess the actual recovered data."
+            }
+          ]
+        },
+        {
+          "id": "recovery-data-path",
+          "title": "Follow the data separately from the management instructions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Enabling Azure-to-Azure replication installs the Site Recovery Mobility service extension on the VM. After registration and initial replication, it tracks disk writes. Changes first reach a cache storage account in the source region, then are processed into replica storage in the recovery region. Initial replication establishes the starting copy; subsequent replication transfers changes. The cache is a staging location, not the recovery region itself. A source-region outage can make changes that never left the source unavailable."
+            },
+            {
+              "type": "diagram",
+              "title": "The vault coordinates; regional storage carries the data",
+              "description": "The top row is the normal replication data path. The Recovery Services vault manages the protected item and recovery operations. A recovery VM is created from a chosen point for a test or actual failover, rather than serving students continuously during ordinary replication.",
+              "nodes": [
+                { "id": "recovery-source", "label": "Source VM", "detail": "West Europe; protected managed disks", "column": 0, "row": 0 },
+                { "id": "recovery-cache", "label": "Cache storage", "detail": "West Europe; incoming disk changes", "column": 1, "row": 0 },
+                { "id": "recovery-replica", "label": "Replica storage", "detail": "North Europe; recoverable points", "column": 2, "row": 0 },
+                { "id": "recovery-vault", "label": "Recovery Services vault", "detail": "North Europe; policy and orchestration", "column": 0, "row": 2 },
+                { "id": "recovery-target", "label": "Recovery VM", "detail": "North Europe; created during recovery", "column": 2, "row": 2 }
+              ],
+              "edges": [
+                { "from": "recovery-source", "to": "recovery-cache", "label": "Send disk changes" },
+                { "from": "recovery-cache", "to": "recovery-replica", "label": "Replicate and process" },
+                { "from": "recovery-vault", "to": "recovery-source", "label": "Manage protection" },
+                { "from": "recovery-replica", "to": "recovery-target", "label": "Use selected point" },
+                { "from": "recovery-vault", "to": "recovery-target", "label": "Coordinate recovery" }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Use a Recovery Services vault, not an Azure Backup vault, for this ASR configuration. The vault manages recovery metadata and operations; it is not a box containing all the school's replicated application data. Separating these roles explains why you need both a correctly located vault and correctly located cache and replica resources. It also explains why a successful vault deployment does not mean any VM is protected yet."
+            }
+          ]
+        },
+        {
+          "id": "recovery-support-and-placement",
+          "title": "Check placement and support before choosing defaults",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Placement rules for this Azure-to-Azure cross-region portal workflow",
+              "headers": ["Resource or decision", "Required check", "School choice"],
+              "rows": [
+                ["Recovery Services vault and its resource group", "For cross-region recovery, neither location can be the source VM region. Microsoft recommends placing the vault in the recovery region.", "Vault and vault resource group in North Europe."],
+                ["Recovery region and target resource group", "Validate the target region, subscription access, quota, VM size, and dependencies. The target resource group's location must not be the source VM region.", "Target resources and their resource group in North Europe."],
+                ["Cache storage", "Keep it in the source VM region. For the portal workflow here, use the source subscription.", "A dedicated West Europe cache account."],
+                ["Subscriptions", "Cross-subscription replication is supported within the same Microsoft Entra tenant, with permissions in the relevant scopes.", "One approved lab subscription for all resources."],
+                ["Region eligibility", "Use the current support matrix and subscription access, not an assumption that any displayed pair is usable.", "Confirm both chosen regions before enabling protection."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A paired region is not a universal ASR requirement. Region support includes restricted regions and exceptions. As checked on September 20, 2026, the matrix excludes vaults in South Central India and North East US 5 even though those regions can be source or target locations with a supported vault elsewhere. Brazil South and Brazil Southeast have additional directional restrictions. These details are reasons to check the matrix for the chosen deployment, not to memorize a permanent worldwide promise."
+            },
+            {
+              "type": "paragraph",
+              "text": "Our baseline is Windows Server 2022 on x64, Standard security type, managed Standard SSD or Premium SSD v1 disks, and a supported VM size with at least two active virtual CPUs and 1 GiB RAM. The example machines have more memory available for their applications. Check the exact VM size, boot generation, disk controller, and target capabilities together. Arm64 and confidential VMs are not supported by this matrix. For Linux, verify the exact distribution, kernel, and Mobility service compatibility; being a supported distribution does not make every custom or newly released kernel supported."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Do not apply an old support list to a new disk",
+              "text": "Unmanaged disks retired on March 31, 2026 and are not supported here. Temporary or local disks are not replicated, and ephemeral OS disks are unsupported. Premium SSD v2 support is generally available, but it and Ultra Disk require High Churn and Premium Block Blob cache storage, with Premium SSD v1 replica disks. They are outside this simple lab. The detailed enablement guide still labels NVMe workflow support as preview; do not treat it, shared disks, or Linux major-version upgrade preview support as interchangeable with this baseline."
+            }
+          ]
+        },
+        {
+          "id": "recovery-prerequisite-checks",
+          "title": "Four different kinds of permission and readiness",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Management-plane authorization means permission to configure Azure resources. The operator needs permissions for the vault, replication operations, and target VM, disk, storage, and network creation or use. Site Recovery Contributor helps manage ASR operations, but assigning it only at the vault does not grant every operation in an unrelated recovery resource group. Check effective role assignments, Azure Policy restrictions, resource locks, and regional quotas before the emergency. A target VM size listed in a menu is not reserved capacity. A compatible on-demand capacity reservation is a separate design and cost decision."
+            },
+            {
+              "type": "paragraph",
+              "text": "Data-plane authorization is permission to read or write service data, such as the cache blobs or the school's archive. Network reachability is whether traffic can reach the endpoint. Application authentication is whether the recovered app accepts a student's identity. These are distinct tests: allowing a storage subnet does not assign data permissions, and a vault role does not authorize a database login. Use the documented cache-access configuration rather than assuming that an operator's portal access proves the replication agent can write."
+            },
+            {
+              "type": "paragraph",
+              "text": "Check the VM agent and extension health, current trusted root certificates, and outbound HTTPS connectivity. Replication needs access to source-region storage, Microsoft Entra ID, ASR services, and monitoring endpoints. Use the documented service tags and required outbound port 443 rules rather than fixed guesses at service IP addresses. Automatic Mobility updates also need their documented connectivity. ASR does not require opening inbound VM ports for replication. An authenticated outbound proxy is unsupported. For a firewall-restricted cache account, allow trusted Microsoft services and all source VM subnets as specified by the matrix; do not weaken production storage indiscriminately."
+            },
+            {
+              "type": "paragraph",
+              "text": "Our portal example uses service-managed Mobility updates with an Azure Automation account and managed identity. Review that account's access and update jobs. The setting is vault-wide, not just a preference for one VM. Old Run As account instructions are obsolete because those accounts retired in 2023. If updates are managed manually instead, somebody must own checking and applying supported agent releases. Replication that was healthy last month can become unreliable after an unsupported guest change or a blocked endpoint."
+            }
+          ]
+        },
+        {
+          "id": "recovery-policy-and-points",
+          "title": "A recovery point has a time and a consistency level",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A crash-consistent recovery point represents data already written to disk, similar to the disk state after an abrupt power loss. It does not contain every unsaved item in memory. On restart, a database may replay its transaction log to recover, but its ability to do so must be tested. An application-consistent point coordinates with supported applications to prepare their data before the snapshot. For Windows, Volume Shadow Copy Service, or VSS, asks participating applications to flush and prepare their state. This is application cooperation, not a frozen copy of a running CPU that resumes exactly where it stopped."
+            },
+            {
+              "type": "paragraph",
+              "text": "A replication policy defines recovery-point retention and application-consistent snapshot frequency. Current Azure-to-Azure defaults retain points for one day and disable application-consistent snapshots. Crash-consistent points are normally generated every five minutes; that interval is not an assurance that replication can never fall behind. In this example, we explicitly select one-day retention and a six-hour application-consistent frequency, after checking the database's VSS support. Six hours is less than the retention period. Verify actual successful points, because configuring a frequency alone does not prove that guest application preparation worked."
+            },
+            {
+              "type": "paragraph",
+              "text": "An application-consistent point from 06:00 may restart more predictably than a crash-consistent point from 09:25, but it also discards much more recent work if chosen after a 09:30 outage. Compare consistency, age, and the application's recovery behavior together. Retention is a history window, not a replication interval: retaining one day does not mean copying once per day. Older points are pruned, so do not promise every five-minute timestamp throughout a long retention window. More retained changes also increase storage cost."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose a replication group with multi-VM consistency only when a workload genuinely requires shared consistent points across machines. It adds coordination and workload overhead. It is different from a recovery plan that sequences machine startup. Our stateless web VM and single database VM do not automatically need a consistency group merely because both belong to the school. The database owner must identify any transactions spanning machines before administrators select independent recovery points."
+            }
+          ]
+        },
+        {
+          "id": "recovery-enable-replication",
+          "title": "Worked configuration: make every default earn its place",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Prepare school-web and school-db for North Europe",
+              "scenario": "Assume the prerequisites above are met. The source App VNet is 10.20.0.0/16, with web subnet 10.20.1.0/24 and database subnet 10.20.2.0/24. The approved recovery VNet is 10.60.0.0/16, with corresponding 10.60.1.0/24 and 10.60.2.0/24 subnets. These are planning values, not provisioned resources.",
+              "steps": [
+                {
+                  "action": "In Recovery Services vaults, create the approved North Europe vault in a North Europe resource group. Open Site Recovery, then Azure virtual machines and Enable replication.",
+                  "why": "The vault and its resource group are outside the source region, and this entry selects the Azure VM replication workflow."
+                },
+                {
+                  "action": "On Source, select West Europe, the approved source subscription and resource group, Resource Manager deployment, and No for disaster recovery between availability zones. Select school-web and school-db on Virtual machines.",
+                  "why": "The objective is recovery to another region, not another zone in one region. If the source resource group has a different location from the VM and is not listed, use the VM's Disaster recovery page instead."
+                },
+                {
+                  "action": "On Replication settings, review the target region, subscription, resource group, failover VNet, and subnet. Verify each VM's target network mapping and planned address in its network settings.",
+                  "why": "A database belongs in the recovery database subnet, not whichever web subnet happens to be selected. A different address range also requires deliberate DNS and application configuration."
+                },
+                {
+                  "action": "Open Storage and View/edit storage configuration. Keep Normal Churn for these low-change managed SSD disks, select a dedicated Standard general-purpose v2 cache account in West Europe, and verify all required OS and data disks and their supported target types.",
+                  "why": "Churn means data change rate. Normal Churn and High Churn have different cache requirements. A missing database data disk cannot be repaired by recovering only the operating system. The temporary disk is never a place for required persistent records."
+                },
+                {
+                  "action": "Review the target VM size and availability settings. On Manage, select the one-day policy with six-hour application-consistent snapshots, leave multi-VM consistency off for the stated workload, and review managed-identity-based extension updates.",
+                  "why": "Policy, capacity, and updates are operational decisions. High Churn limits depend on memory, disk, write size, region, and agent version; choosing it is not a universal performance upgrade. The target availability type cannot simply be changed later without re-enabling replication."
+                },
+                {
+                  "action": "Review and enable replication, then open Replicated items and the Site Recovery jobs view. Wait for initial replication and inspect protection state, replication health, recovery-point timestamps, disk coverage, and errors.",
+                  "why": "A submitted job is not a ready replica. The evidence must show that the right disks can actually be recovered, not just that the enablement request was accepted."
+                }
+              ],
+              "result": "The intended VMs, storage, target network, policy, and update process are configured and checked. The next proof is an isolated recovery drill. Production DNS still points to the original school application."
+            }
+          ]
+        },
+        {
+          "id": "recovery-readiness-and-changes",
+          "title": "Protection is a condition to maintain",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "After setup, watch replication health, lag, failed jobs, guest-agent issues, and the most recent usable recovery points. Check both ordinary and busy school periods. A cache account can be throttled even when the portal permissions are correct. Target quota or policy can change after replication starts. Repeat readiness checks before a drill and after significant workload changes; green status on one VM says nothing about the separate archive or office route."
+            },
+            {
+              "type": "prediction",
+              "id": "recovery-predict-added-disk",
+              "prompt": "The database VM was protected yesterday. Today its owner adds a managed data disk containing new coursework. The portal warns that a disk is available for protection. Would dismissing the warning make that coursework recoverable?",
+              "answer": "No. Dismissing the warning does not replicate the disk.",
+              "explanation": "For this ordinary non-shared managed disk, open the replicated item's Disks page, select the unprotected disk, and enable replication. Wait for its initial replication and a suitable new recovery point. A point from before the disk was protected cannot contain its data. Shared cluster disks require their separate workflow, not this hot-add procedure."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the requested protection outcome",
+              "text": "For regional continuity, configure ASR replication plus the recovery dependencies. For historical restoration, use the appropriate backup protection and restore operation. Neither a VM backup nor a completed ASR enablement wizard proves that an entire application can serve users in the secondary region. A replication policy describes point retention and consistency, not user access or automatic DNS switching."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "recovery-budget-check",
+          "kind": "single",
+          "prompt": "Submissions stop at 14:00. Recovered data is complete through 13:56, and students can submit again at 14:18. Assume no later writes are recovered. The targets are RPO five minutes and application RTO fifteen minutes. Which conclusion is correct?",
+          "choices": [
+            { "id": "data-pass-time-fail", "text": "The four-minute data-loss window meets RPO; eighteen minutes of downtime misses RTO.", "explanation": "14:00 minus 13:56 is four minutes. 14:18 minus 14:00 is eighteen minutes. Each measurement is compared with its own target." },
+            { "id": "both-pass", "text": "Both targets are met because the recovered data is only four minutes old.", "explanation": "Recent data does not shorten the separate eighteen-minute interruption. The fifteen-minute RTO is still missed." },
+            { "id": "reversed-targets", "text": "RPO is eighteen minutes and RTO is four minutes.", "explanation": "This reverses the definitions. RPO addresses the missing data interval; RTO addresses the interruption before usable service returns." },
+            { "id": "no-loss-assumed", "text": "RPO is zero because continuous replication guarantees all writes are present.", "explanation": "The scenario states that recovery stops at 13:56. Continuous asynchronous replication is not a no-loss guarantee." }
+          ],
+          "correctIds": ["data-pass-time-fail"],
+          "explanation": "Use the disruption time as the reference for the stated data-loss and service-restoration calculations, not merely the duration of an Azure job."
+        },
+        {
+          "id": "recovery-placement-check",
+          "kind": "multiple",
+          "prompt": "Select the two correct placement decisions for the taught portal workflow: source VMs in West Europe, recovery to North Europe, all in one eligible subscription.",
+          "choices": [
+            { "id": "vault-and-group-north", "text": "Place the Recovery Services vault and its resource group in North Europe.", "explanation": "Both locations are outside the source region, and placing the vault in the recovery region follows the recommendation for this scenario." },
+            { "id": "cache-west", "text": "Use a suitable cache storage account in West Europe.", "explanation": "Cache storage receives writes in the region of the protected source VM before cross-region replication." },
+            { "id": "vault-west", "text": "Put the vault in West Europe because all Recovery Services vaults must match the protected VM region.", "explanation": "That is not the cross-region ASR placement rule. It confuses requirements from different protection scenarios." },
+            { "id": "cache-north-only", "text": "Put the source replication cache only in North Europe to avoid any source-region storage.", "explanation": "The source cache must be in West Europe for this direction. North Europe holds the replica resources." }
+          ],
+          "correctIds": ["vault-and-group-north", "cache-west"],
+          "explanation": "The vault, source cache, and recovery resources serve different purposes and have different placement requirements."
+        },
+        {
+          "id": "recovery-consistency-check",
+          "kind": "single",
+          "prompt": "An operator kept the current default Azure-to-Azure replication policy. The database owner now requires application-consistent points. What should the operator do?",
+          "choices": [
+            { "id": "configure-and-verify-app", "text": "Configure an appropriate application-consistent frequency, check guest application support, and verify successful points.", "explanation": "Application-consistent snapshots are disabled by default. A supported preparation mechanism and observed successful points are needed as well as a policy setting." },
+            { "id": "five-minute-app", "text": "Do nothing because every default five-minute point is application-consistent.", "explanation": "The default five-minute generation concerns crash-consistent points, which do not coordinate application memory and transactions." },
+            { "id": "retention-creates-app", "text": "Increase retention to make existing crash-consistent points application-consistent.", "explanation": "Keeping a point longer does not change how it was captured or add missing application preparation." }
+          ],
+          "correctIds": ["configure-and-verify-app"],
+          "explanation": "Point age, retention, and consistency are separate properties. A current-looking timestamp alone does not prove application consistency."
+        },
+        {
+          "id": "recovery-disk-readiness-check",
+          "kind": "single",
+          "prompt": "A required, non-shared managed data disk was added after VM protection was enabled and is marked Not protected. What establishes readiness to recover its data?",
+          "choices": [
+            { "id": "protect-disk-new-point", "text": "Enable replication for the disk, wait for initial replication, and verify a new recovery point includes it.", "explanation": "The new disk needs its own protection enablement and a point created after its data became recoverable." },
+            { "id": "dismiss-disk-warning", "text": "Dismiss the warning because the VM already appears in Replicated items.", "explanation": "The VM-level listing does not prove that a later-added disk is protected. Dismissal only hides the warning." },
+            { "id": "old-point-all-disks", "text": "Choose yesterday's recovery point because it automatically expands to include today's disk.", "explanation": "An older point represents the disk set available then. It cannot contain data from a disk that was not yet protected." }
+          ],
+          "correctIds": ["protect-disk-new-point"],
+          "explanation": "Verify disk coverage and timestamps, not just the presence of a protected VM name."
+        }
+      ],
+      "takeaways": [
+        "RPO limits acceptable missing work; RTO limits acceptable interruption of the required service.",
+        "ASR replication supports continuity but does not replace independent historical backup protection.",
+        "Vault placement, source-region cache, recovery resources, permissions, and network dependencies must all be checked.",
+        "Explicitly configure and verify application-consistent points when the application requires them.",
+        "Initial replication, disk coverage, recovery-point age, and a successful drill provide stronger evidence than wizard completion."
+      ],
+      "sourceIds": ["recovery-guide", "recovery-overview", "recovery-architecture", "recovery-support", "recovery-enable-tutorial", "recovery-enable-details", "recovery-networking", "recovery-agent-updates", "recovery-high-churn", "recovery-questions"]
+    },
+    {
+      "id": "recovery-test-failover-and-failback",
+      "title": "Prove recovery safely, then manage the real transition",
+      "summary": "Run an isolated test without stopping replication, choose a recovery point for actual failover, validate the application before commit, and restore protection in the correct direction.",
+      "objectives": [
+        "Perform and clean up an isolated Azure-to-Azure test failover.",
+        "Choose a recovery point using the data-age and startup-time trade-off.",
+        "Follow the Azure VM Failover workflow for a controlled or unexpected outage.",
+        "Explain commit, reverse replication, failback, and end-to-end application verification."
+      ],
+      "sections": [
+        {
+          "id": "recovery-drill-isolation",
+          "title": "A recovery drill must not become a second production system",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A test failover creates temporary recovery VMs so you can inspect whether they boot and whether the workload works. The original VMs keep running and production replication continues. This is not the same operation as switching the school to the secondary region. Use the protected item's Test Failover action, not Failover, when the purpose is a drill. Record the selected recovery point and test scope so that a successful web-server boot is not later described as a complete regional recovery test."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the school, use a separate North Europe test VNet, 10.80.0.0/16, with test web and database subnets. Separate addresses alone do not provide isolation. Avoid production peering, office VPN routes, shared production DNS updates, and routes or credentials that let a test web VM write to the live database or archive. Prevent scheduled email jobs from sending real messages. Use approved private administration access and test-only name resolution. A clone can retain application credentials and background jobs from its recovered disks, so check behavior as well as network configuration."
+            },
+            {
+              "type": "paragraph",
+              "text": "Isolation need not mean an unusable test. Provide controlled access for the administrator and any required test-only identity or application dependencies. If the real archive cannot be included safely, use a test archive and document that limitation. The drill should answer specific questions: can the database recover, can the web VM reach it through the expected rules, and can an approved test user complete a submission? It cannot prove an untested production office route merely by displaying a login page."
+            }
+          ]
+        },
+        {
+          "id": "recovery-test-steps",
+          "title": "Worked drill: observe, record, and clean up",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Test the school copy without moving any students",
+              "scenario": "Both VMs are protected and healthy, an isolated test VNet and controlled access exist, and test-only application settings are prepared. A harmless record called practice-submission-17 exists in the selected database point. No production DNS or routing changes are authorized.",
+              "steps": [
+                {
+                  "action": "Open the vault, Replicated items, and the database item. Check its health, point timestamps, included disks, and target compute settings before choosing Test Failover.",
+                  "why": "Testing the wrong point or an incomplete disk set can produce a misleading result. Quota and VM compatibility must still permit creation."
+                },
+                {
+                  "action": "Select the chosen recovery point and the isolated North Europe test VNet, then start the test and inspect the Site Recovery job and notifications.",
+                  "why": "The test-network selection controls where the temporary VM is attached. A successful job confirms infrastructure work, not application correctness."
+                },
+                {
+                  "action": "Recover the web VM into its test subnet, configure test-only dependency names, and verify database readiness before starting the application workload.",
+                  "why": "A web VM can start before its database is usable. Sequencing and dependency checks prevent that from being mistaken for a failed replication mechanism."
+                },
+                {
+                  "action": "Check VM size, NIC addresses, DNS answers, allowed network paths, guest services, and application sign-in. Read practice-submission-17 and create a separate test submission.",
+                  "why": "The read proves expected recovered data exists; the new write and read-back test prove useful service. These checks are broader than a successful remote login."
+                },
+                {
+                  "action": "Record timestamps and limitations, then use Cleanup test failover for each tested item. Add observations, mark Testing is complete, and monitor the cleanup job.",
+                  "why": "The ASR cleanup workflow closes the drill and deletes its test VMs. Manually deleting a VM alone can leave the recovery workflow unfinished."
+                }
+              ],
+              "result": "Production continues in West Europe. The test demonstrated the stated recovery behaviors and produced evidence for improving the plan. After cleanup, production replication remains enabled; test-only writes are not merged back into the source application."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Cleanup test failover is not Disable replication",
+              "text": "Cleaning up a drill does not stop production replication or remove the normal protection configuration. Check the cleanup result and continuing replication health. Inspect separately created lab networking and access resources for charges. Do not delete the production cache, replica disks, vault, or shared dependencies as test cleanup."
+            }
+          ]
+        },
+        {
+          "id": "recovery-point-selection",
+          "title": "Choose the point that answers the incident",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Recovery-point choices in the Azure-to-Azure failover workflow",
+              "headers": ["Choice", "What it uses", "Trade-off"],
+              "rows": [
+                ["Latest processed", "The newest point already processed by ASR.", "Avoids processing pending data first, favoring shorter startup time over incorporating that pending data."],
+                ["Latest", "Processes available data already sent to ASR before selecting the resulting point.", "Favors the freshest received data, but processing can extend recovery time. It cannot invent writes that never arrived."],
+                ["Latest app-consistent", "The most recent available application-consistent point.", "Favors the prepared application state, but check its timestamp because it can be older."],
+                ["Custom", "A specific available point chosen for a single VM.", "Useful for a deliberate timestamp choice. This choice is not available when failing over through a recovery plan."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose disruption occurs at 11:20. The newest processed point is 11:15, while additional data received by ASR could produce an 11:18 point. Selecting Latest processed accepts a five-minute data window and avoids that additional processing. Selecting Latest aims for a two-minute window if processing the available data succeeds, but takes longer. A separate application-consistent point from 10:00 has a much older data state. Choose according to the incident's priorities and the database recovery requirements, not because the word latest sounds reassuring."
+            },
+            {
+              "type": "prediction",
+              "id": "recovery-predict-latest",
+              "prompt": "The source region is unavailable. A homework record was committed at 11:19 but never reached the recovery region. Will selecting Latest recover it because 11:19 is the newest timestamp?",
+              "answer": "No. Latest can process received replication data, not retrieve unavailable writes that never arrived.",
+              "explanation": "The operation favors the lowest achievable RPO from available replication data. If nothing new is waiting to be processed, it can use the previously processed point. A faster network yesterday or an RPO target of zero does not create the missing record today."
+            }
+          ]
+        },
+        {
+          "id": "recovery-actual-failover",
+          "title": "One Azure VM Failover workflow, two operational situations",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A controlled switchover is planned by the operators; an emergency failover responds to an unexpected disruption. For the Azure-to-Azure portal procedure documented here, both use the replicated item's Failover action. The dialog includes Shut down machine before beginning failover. Do not look for a separate Planned failover action copied from a different replication scenario. That checkbox asks ASR to try to shut down the source machine, but failover continues even if shutdown fails. It is not a guaranteed no-data-loss transaction."
+            },
+            {
+              "type": "example",
+              "title": "Move the live school application to North Europe",
+              "scenario": "The school authorizes a controlled regional switchover. West Europe is still reachable, both VMs have healthy protection, and the North Europe production recovery network and application dependencies have passed the drill. The team prioritizes incorporating received changes over minimizing point-processing time. This is an actual service move, not Test Failover.",
+              "steps": [
+                {
+                  "action": "Pause new submissions and background database writers in West Europe. Record the last acknowledged homework record and its timestamp, then inspect replication progress for the protected disks.",
+                  "why": "Controlling writes establishes what data the team expects to find after recovery. Choosing a recent point without controlling continuing writers would leave that expectation moving."
+                },
+                {
+                  "action": "In the vault's Replicated items, select school-db. Review disk coverage, available points, target size, quota, and the North Europe database subnet. Select Failover and choose Latest.",
+                  "why": "Latest processes received pending data, matching the stated priority. The production recovery subnet is intentional here; the isolated drill subnet would not provide the approved live application path."
+                },
+                {
+                  "action": "Select Shut down machine before beginning failover, start the operation, and inspect the job and shutdown result. Keep the original application unavailable to writers if shutdown does not succeed.",
+                  "why": "The shutdown checkbox requests an attempt, not a prerequisite that always blocks recovery when unsuccessful. The team must still prevent conflicting source and recovery writers."
+                },
+                {
+                  "action": "Verify the recovered database and the last acknowledged record. Fail over school-web into its approved North Europe subnet, then verify its database name resolution, connection, and application sign-in.",
+                  "why": "The database must be usable before the web tier accepts submissions. Successful VM creation alone proves neither the expected data nor the web-to-database dependency."
+                },
+                {
+                  "action": "After acceptance checks, direct the approved school endpoint to North Europe, test a new submission through the user path, and record the service-restoration time before committing.",
+                  "why": "The operation becomes useful to students only after traffic reaches the recovered application. Commit should follow acceptance because it removes the alternative recovery-point choices."
+                }
+              ],
+              "result": "North Europe serves the school after a verified actual failover. The team records the recovered data and elapsed interruption rather than assuming zero loss. It then follows the commit and reprotect procedure below to establish reverse protection."
+            },
+            {
+              "type": "paragraph",
+              "text": "For an unexpected outage, record which source checks cannot be completed instead of pretending the controlled procedure occurred. Failover does not require connectivity to the unavailable source region, but it can use only the recovery data that exists. Choose the point, control access to the old endpoint, and validate the recovered application under those constraints."
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep a single authoritative application writer. If a disconnected source later returns, do not let students write independently to both databases. Use the approved application, routing, and source shutdown controls to prevent that split. ASR does not automatically merge conflicting records. The checkbox cannot prove the old application is stopped when the source is unreachable, so the incident plan needs an explicit decision about how access to the old endpoint will be prevented."
+            }
+          ]
+        },
+        {
+          "id": "recovery-application-verification",
+          "title": "A running VM is not yet a recovered school",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Build an order for dependencies. If the application needs a private resolver, database, and web VM, the recovery procedure must make name resolution available and confirm the database is ready before accepting web traffic. A recovery plan can group and sequence VMs and include manual actions. It does not discover every dependency or certify database readiness automatically. A multi-VM consistency group coordinates recovery points; a recovery plan coordinates recovery actions. They solve different problems."
+            },
+            {
+              "type": "paragraph",
+              "text": "In our recovery VNet, the database may be 10.60.2.5 instead of its original 10.20.2.5. Verify that db.classroom.internal resolves correctly from the recovered web VM through an appropriate private DNS link or resolver path. Check routes and network security groups, or NSGs, for the specific web-to-database connection. Then check the guest firewall, database listener, and application identity. Azure management-plane permission to create the VM is not database authorization. VM-scoped role assignments and VM extensions are not simply replicated to the new VM, so plan the required restoration of access and monitoring."
+            },
+            {
+              "type": "paragraph",
+              "text": "The regional production public IP does not move with the application. Prepare the approved recovery endpoint and any necessary gateway or traffic-routing configuration separately. When validation is complete and the cutover is authorized, update DNS or the configured traffic-routing service to direct classroom.example to that endpoint. DNS caches can preserve older answers until their time to live, or TTL, expires. Test from an actual user path, including the office connection if it is in scope. Do not declare the RTO met while only the administrator's private test path works."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use an application checklist: confirm the recovered timestamp, read known records, submit a harmless new item, read it back, access the intended archive, and inspect errors. Record any missing transactions and reconcile them through the application's approved process. Treat secrets, certificates, identity access, and regional managed services as explicit dependencies. A green replication indicator cannot prove these business operations, and loosening all NSGs is not an appropriate answer to an authentication failure."
+            }
+          ]
+        },
+        {
+          "id": "recovery-commit-and-reprotect",
+          "title": "Commit accepts the point; reprotect restores protection",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "After actual failover, validate the recovered application before selecting Commit. If the selected point is unsuitable and the operation supports it, use Change recovery point before committing, accepting that this changes the recovered VM's state. Do not accept new production writes and then casually discard that state to try an older point. Once committed, ASR deletes the available recovery points for that failover, and you cannot change the selected point. Commit is therefore an acceptance decision, not an extra backup or a reversal button."
+            },
+            {
+              "type": "paragraph",
+              "text": "A failed-over VM starts in the secondary region without reverse protection automatically enabled. When its status is Failover committed and the original region is available, select Re-Protect. Verify that direction now runs North Europe to West Europe. Review the original-region resource group, network mapping, storage, target compute needs, and permissions. The currently running North Europe VM becomes the replication source, so its cache storage is in North Europe. The names primary and secondary describe the original plan, not an unchanging data-flow direction."
+            },
+            {
+              "type": "paragraph",
+              "text": "Reprotection synchronizes data toward the original region, then continues replicating changes. Wait for the job and synchronization to complete and for healthy Protected status. It is not a merge of two independently edited databases. The normal path here assumes the original source data and supported configuration remain accessible; missing or corrupted original resources require reviewing the documented recovery alternatives rather than blindly retrying. Reprotection can replace original disks and creates billable temporary managed replica disks, so do not treat it as a harmless metadata toggle."
+            }
+          ]
+        },
+        {
+          "id": "recovery-failback-verification",
+          "title": "Failback is another verified failover, in reverse",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Bring the latest school work home, not yesterday's copy",
+              "scenario": "The school has operated in North Europe since the incident and accepted new coursework there. Failover was committed, reprotection completed, and replication back to West Europe is healthy. The original region and application dependencies are usable again. A controlled return has been approved.",
+              "steps": [
+                {
+                  "action": "Verify synchronization, recent points, original-region capacity, and recovery networking. Ensure the old West Europe VM is shut down before failback.",
+                  "why": "The original-region disks must not be actively used while failback synchronizes them. Booting the stale VM is not a return of the current service."
+                },
+                {
+                  "action": "Pause new writes in the current North Europe application. In the replicated item's Failover dialog, verify North Europe to West Europe, choose the approved point, and use the shutdown option for the current source.",
+                  "why": "There are two shutdown considerations: the old West Europe target must be off, and the current North Europe writer must be controlled. The portal direction prevents confusing these roles."
+                },
+                {
+                  "action": "Monitor the failover job and verify the recovered database contains coursework accepted during the North Europe period. Test the whole application and switch the approved user endpoint back.",
+                  "why": "A VM that boots with pre-incident data is not a successful failback. User routing, name resolution, and application operations must match the now-current site."
+                },
+                {
+                  "action": "Commit after acceptance, then reprotect from West Europe to North Europe and confirm healthy replication and fresh points again.",
+                  "why": "Returning users does not automatically restore the original protection direction. The next regional incident still needs an up-to-date recovery copy."
+                }
+              ],
+              "result": "West Europe again serves students with the current data, and North Europe is again the protected recovery destination. Review ASR's managed-resource cleanup and remaining charges without deleting resources still required for replication."
+            }
+          ]
+        },
+        {
+          "id": "recovery-operation-distinction",
+          "title": "Choose the operation by its effect, not by its name alone",
+          "blocks": [
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Five different decisions",
+              "text": "Test Failover creates an isolated drill copy while production replication continues. Cleanup test failover closes that drill without disabling protection. Failover recovers the workload to the selected region and point. Commit accepts the recovered state and removes the option to change its recovery point. Re-Protect establishes replication in the new direction. Failback uses Failover after reverse replication is ready, followed by acceptance and protection in the original direction again."
+            },
+            {
+              "type": "paragraph",
+              "text": "Budget for the state you actually create. Ongoing protection can incur the ASR instance charge, cache and replica storage, storage transactions, and data transfer. Test and actual recovery VMs add compute and disk charges, while networking, automation, and capacity reservations can add their own costs. A published introductory waiver for the ASR protection charge does not make the whole exercise free. Longer retention, higher churn, a forgotten test VM, or a long reprotection job can all change the bill. Estimate the chosen regions and resources before any optional lab."
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep a short incident record with the decision owner, operation direction, chosen point and consistency, missing-data assessment, job identifiers, user-path validation, commit time, and reprotection result. This turns an emergency into evidence for the next drill. Improving a seventeen-minute recovery requires knowing whether the delay came from detection, point processing, database startup, DNS caching, or a missing office route. An unexplained screenshot of a successful VM job cannot answer that."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "recovery-test-isolation-check",
+          "kind": "multiple",
+          "prompt": "The school wants a recovery drill without moving production users or stopping production replication. Select the two correct actions.",
+          "choices": [
+            { "id": "isolated-test-network", "text": "Use Test Failover with a non-production network whose routes, DNS, and application access cannot affect production.", "explanation": "The test creates copies while production continues. Isolation includes dependency access, not just selecting a different VNet name." },
+            { "id": "cleanup-test-workflow", "text": "After recording results, run Cleanup test failover and verify continuing replication health.", "explanation": "This closes the drill and removes the test VMs without disabling ordinary production protection." },
+            { "id": "disable-first", "text": "Disable replication first so the production VM cannot change during the drill.", "explanation": "A test failover is designed to run with ongoing replication. Disabling protection is unnecessary and removes the protection the exercise is meant to test." },
+            { "id": "switch-public-dns", "text": "Point the public school hostname at the test VM to make the drill harmless.", "explanation": "That would move real users toward the test environment. It is a production traffic change, not isolation." }
+          ],
+          "correctIds": ["isolated-test-network", "cleanup-test-workflow"],
+          "explanation": "Use the dedicated test and cleanup operations, and keep production traffic and writable dependencies separate."
+        },
+        {
+          "id": "recovery-point-choice-check",
+          "kind": "single",
+          "prompt": "During an outage, ASR has a processed 11:15 point and received data that can produce an 11:18 point. The source is unreachable. The approved priority is the freshest received data, even if processing delays startup. Which choice fits?",
+          "choices": [
+            { "id": "latest-received", "text": "Latest, allowing ASR to process the received pending data.", "explanation": "This prioritizes the lowest achievable data-loss window from the available received data. It still cannot recover writes that never arrived." },
+            { "id": "processed-fastest", "text": "Latest processed, because it necessarily incorporates all pending data first.", "explanation": "Latest processed avoids that processing and uses the existing point. It favors quicker recovery rather than this scenario's stated priority." },
+            { "id": "app-point-any-age", "text": "Latest app-consistent, regardless of its timestamp.", "explanation": "An application-consistent point might be much older. Its consistency does not mean it contains the freshest received data." }
+          ],
+          "correctIds": ["latest-received"],
+          "explanation": "Choose by the stated trade-off. Freshness, application consistency, and startup time are related but not interchangeable."
+        },
+        {
+          "id": "recovery-commit-check",
+          "kind": "single",
+          "prompt": "Actual failover succeeded, the recovered application and data have been accepted, and the original region is available. Failover is not yet committed. What is the correct next sequence to restore reverse protection?",
+          "choices": [
+            { "id": "commit-then-reprotect", "text": "Commit the accepted failover, then run Re-Protect and verify secondary-to-primary replication.", "explanation": "Reprotection requires Failover committed status. Commit accepts the point and removes the ability to select another one; reprotection is the separate replication operation." },
+            { "id": "reprotect-before-commit", "text": "Run Re-Protect first to preserve all alternative failover points indefinitely.", "explanation": "The documented prerequisite is a committed failover. Reprotection is not a way to retain all earlier point choices." },
+            { "id": "cleanup-instead", "text": "Run Cleanup test failover to establish reverse replication.", "explanation": "That operation belongs to a drill. It neither commits this actual failover nor enables reverse protection." },
+            { "id": "automatic-reverse", "text": "Do nothing because recovered VMs automatically replicate back once their operating system starts.", "explanation": "Failed-over VMs start without automatic reverse protection. Re-Protect must establish it." }
+          ],
+          "correctIds": ["commit-then-reprotect"],
+          "explanation": "Application acceptance, commit, and reprotection are successive decisions with distinct consequences."
+        },
+        {
+          "id": "recovery-failback-check",
+          "kind": "single",
+          "prompt": "North Europe has accepted new coursework after failover. Reverse replication to West Europe is now healthy and synchronized. Which approach returns service safely under the lesson's controlled failback assumptions?",
+          "choices": [
+            { "id": "verified-reverse-failover", "text": "Keep the old West Europe VM off, control North Europe writes, fail over in the verified reverse direction, validate recent coursework and user access, commit, and reprotect.", "explanation": "This uses the current replicated data and controls both the stale original VM and the current writer. Reprotection then restores readiness for another incident." },
+            { "id": "dns-only-return", "text": "Only switch DNS back to the original West Europe address.", "explanation": "DNS changes where requests go, not which data is recovered or whether the old VM is safe to start. It does not perform failback." },
+            { "id": "boot-old-vm", "text": "Start the old West Europe VM before failback to ensure it can accept simultaneous writes.", "explanation": "The original-region VM must be shut down for the documented failback operation. Simultaneous independent writers also risk conflicting data." },
+            { "id": "stop-after-boot", "text": "Stop as soon as a West Europe VM boots because protection automatically returns to its original direction.", "explanation": "Booting proves neither application correctness nor ongoing replication. Validation, acceptance, and reprotection still matter." }
+          ],
+          "correctIds": ["verified-reverse-failover"],
+          "explanation": "Failback is a data and service transition after reverse replication, not a shortcut to the original machine's old state."
+        }
+      ],
+      "takeaways": [
+        "An isolated test failover and its cleanup leave production replication running.",
+        "Latest favors received data freshness; Latest processed avoids extra processing time.",
+        "Azure-to-Azure uses Failover with an optional source shutdown attempt, not a copied workflow from another replication scenario.",
+        "Validate data, dependencies, DNS, permissions, and real user access before accepting recovery.",
+        "Commit removes alternative point choices; Re-Protect establishes the new replication direction.",
+        "Failback requires completed reverse replication, controlled writers, application verification, and restored protection."
+      ],
+      "sourceIds": ["recovery-guide", "recovery-overview", "recovery-support", "recovery-architecture", "recovery-drill", "recovery-failover", "recovery-reprotect", "recovery-failback", "recovery-networking", "recovery-questions"]
+    }
+  ],
+  "glossary": [
+    { "term": "Azure Site Recovery (ASR)", "definition": "A service that coordinates replication and recovery of supported workloads. This module uses Azure VM recovery between Azure regions." },
+    { "term": "Recovery point objective (RPO)", "definition": "The maximum acceptable missing-data interval. An objective is not a guarantee that every disruption loses no more than that amount." },
+    { "term": "Recovery time objective (RTO)", "definition": "The maximum acceptable interruption before the defined service is usable again. Specify whether the measurement covers a VM or the whole application." },
+    { "term": "Recovery point", "definition": "A selectable captured state used to create a recovered VM. Its timestamp, consistency, and included disks affect what can be recovered." },
+    { "term": "Crash-consistent", "definition": "A captured disk state resembling an abrupt shutdown, without capturing all unwritten application memory. Applications may need recovery processing when started." },
+    { "term": "Application-consistent", "definition": "A state prepared with application cooperation before capture, such as through Windows VSS writers. Its timestamp can be older than the newest crash-consistent point." },
+    { "term": "Cache storage", "definition": "Source-region staging storage for replication changes before processing into recovery-region replica storage." },
+    { "term": "Mobility service", "definition": "The guest component installed through the ASR extension to track replication data. Its support, connectivity, and update health matter." },
+    { "term": "Churn", "definition": "The rate at which source disk data changes. Supported replication rates depend on both individual disks and the VM's overall configuration." },
+    { "term": "Test failover", "definition": "A recovery drill that creates test VMs without stopping the production workload or its ongoing replication." },
+    { "term": "Failover", "definition": "Recovering the protected workload at another location using a chosen point. Users also need working dependencies and an appropriate traffic path." },
+    { "term": "Commit", "definition": "Accepting an actual failover's recovered state. ASR removes available alternative recovery points for that failover." },
+    { "term": "Reprotect", "definition": "Establishing replication from the currently running recovered VM toward the other region after a committed failover." },
+    { "term": "Failback", "definition": "Returning service to its original region after reverse replication is ready, then verifying the application and restoring its protection direction." },
+    { "term": "Recovery plan", "definition": "An ASR procedure that groups and sequences VM recovery and can include manual actions. It is not the same as a multi-VM consistency group." }
+  ],
+  "sources": [
+    {
+      "id": "recovery-guide",
+      "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104",
+      "title": "AZ-104 study guide: skills measured as of April 17, 2026",
+      "supports": "Checked September 20, 2026. Establishes mo-11, configuring Site Recovery for Azure resources, and mo-12, failing over to a secondary region. It supports the module's scope, not a prediction about exam questions."
+    },
+    {
+      "id": "recovery-overview",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/site-recovery-overview",
+      "title": "Azure Site Recovery overview",
+      "supports": "Supports recovery-service-boundary and recovery-drill-isolation: continuity through replication, separation from backup, and testing without affecting ongoing replication. Its broad planned-failover language is qualified by the Azure-to-Azure-specific procedure rather than treated as a separate Azure VM portal action."
+    },
+    {
+      "id": "recovery-architecture",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-architecture",
+      "title": "Azure-to-Azure disaster recovery architecture",
+      "supports": "Supports the data-path diagram, Mobility extension, source cache, target resources, current one-day retention and disabled application-consistent defaults, five-minute crash-consistent points, VSS preparation, and multi-VM consistency distinction. Traces recovery-consistency-check and the teaching behind recovery-budget-check; the fictional timeline arithmetic is independently calculated."
+    },
+    {
+      "id": "recovery-support",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-support-matrix",
+      "title": "Azure VM regional disaster recovery support matrix",
+      "supports": "Read in full on September 20, 2026, including current regions, cache, guest OS/kernel, compute, disks, churn, and network limits. Supports recovery-support-and-placement, same-tenant cross-subscription scope, source-region cache, unsupported local/ephemeral/Arm64/confidential cases, unmanaged-disk retirement, Premium SSD v2 GA qualifications, and non-replicated VM extensions/RBAC. Traces the cache part of recovery-placement-check and support assumptions in both lessons."
+    },
+    {
+      "id": "recovery-enable-tutorial",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-tutorial-enable-replication",
+      "title": "Set up disaster recovery for Azure VMs",
+      "supports": "Supports recovery-prerequisite-checks and recovery-enable-replication: operator permissions, guest certificates and connectivity, vault creation, Azure VM source selection, target review, policy, and extension settings. Used with the detailed article for the vault resource-group location restriction."
+    },
+    {
+      "id": "recovery-enable-details",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-how-to-enable-replication",
+      "title": "Replicate Azure VMs to another Azure region",
+      "supports": "Supports the actual portal sequence, source-region restrictions for the vault and its resource group, target resource-group placement, recovery network/subnet, cache and disk configuration, availability-type restriction, source resource-group visibility, and ordinary added-disk protection. Traces recovery-placement-check and recovery-disk-readiness-check. Its NVMe preview qualification is retained rather than expanded into baseline support."
+    },
+    {
+      "id": "recovery-networking",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-about-networking",
+      "title": "Networking in Azure VM disaster recovery",
+      "supports": "Supports recovery-prerequisite-checks and recovery-application-verification: target subnet/NIC compatibility, outbound service connectivity, unsupported authenticated proxies, service tags instead of fixed addresses, and reverse-direction connectivity. Storage firewall wording is reconciled with the support matrix's requirement to allow all source VM subnets."
+    },
+    {
+      "id": "recovery-agent-updates",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-autoupdate",
+      "title": "Automatic Mobility service updates",
+      "supports": "Supports the vault-wide managed update setting, Automation account dependency, manual-update responsibility, and managed identity requirement after Run As retirement. No sample automation script is reproduced or executed."
+    },
+    {
+      "id": "recovery-high-churn",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/concepts-azure-to-azure-high-churn-support",
+      "title": "Azure VM disaster recovery: High Churn support",
+      "supports": "Read in full for current memory, disk/write-size, operating-system, region, and Mobility service qualifications. Supports Normal Churn with Standard GPv2 versus High Churn with Premium Block Blob cache, selection during initial enablement, and the warning that a mode choice alone does not establish supported throughput. No maximum throughput is promised for the small school VMs."
+    },
+    {
+      "id": "recovery-questions",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-common-questions",
+      "title": "Azure-to-Azure disaster recovery common questions",
+      "supports": "Supports point pruning, nonautomatic failover, Latest processing only received data, public IP limitations, recovery-plan sequencing, unprotected state after failover, capacity checks, and charges beyond introductory ASR protection waivers. Traces recovery-point-choice-check and recovery-commit-check. Legacy unmanaged-disk references are not adopted because the current support matrix marks them retired."
+    },
+    {
+      "id": "recovery-drill",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-tutorial-dr-drill",
+      "title": "Run a disaster recovery drill for Azure VMs",
+      "supports": "Supports recovery-drill-isolation and recovery-test-steps: protected/healthy prerequisites, Test Failover, point selection, non-production target network, observation, and Cleanup test failover with notes and Testing is complete. Together with the overview's ongoing-replication statement, traces recovery-test-isolation-check."
+    },
+    {
+      "id": "recovery-failover",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-tutorial-failover-failback",
+      "title": "Fail over Azure VMs to a secondary region",
+      "supports": "Supports recovery-actual-failover and recovery-commit-and-reprotect: Failover with an optional source shutdown attempt, continuation if shutdown fails, point options, Custom restriction, jobs, Change recovery point, Commit deleting recovery-point alternatives, and committed-state prerequisite for Re-Protect. Traces recovery-point-choice-check and recovery-commit-check."
+    },
+    {
+      "id": "recovery-reprotect",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-how-to-reprotect",
+      "title": "Reprotect failed-over Azure VMs to the primary region",
+      "supports": "Supports recovery-commit-and-reprotect: committed failover, original-region availability, secondary-to-primary direction, cache in the currently running region, synchronization before failback, original-source accessibility qualifications, and billable temporary managed replica disks. Reprotect is not described as an application-data merge."
+    },
+    {
+      "id": "recovery-failback",
+      "url": "https://learn.microsoft.com/en-us/azure/site-recovery/azure-to-azure-tutorial-failback",
+      "title": "Fail back Azure VMs to the primary region",
+      "supports": "Supports recovery-failback-verification and recovery-failback-check: completed reverse replication, healthy Protected state, original-region VM shutdown, reversed Failover direction, jobs, and reprotection to the secondary region after return. Commit prerequisites come from the reprotect article; legacy unmanaged-disk cleanup text is not used."
+    }
+  ],
+  "lab": {
+    "title": "Optional manual lab: a disposable VM recovery drill",
+    "purpose": "Observe Azure-to-Azure replication, an isolated test recovery, and test cleanup without executing a production failover. All required reasoning is already taught in the lessons; this is optional portal practice, not an instruction to deploy automatically.",
+    "prerequisites": [
+      "An explicitly approved disposable Azure subscription or tightly scoped lab resource groups, an agreed spending limit, and permission to configure the required vault, VM, disks, storage, network, and Automation resources.",
+      "One disposable Windows Server 2022 x64 VM using a currently supported Standard-security VM size and ordinary managed SSD disks. Use fictional files only, with no school records, production credentials, shared disks, or external writable dependencies.",
+      "Access and quota for the selected source and recovery regions, verified against the current ASR support matrix and the exact VM size. Use the taught West Europe and North Europe choices only if eligible.",
+      "Approved outbound service connectivity, healthy VM and Mobility extension prerequisites, current certificates, and a supported cache-storage access configuration.",
+      "Separate recovery and isolated test VNets in the recovery region, with controlled private administrator access and no path into production. Plan any access-service charges before creating them.",
+      "A written list of the lab-owned resources and resource groups so cleanup can distinguish them from shared resources. No actual failover, reprotection, or failback is necessary for this optional drill."
+    ],
+    "costWarning": "Assume charges are possible from the first resource creation. Estimate source and test VM compute, managed and replica disks, cache storage and transactions, cross-region transfer, ASR protection, automation, and any paid network access service. An introductory waiver for the ASR instance charge does not waive the other services. Do not create a capacity reservation for this lab, and do not promise a free exercise.",
+    "steps": [
+      "Before creating anything, record the approved regions, spending limit, lab resource names, and cleanup ownership. Inspect the current support matrix and price estimate. Stop if the required configuration is unsupported or unapproved.",
+      "On the disposable source VM, create an ordinary fictional note with a visible timestamp on a persistent managed disk, not the temporary disk. Record where it is stored and confirm that no background task can contact production.",
+      "Create or select the lab Recovery Services vault outside the source region, with its resource group outside that region too. Use the recovery region for both. Follow recovery-enable-replication to select the source VM, target resources and network, correct cache location, disks, policy, and update settings.",
+      "Enable replication and inspect the jobs, initial synchronization, protected state, replication health, and available point timestamps. Do not treat the submitted request as readiness. Record any actual application-consistent points if a supported frequency was enabled.",
+      "Choose Test Failover, select a point containing the note, and select the isolated test VNet. Monitor the job and verify the new VM's region, size, subnet, and disk coverage before connecting through the approved private path.",
+      "Read the recovered note and compare its timestamp with the selected point. Create a new test-only note on the recovered VM. Observe that production remains running and replication continues; do not change production DNS or run Failover.",
+      "Record test-start, VM-ready, and successful-access times separately. Explain which dependencies this single-VM drill did not test and why its elapsed time cannot prove the school's complete application RTO.",
+      "Run Cleanup test failover, enter observations, mark Testing is complete, and monitor completion. Verify the test VM is removed and ordinary replication remains healthy. Then perform the narrow end-of-lab cleanup below only if this disposable protection is no longer needed."
+    ],
+    "expectedResults": [
+      "The replica reaches a healthy protected state with inspectable recovery points, and the isolated test VM contains the fictional data available in the chosen point.",
+      "The source VM and normal replication remain active throughout the drill and its test cleanup. Test-only writes are not merged into the source.",
+      "The learner can distinguish point age, VM creation time, application access time, and the untested dependencies rather than reporting one misleading success timestamp.",
+      "After test cleanup, the test VM is gone; remaining protection and separately created networking resources are still visible for an explicit ownership and cost review."
+    ],
+    "cleanup": [
+      "First use Cleanup test failover and confirm its job completed. Do not use Disable replication merely to finish a drill.",
+      "Only when ending the disposable lab, disable replication for this specific lab VM after confirming no further recovery evidence is needed. This intentionally ends its protection; do not apply it to shared or production items.",
+      "Inspect the original resource inventory and the portal after ASR cleanup. Delete only remaining lab-owned VMs, disks, cache storage, networking or paid access resources, and Automation resources that have no other users. Do not delete by an unverified name pattern.",
+      "Remove a lab vault or resource group only after verifying it contains no other protected items, backups, or shared dependencies. Check remaining resources and accumulated cost afterward; a stopped VM alone does not remove storage or other service charges."
+    ]
+  }
+}

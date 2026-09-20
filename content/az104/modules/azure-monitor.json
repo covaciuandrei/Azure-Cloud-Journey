@@ -1,0 +1,792 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-monitor",
+  "title": "Azure Monitor: collect evidence, explain it, and respond",
+  "summary": "Follow the school application from a suspicious graph to selected logs, a reasoned diagnosis, and an alert that reaches the right person without hiding the evidence.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 objectives effective April 17, 2026 explicitly require metrics, log collection and queries, alerts, Insights, Network Watcher, and Connection monitor. These lessons teach those decisions rather than assuming that opening a dashboard configures its data sources.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/azure-monitor/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Interpret metrics in Azure Monitor.",
+    "Configure Azure Monitor log settings.",
+    "Query and analyze Azure Monitor logs.",
+    "Set up alert rules, action groups and alert processing rules.",
+    "Configure and interpret VM, storage and network monitoring with Azure Monitor Insights.",
+    "Use Azure Network Watcher and Connection Monitor."
+  ],
+  "lessons": [
+    {
+      "id": "monitor-metrics-logs-and-collection",
+      "title": "Know what you measured and how it arrived",
+      "summary": "Distinguish numbers, event records, and collection paths before interpreting a graph or enabling expensive data collection.",
+      "objectives": [
+        "Interpret aggregation, time grain, dimensions, and missing metric values.",
+        "Choose activity logs, resource logs, or guest collection for a specific question.",
+        "Configure diagnostic settings and distinguish them from an agent's data collection rule.",
+        "Verify a collection path without mistaking an empty workspace for a healthy application."
+      ],
+      "sections": [
+        {
+          "id": "observations-not-guesses",
+          "title": "Start with the question the school actually needs answered",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "At 09:05 UTC, students say the homework page is slow. Our fictional school has web VM web-01 at 10.20.1.4, a private database at 10.20.2.5, and a document archive in Azure Storage. An administrator needs observations, not a guess that Azure is broken. A metric is a numerical measurement associated with a time, such as processor utilization or a count of requests. A log is a record with named fields, such as a timestamp, operation, caller, and result. Azure Monitor brings these different kinds of evidence together, but they answer different questions."
+            },
+            {
+              "type": "paragraph",
+              "text": "A processor graph can show when web-01 was busy. It normally cannot tell you which homework operation failed or who changed the VM size. Conversely, an operation log can explain one failure without showing whether every minute was overloaded. First write a question: was the processor busy, did a configuration change occur, or did a storage request fail? Then choose the source, resource, and time interval. Keep the timezone explicit. A Romanian local-time screenshot and a UTC event can describe the same incident even when their displayed clock hours differ."
+            }
+          ]
+        },
+        {
+          "id": "metric-grain-and-dimensions",
+          "title": "A graph is a calculation, not a photograph",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "In Metrics, select the resource scope, metric namespace, metric name, aggregation, and time range. The namespace groups related measurements. The unit matters: milliseconds, bytes, percentages, and counts are not interchangeable. The time range is the full period displayed, perhaps 09:00 to 10:00. Time grain is the width of each displayed bucket, perhaps five minutes. That hour then contains twelve five-minute buckets. Changing the display grain does not retroactively change how often the underlying resource collected its measurements. Available grains and aggregations depend on the metric."
+            },
+            {
+              "type": "paragraph",
+              "text": "Aggregation turns several observations into one value. Average divides the sum by the number of valid observations. Maximum preserves the highest observation, while minimum preserves the lowest. Sum is useful for quantities that accumulate, such as bytes transferred over an interval. Count counts measurements, not automatically failed requests. If each recorded measurement already represents several requests, counting those measurements is different from summing their values. Choose an aggregation the metric supports and that answers your question. A sum of CPU percentages is not a useful percentage of processor utilization."
+            },
+            {
+              "type": "table",
+              "caption": "Synthetic equal-weight CPU observations within one five-minute bucket",
+              "headers": ["Minute starting UTC", "CPU observation"],
+              "rows": [
+                ["09:00", "20%"],
+                ["09:01", "20%"],
+                ["09:02", "100%"],
+                ["09:03", "20%"],
+                ["09:04", "20%"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "For these deliberately simplified observations, the five-minute average is 180 divided by 5, or 36%, while the maximum is 100%. Neither graph is lying. The average answers how busy the processor was across the bucket; the maximum reveals a peak. Production metrics can have unequal underlying sample counts, so do not average already-averaged chart points blindly. Missing observations are not zeros. A gap could indicate missing telemetry or an inactive resource, and inserting zero into an average would invent an observation."
+            },
+            {
+              "type": "paragraph",
+              "text": "A dimension labels a metric's separate time series. Storage transaction metrics can distinguish API names and response types. Filtering selects dimension values; splitting draws separate series for them. For example, split transactions by response type to avoid hiding failed requests among thousands of successes, then filter to the account and service involved in the ticket. Dimensions must be offered by that metric. Adding a resource tag named Classroom does not automatically create a Classroom metric dimension. More splits also mean more individual series to interpret and potentially monitor with alerts."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-average-spike",
+              "prompt": "A rule checks whether the five-minute average is greater than 80%. Using exactly the five CPU observations above, does it detect the one 100% observation?",
+              "answer": "No. The average is 36%, below the rule's threshold.",
+              "explanation": "A maximum-based condition would answer a different question. The lesson is to match the statistic and window to the required symptom, not to assume that any high individual observation makes every aggregation high."
+            }
+          ]
+        },
+        {
+          "id": "four-collection-paths",
+          "title": "Separate platform, management, service, and guest evidence",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Choose a data source before choosing a destination",
+              "headers": ["Evidence", "School question", "Collection path"],
+              "rows": [
+                ["Platform metric", "Was the VM processor busy?", "Azure collects supported platform metrics automatically; inspect Metrics."],
+                ["Activity log", "Who changed a resource configuration?", "Management operations are recorded automatically; export separately if needed."],
+                ["Resource log", "Which storage operation returned an error?", "Enable supported service log categories through diagnostic settings."],
+                ["Guest operating-system data", "Did Windows record a service failure inside web-01?", "Use Azure Monitor Agent with an associated data collection rule for that data."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "The activity log describes control-plane events, meaning administration of Azure resources. It is not a transcript of every data-plane request made through those resources. Reading a document from storage and resizing a VM are different kinds of operations. Resource logs describe service-specific activity inside a resource and are not generally collected by default. Guest data originates inside Windows or Linux, which is another boundary again. Azure can report a VM's platform CPU without automatically collecting the guest's Windows events, Linux Syslog messages, or application files."
+            },
+            {
+              "type": "paragraph",
+              "text": "A Log Analytics workspace is the destination and management boundary for Azure Monitor Logs tables. It has access, retention, and cost settings. Log Analytics is also the portal tool used to query those tables. Creating the workspace alone does not connect every school resource to it. Opening Logs from a resource can restrict the query scope to that resource; opening the workspace gives a different starting scope. Permission to configure a resource, permission to read workspace data, network reachability, and permission to use the school application remain separate controls."
+            },
+            {
+              "type": "diagram",
+              "title": "Three independent routes to monitoring evidence",
+              "description": "Platform metrics exist independently of guest log collection. Diagnostic settings route selected service and activity logs. AMA follows an associated DCR for guest logs. A workspace is a destination, not an agent.",
+              "nodes": [
+                { "id": "platform-data", "label": "Azure platform", "detail": "Supported numerical metrics", "column": 0, "row": 0 },
+                { "id": "metric-store", "label": "Metrics", "detail": "Time series and dimensions", "column": 2, "row": 0 },
+                { "id": "service-data", "label": "Service and activity logs", "detail": "Select the right resource or subscription", "column": 0, "row": 1 },
+                { "id": "diagnostic-route", "label": "Diagnostic setting", "detail": "Categories and destinations", "column": 1, "row": 1 },
+                { "id": "school-workspace", "label": "Log Analytics workspace", "detail": "Tables, queries, retention, access", "column": 2, "row": 1 },
+                { "id": "guest-agent", "label": "VM with AMA", "detail": "Events and other configured guest data", "column": 0, "row": 2 },
+                { "id": "guest-rule", "label": "Associated DCR", "detail": "Sources, processing, destination", "column": 1, "row": 2 }
+              ],
+              "edges": [
+                { "from": "platform-data", "to": "metric-store", "label": "Automatic platform collection" },
+                { "from": "service-data", "to": "diagnostic-route", "label": "Select supported categories" },
+                { "from": "diagnostic-route", "to": "school-workspace", "label": "Route logs" },
+                { "from": "guest-rule", "to": "guest-agent", "label": "Agent follows rule" },
+                { "from": "guest-agent", "to": "school-workspace", "label": "Send selected guest logs" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "configure-diagnostic-settings",
+          "title": "Route the logs you need, not every available byte",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For service logs, open the monitored resource's Diagnostic settings and add a named setting. For storage requests, select the relevant service resource, such as the blob service, rather than assuming the parent account exposes every service category. Select supported categories, such as storage reads, writes, or deletes, and an existing destination. A Log Analytics workspace supports queries and log alerts; a storage account can hold an archive; Event Hubs can stream records to another system. These destinations are choices for routing, not different agents installed on the source."
+            },
+            {
+              "type": "paragraph",
+              "text": "A setting can use more than one destination type, but only one destination of each type. To send to two workspaces, use separate settings within the resource's limit of five settings. You need appropriate access to the source and destination. Storage and Event Hubs destinations for regional resources must be in the same region as the source; that restriction is not a universal same-region rule for Log Analytics. Standard storage is supported as a destination, not Premium storage. Destination firewall restrictions need the documented trusted-service access; simply selecting a destination cannot bypass them."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose individual categories or a supported category group. The allLogs group follows the service's category grouping as it evolves, which can change volume. Diagnostic settings select categories, not arbitrary conditions such as only one student's requests. Supported ingestion transformations can filter records before storage, while a query filter only hides rows in that query's results. Supported platform metrics can also be exported by diagnostic settings, but this export flattens dimensions. Do not assume the exported table preserves every split available in Metrics. DCR-based platform metric export is a separate path currently documented as preview."
+            }
+          ]
+        },
+        {
+          "id": "ama-and-dcr",
+          "title": "Collect guest evidence with a working agent and rule",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure Monitor Agent, abbreviated AMA, is software running on the VM. A data collection rule, or DCR, tells the collection pipeline what to collect, how supported transformations process it, and where to send it. A DCR association connects a resource to the rule. An installed agent with no relevant association is not a promise that Windows events will appear. Conversely, creating a rule does not make an absent or unhealthy agent run. For our Windows VM, choose the required event logs and event levels in a guest-log DCR, select the workspace destination, and associate web-01."
+            },
+            {
+              "type": "paragraph",
+              "text": "Check the supported operating system, healthy VM extension installation, local disk space for caching, and an enabled managed identity. Azure VMs support system-assigned or user-assigned managed identities; Arc-enabled servers use their system-assigned identity for this agent. Outside Azure, Azure Arc first makes the server manageable, then AMA collects the selected data. The administrator needs rights to install extensions and create or associate DCRs. The VM also needs the documented outbound HTTPS paths for configuration and ingestion, with correct DNS and no unsupported HTTPS inspection. A private-link design requires the corresponding data collection endpoints and private connectivity."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Old workspace-agent instructions are not a new deployment plan",
+              "text": "The Log Analytics agent, also called Microsoft Monitoring Agent or MMA, retired on August 31, 2024. Microsoft warns that its cloud uploads can stop without notice after March 2, 2026. Use AMA and DCRs for new guest collection. Avoid collecting the same data twice during migration, and verify actual arrivals before removing the old configuration."
+            }
+          ]
+        },
+        {
+          "id": "worked-collection-plan",
+          "title": "Worked example: build an evidence plan for a slow lesson",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Collect three answers without confusing their paths",
+              "scenario": "The school needs CPU trends, a record of VM administration, and Windows service errors. It already has an approved Log Analytics workspace named school-ops. No claim is made that this example provisions resources.",
+              "steps": [
+                { "action": "Open web-01 Metrics, select Percentage CPU, and compare average and maximum using the same time range.", "why": "The platform already collects this metric. Installing a guest agent merely to obtain platform CPU is unnecessary." },
+                { "action": "Review the subscription activity log and configure its export to school-ops for the approved categories and retention plan.", "why": "Administration history comes from the control-plane activity log, not Windows service events. Its built-in retention is 90 days; longer preservation needs another destination and a retention decision." },
+                { "action": "Configure a Windows event DCR, associate web-01, and verify AMA, identity, and outbound connectivity.", "why": "Windows errors originate inside the guest. A storage diagnostic setting cannot collect them." },
+                { "action": "After authorized test activity and ingestion delay, inspect the relevant workspace tables, resource identity, timestamps, and selected event levels.", "why": "A saved setting is configuration evidence, not proof of delivered records. Check the chosen categories and scope before concluding that an empty result means nothing happened." }
+              ],
+              "result": "The ticket can now distinguish a busy processor, an administrative change, and a guest service failure. The operator records each source and time range instead of combining unrelated green status icons into a false statement that the whole application is healthy."
+            },
+            {
+              "type": "paragraph",
+              "text": "Budget for collection before enabling every category. Workspace ingestion, retention beyond included allowances, exports, storage, and some query plans or alert features can incur charges. Choose a retention period that meets the school's actual incident and audit needs. Keep personal student data and secrets out of teaching logs. Establish who can read retained evidence and who may alter its collection. After configuration, allow ingestion latency and verify new records rather than expecting old missing records to appear retroactively. Stopping future collection does not automatically remove previously stored data or its retention obligations."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Destination, collection instruction, and collector are different",
+              "text": "A workspace stores logs. A diagnostic setting routes supported platform logs and exports. AMA collects guest data under associated DCRs. Choose by the origin of the required evidence. None of these independently grants application access or proves that the application works."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "monitor-aggregation-check",
+          "kind": "single",
+          "prompt": "Five equally weighted CPU observations are 20, 20, 100, 20, and 20 percent. Which pair correctly describes the five-minute average and maximum?",
+          "choices": [
+            { "id": "average-thirty-six", "text": "Average 36%, maximum 100%.", "explanation": "The sum is 180 and there are five observations. The highest single observation is 100." },
+            { "id": "average-one-hundred", "text": "Average 100%, maximum 100%.", "explanation": "The peak is not the average. Four lower observations must also contribute." },
+            { "id": "sum-as-percent", "text": "Average 180%, maximum 36%.", "explanation": "This confuses a sum with an average and reverses the role of the maximum." }
+          ],
+          "correctIds": ["average-thirty-six"],
+          "explanation": "Time grain and aggregation change what a chart point means. A peak can disappear inside an average-based threshold."
+        },
+        {
+          "id": "monitor-diagnostic-check",
+          "kind": "single",
+          "prompt": "The school wants supported blob read-operation logs in an existing Log Analytics workspace. Which configuration directly addresses that requirement?",
+          "choices": [
+            { "id": "blob-diagnostics", "text": "A diagnostic setting on the blob service selecting the read category and workspace destination.", "explanation": "This selects service-originated resource logs and their destination." },
+            { "id": "install-database-agent", "text": "Install AMA on the database VM without any DCR.", "explanation": "The database VM is not the source of Azure Blob service resource logs. An unconfigured guest agent does not route them." },
+            { "id": "only-create-workspace", "text": "Create another workspace and leave every resource unchanged.", "explanation": "A destination alone does not enable collection from the blob service." }
+          ],
+          "correctIds": ["blob-diagnostics"],
+          "explanation": "Identify the source before choosing collection configuration."
+        },
+        {
+          "id": "monitor-guest-check",
+          "kind": "multiple",
+          "prompt": "Select the two relevant parts of a new Windows guest-event collection path for an Azure VM.",
+          "choices": [
+            { "id": "ama-ready", "text": "A supported, healthy AMA extension with identity and required outbound connectivity.", "explanation": "The collector must run and communicate before its records can arrive." },
+            { "id": "associated-event-rule", "text": "An associated DCR selecting Windows events and the destination workspace.", "explanation": "The association tells the agent which event collection instructions apply to this VM." },
+            { "id": "mma-default", "text": "Use the retired MMA agent as the default for new machines.", "explanation": "MMA is retired and its cloud uploads can stop. It is not the supported new-deployment path." },
+            { "id": "activity-only", "text": "Rely solely on the subscription activity log for all guest service errors.", "explanation": "The activity log records Azure management events, not every event inside Windows." }
+          ],
+          "correctIds": ["ama-ready", "associated-event-rule"],
+          "explanation": "An agent, collection instructions, identity, and connectivity work together. Management events are a different data source."
+        },
+        {
+          "id": "monitor-dimension-check",
+          "kind": "single",
+          "prompt": "A storage transaction graph combines successful and failed response types. You need to see separate trends, without changing what the service collects. What should you do?",
+          "choices": [
+            { "id": "split-response", "text": "Split the supported transaction metric by its response-type dimension.", "explanation": "Splitting exposes separate time series already represented by that metric." },
+            { "id": "invent-tag", "text": "Add a tag and assume it becomes a new metric dimension.", "explanation": "Resource tags do not automatically extend a metric's defined dimensions." },
+            { "id": "flatten-export", "text": "Export through diagnostic settings and assume all dimensions remain separate.", "explanation": "Diagnostic metric export flattens dimensions; it is not a substitute for checking the original supported split." }
+          ],
+          "correctIds": ["split-response"],
+          "explanation": "Filtering and splitting affect interpretation. They are not agent installation or a change to collection frequency."
+        }
+      ],
+      "takeaways": [
+        "A time range, time grain, aggregation, unit, and dimension together define a metric chart's meaning.",
+        "Platform metrics, activity logs, service logs, and guest data have distinct collection paths.",
+        "A saved collection setting needs verification through actual recent records.",
+        "Use AMA with associated DCRs for new guest collection, not the retired Log Analytics agent."
+      ],
+      "sourceIds": ["metric-aggregation", "diagnostic-settings", "activity-log", "dcr-overview", "ama-requirements", "ama-network", "ama-migration", "storage-insights"]
+    },
+    {
+      "id": "monitor-kql-and-insights",
+      "title": "Turn rows and dashboards into an explanation",
+      "summary": "Work through small KQL results by hand, then interpret VM, storage, and network monitoring without confusing missing data with success.",
+      "objectives": [
+        "Use table selection, time filters, where, project, summarize, bin, and order by.",
+        "Calculate and interpret query results from explicitly synthetic input.",
+        "Configure and interpret VM, storage, and network Insights.",
+        "Configure Connection monitor tests and distinguish continuous evidence from a one-time diagnostic."
+      ],
+      "sections": [
+        {
+          "id": "kql-table-and-scope",
+          "title": "Read a query as a sequence of table transformations",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Kusto Query Language, or KQL, is used to ask questions of Azure Monitor Logs. Imagine a spreadsheet whose rows are events and whose columns have names and types. Start a query with a table name, then use the pipe character to pass the resulting table to the next operator. The operators shown here read data; they do not restart machines, change firewall rules, or delete records. Table and column names are case sensitive. Inspect the schema pane rather than inventing columns because they sound reasonable."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose the workspace, resource scope, and time range before interpreting an answer. AzureActivity contains exported activity events, not every event visible anywhere in the subscription. Heartbeat can provide recent agent evidence when that data is collected to the workspace. Windows events, performance counters, and resource-specific service tables depend on their own collection configuration. A table can be absent before its first records arrive. A permission error, a wrong workspace, and a valid query returning zero rows are three different outcomes. None should be silently reported as proof that the school had no incident."
+            }
+          ]
+        },
+        {
+          "id": "kql-filter-and-project",
+          "title": "Work with seven invented records before querying a real service",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The following datatable is synthetic teaching data, not an Azure-provided table and not evidence from a real school. The declaration gives each column a type: datetime for a time, string for text, and int for whole-number milliseconds. It creates a temporary query value only; it does not ingest records into a workspace. The let statement names that value SchoolRequests. All timestamps are UTC. This fixed example remains understandable even when today's date changes."
+            },
+            {
+              "type": "code",
+              "language": "kusto",
+              "code": "let SchoolRequests = datatable(TimeGenerated:datetime, Computer:string, Outcome:string, DurationMs:int)\n[\n  datetime(2026-09-20T08:59:00Z), \"web-01\", \"Error\", 900,\n  datetime(2026-09-20T09:01:00Z), \"web-01\", \"Error\", 300,\n  datetime(2026-09-20T09:03:00Z), \"web-01\", \"Error\", 500,\n  datetime(2026-09-20T09:04:00Z), \"web-01\", \"OK\", 100,\n  datetime(2026-09-20T09:06:00Z), \"web-01\", \"Error\", 700,\n  datetime(2026-09-20T09:07:00Z), \"web-02\", \"Error\", 900,\n  datetime(2026-09-20T09:10:00Z), \"web-01\", \"Error\", 1000\n];\nSchoolRequests\n| where TimeGenerated >= datetime(2026-09-20T09:00:00Z) and TimeGenerated < datetime(2026-09-20T09:10:00Z)\n| where Computer == \"web-01\" and Outcome == \"Error\"\n| project TimeGenerated, Computer, DurationMs\n| order by TimeGenerated asc",
+              "explanation": "Read-only synthetic example. where keeps matching rows; project keeps named columns; order by makes the output chronological. The half-open time interval includes its starting boundary but excludes 09:10 exactly."
+            },
+            {
+              "type": "table",
+              "caption": "Exact result of the synthetic query",
+              "headers": ["TimeGenerated UTC", "Computer", "DurationMs"],
+              "rows": [
+                ["2026-09-20 09:01:00", "web-01", "300"],
+                ["2026-09-20 09:03:00", "web-01", "500"],
+                ["2026-09-20 09:06:00", "web-01", "700"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Trace every discarded record. The 08:59 row is too early and the 09:10 row is at the excluded upper boundary. The 09:04 row is successful, and the 09:07 row belongs to another computer. Three records remain. Project removes Outcome from the displayed result, not from the source. If you removed Outcome before using it in where, the later operator would not have that column available. Order by ascending places the oldest remaining record first; descending would reverse that order. Taking an arbitrary few rows without ordering would not reliably show the latest failures."
+            }
+          ]
+        },
+        {
+          "id": "kql-summarize-results",
+          "title": "Group the remaining evidence into time buckets",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Keep the entire let declaration above and replace the final SchoolRequests pipeline with the following pipeline. Run the declaration and replacement together. Summarize creates one output row for each group. Here, a group is the combination of Computer and a five-minute time bucket. Bin rounds each event time down to its bucket boundary: 09:01 and 09:03 become 09:00, while 09:06 becomes 09:05. Naming the calculated columns Failures and AverageMs makes their meaning easier to read than relying on automatically generated names."
+            },
+            {
+              "type": "code",
+              "language": "kusto",
+              "code": "SchoolRequests\n| where TimeGenerated >= datetime(2026-09-20T09:00:00Z) and TimeGenerated < datetime(2026-09-20T09:10:00Z)\n| where Computer == \"web-01\" and Outcome == \"Error\"\n| summarize Failures=count(), AverageMs=avg(DurationMs) by Computer, bin(TimeGenerated, 5m)\n| order by TimeGenerated asc",
+              "explanation": "Read-only replacement pipeline for the synthetic SchoolRequests declaration above. count() counts the filtered records in each bucket; avg(DurationMs) averages only their durations."
+            },
+            {
+              "type": "table",
+              "caption": "Exact grouped result, with columns shown in a readable order",
+              "headers": ["Computer", "TimeGenerated UTC", "Failures", "AverageMs"],
+              "rows": [
+                ["web-01", "2026-09-20 09:00:00", "2", "400"],
+                ["web-01", "2026-09-20 09:05:00", "1", "700"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "The first average is (300 + 500) divided by 2, or 400 milliseconds. The second is 700 because its group has one record. These are durations of failed requests, not durations of all requests and not processor measurements. Summarize does not preserve every original column unless you group or aggregate it. Empty time buckets are not automatically generated by this query. A missing bucket could mean no matching events, but you must also consider collection gaps before calling it an error-free period."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-project-filter",
+              "prompt": "You move project TimeGenerated, Computer before where Outcome == \"Error\". Will the query still filter by Outcome?",
+              "answer": "No. That project removed Outcome from the intermediate table.",
+              "explanation": "Each pipeline operator receives the previous operator's result, not the untouched source table. Filter while the needed column still exists, or include it in the projection."
+            }
+          ]
+        },
+        {
+          "id": "kql-real-table",
+          "title": "Transfer the method to collected data without inventing results",
+          "blocks": [
+            {
+              "type": "code",
+              "language": "kusto",
+              "code": "Heartbeat\n| where TimeGenerated >= ago(1h)\n| summarize LastSeen=max(TimeGenerated) by Computer\n| order by LastSeen asc",
+              "explanation": "Read-only query for a workspace actually receiving Heartbeat records. ago(1h) means one hour before the current query time. Results depend on collection and permissions; no fixed output is promised."
+            },
+            {
+              "type": "paragraph",
+              "text": "This query finds each reporting computer's latest heartbeat within the last hour and puts the oldest latest report first. Max chooses a timestamp, not the greatest computer name. If web-01 has no records anywhere in that hour, it will not appear at all. A missing computer therefore requires comparison with the inventory you expected to monitor. The query does not synthesize a row for every VM in Azure. Recent heartbeats also do not prove a database login or an application transaction succeeded."
+            },
+            {
+              "type": "paragraph",
+              "text": "For repeatable incident analysis, replace relative time with explicit datetime boundaries and record the resource scope. Log Analytics can apply the narrower range when a manually chosen time picker conflicts with a query's time filter. Filter early to reduce irrelevant work, keep only useful columns, and order before selecting a latest sample. When writing an alert from a query, understand whether the rule counts returned rows or evaluates a numeric column. Our grouped synthetic query returns two rows describing three failures. Counting output rows would measure two groups, not three failed requests."
+            }
+          ]
+        },
+        {
+          "id": "configure-vm-insights",
+          "title": "Enable VM visibility and interpret the guest evidence",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "VM monitoring adds guest performance information to the platform's view. For a slow school VM, useful evidence includes memory pressure, disk behavior, and processor use over the same period. Current Microsoft enablement guidance recommends OpenTelemetry metrics to an Azure Monitor workspace for new VM monitoring deployments. OpenTelemetry is a standard way to describe telemetry. This metrics path uses Prometheus Query Language, or PromQL, rather than KQL. Its Azure Monitor workspace is not the same resource as a Log Analytics workspace for KQL logs. Data sent only to the metrics workspace does not automatically appear in a Log Analytics table, and one query cannot combine these two workspace types."
+            },
+            {
+              "type": "paragraph",
+              "text": "Check the feature's current scope before choosing it. Metrics-based guest collection currently supports individual Azure VMs and Arc-enabled servers, not VM Scale Sets, and does not support Private Link. The classic logs-based experience supports scale sets and broader existing VM Insights workbooks. The newer portal default therefore does not mean all classic VM Insights is retired. The documented free collection of default OpenTelemetry metrics is also not a promise that extra logs, alerts, retained data, and all monitoring features are free. Match the selected path to the workload, network requirements, existing queries, and cost plan."
+            },
+            {
+              "type": "paragraph",
+              "text": "The classic logs-based VM Insights performance experience remains a documented option for existing implementations. It uses AMA and a predefined performance DCR sending to a Log Analytics workspace, including the InsightsMetrics table. For that explicit path, choose the VM monitoring or Insights onboarding option, select logs-based performance collection and the intended workspace, and inspect the created or selected DCR association. Do not edit the predefined VM Insights counter set as if it were an arbitrary event rule. Collect additional Windows events or Syslog with the appropriate separate guest-log configuration."
+            },
+            {
+              "type": "paragraph",
+              "text": "Whichever path you select, verify the prerequisites from the previous lesson: supported guest OS, managed identity, healthy AMA, data destination, DCR permissions and association, and working outbound connectivity. Then check new timestamps and the actual machine identity in the performance view. If CPU is modest while available memory is low and disk activity increases, memory pressure is a hypothesis to investigate, not proof from one graph. Compare with a healthy period, expected workload, and application evidence. A chart cannot decide whether deleting a student's files is a safe way to free space."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Do not confuse three different agents",
+              "text": "AMA supports performance collection. The Network Watcher extension supports features such as Connection monitor. The separate Dependency Agent powered the old VM Insights Map and is not required for performance collection. Map and Dependency Agent are deprecated, with retirement on June 30, 2028; new portal onboarding stopped after September 30, 2025. Do not install that agent as the default for a new VM monitoring plan."
+            }
+          ]
+        },
+        {
+          "id": "interpret-storage-insights",
+          "title": "Inspect storage performance without assuming logs exist",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Storage Insights presents already-collected storage metrics through workbooks. From Monitor, choose Storage Accounts under Insights, or open a storage account's Insights view. Select the actual account, service, and incident time rather than reading an unrelated default selection. Its metric view does not require installing AMA on the storage service. However, detailed request logs still require the relevant diagnostic settings. A workbook is a presentation of data and calculations, not a second backup of the documents or a magic switch that enables every log category."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use the Capacity view for used space and growth, Performance for end-to-end and server latency, and Failures for transaction errors. Drill into API name and response type. Imagine the school sees many GetBlob requests and increasing client-throttling errors during an upload lesson. The evidence supports investigating request rate and workload behavior; it does not justify declaring all storage unavailable. Compare successful-call latency, failed operations, and the time period together. A low server-processing latency alongside higher end-to-end latency directs investigation beyond server processing, but is not by itself proof of a specific broken network device."
+            },
+            {
+              "type": "paragraph",
+              "text": "Workbook colors reflect configured thresholds, not automatically a contractual service-level guarantee. If the school needs an operational warning, configure an alert separately instead of assuming a red workbook tile sends email. You can save a customized workbook with the approved account scope and useful columns. Keep the default and customized versions distinguishable. Storage Insights itself has no access charge, but underlying enabled collection, alerting, storage, and other Monitor features can still cost money."
+            }
+          ]
+        },
+        {
+          "id": "network-insights-and-connection-monitor",
+          "title": "Configure a repeated connection test, then explain its limits",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Network Insights brings topology, resource health, metrics, connectivity, and diagnostic tools into one view. Select the subscription and resource group, inspect the affected resource, and follow its metrics or alerts. Topology shows relationships, not a successful application transaction. Basic health and metric views require no extra collection setup, but repeated connectivity history needs configured Connection monitor tests. Traffic history needs separately enabled flow logs and analytics. Opening the network dashboard today cannot reconstruct tests that were never run yesterday."
+            },
+            {
+              "type": "paragraph",
+              "text": "For our school, create a Connection monitor test group with source web-01, destination 10.20.2.5, and a TCP test configuration for port 1433. Specify the test frequency and acceptable failed-check percentage and round-trip time. Choose the Log Analytics workspace for results. Confirm the regional Network Watcher setup and the Network Watcher extension on the Azure VM source. The destination does not need the extension merely to accept probes. For on-premises sources, current guidance requires Azure Arc and the documented AMA and Network Watcher setup, not the retired MMA agent."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose a fictional observation period contains twenty checks, four failed, and the configured failure threshold is 10%. Four divided by twenty is 20%, above that threshold. Inspect the individual source-destination test, failed-check trend, round-trip time, and reported issues. A test with no data is indeterminate, not healthy. A successful TCP test proves the selected transport connection worked at that time, not that a student may log in to the database. A test to a name also depends on resolution; a test directly to an IP does not examine that name."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use Network Watcher tools for the next precise question: IP flow verify evaluates the selected security tuple, Next hop examines routing, and Connection troubleshoot tests current reachability. Those are not substitutes for continuous historical monitoring. The existing Network Watcher module develops this layered investigation using the same school addresses. For VNet flow-log Traffic Analytics, use the current NTANetAnalytics table and its documented fields. AzureNetworkAnalytics_CL belongs to legacy NSG flow-log analytics. Do not paste its suffixed field names into a VNet query. Analytics aggregates and delays raw flows; it is not a live packet capture."
+            }
+          ]
+        },
+        {
+          "id": "worked-insights-investigation",
+          "title": "Worked example: connect the evidence without overstating it",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "A lunch-time database incident",
+              "scenario": "Students saw failures at 09:00 to 09:10 UTC. In this fictional case, VM monitoring was already configured, the archive's metrics exist, and Connection monitor had been testing web-01 to the database. The synthetic request records above are only a teaching model of the application's errors.",
+              "steps": [
+                { "action": "Use the explicit incident range and filter the synthetic rows to web-01 errors; calculate the two five-minute groups.", "why": "The resulting counts and averages answer a defined question. They do not mix successful requests or web-02 with web-01." },
+                { "action": "Compare web-01's guest performance with the same interval and confirm current data arrived through the chosen VM monitoring path.", "why": "A blank Insights panel can indicate a collection issue. A performance hypothesis needs actual observations, not the existence of an agent extension." },
+                { "action": "Select the document account in Storage Insights and examine failures and latency by API and response type.", "why": "Normal archive evidence makes that component less suspicious for this incident, without proving the private database is healthy." },
+                { "action": "Inspect the TCP 1433 Connection monitor test and follow its failure period with targeted route, security, and listener investigation.", "why": "Four failed checks out of twenty establish an intermittent connectivity symptom. A current successful probe alone cannot explain the earlier failures." }
+              ],
+              "result": "The administrator has a time-aligned investigation rather than a guessed fix. If the database listener restarted during the failure window, application and guest evidence must confirm that explanation before the ticket is closed."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "The displayed row, line, and green tile mean different things",
+              "text": "KQL results depend on table, scope, collection, and filters. Insights presents selected telemetry. Connection monitor repeats configured tests. A network allow, an agent heartbeat, and successful application authorization are not interchangeable proofs. Match the evidence to the requirement."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "monitor-kql-result-check",
+          "kind": "single",
+          "prompt": "In the synthetic SchoolRequests example, which grouped result belongs to web-01's 09:00 five-minute bucket after the time and Error filters?",
+          "choices": [
+            { "id": "two-four-hundred", "text": "Failures 2 and AverageMs 400.", "explanation": "Only the 09:01 duration 300 and 09:03 duration 500 rows match that bucket and filter. Their average is 400." },
+            { "id": "three-three-hundred", "text": "Failures 3 and AverageMs 300.", "explanation": "This incorrectly includes the successful 09:04 row. That row is removed by Outcome == Error." },
+            { "id": "one-seven-hundred", "text": "Failures 1 and AverageMs 700.", "explanation": "Those values describe the 09:05 bucket, not the 09:00 bucket." }
+          ],
+          "correctIds": ["two-four-hundred"],
+          "explanation": "Apply filtering before grouping, then calculate only from the remaining records."
+        },
+        {
+          "id": "monitor-kql-shape-check",
+          "kind": "single",
+          "prompt": "The grouped synthetic query returns two rows whose Failures values are 2 and 1. A log alert counts returned table rows. What value does that measurement use?",
+          "choices": [
+            { "id": "two-result-rows", "text": "2, because two grouped rows were returned.", "explanation": "A row-count measurement counts query output rows, not the total held inside an aggregated column." },
+            { "id": "three-automatically", "text": "3, because the rule automatically sums every Failures column.", "explanation": "Summing or measuring that numeric column must be selected or expressed explicitly; it is not implied by row counting." },
+            { "id": "seven-original", "text": "7, because datatable originally contained seven records.", "explanation": "The rule evaluates the query result after filtering and summarizing, not the original unfiltered input." }
+          ],
+          "correctIds": ["two-result-rows"],
+          "explanation": "Understand the shape of a query result before connecting it to an alert criterion."
+        },
+        {
+          "id": "monitor-insights-check",
+          "kind": "multiple",
+          "prompt": "Select the two correct interpretations when configuring monitoring for the school.",
+          "choices": [
+            { "id": "vm-destination", "text": "Classic logs-based VM performance collection uses AMA and its DCR; new OpenTelemetry metrics can use an Azure Monitor workspace instead.", "explanation": "The collection path and destination determine where to inspect evidence. A Log Analytics query does not automatically read the separate metrics workspace." },
+            { "id": "storage-metrics-first", "text": "Storage Insights can show default platform metrics while detailed service logs still need diagnostic settings.", "explanation": "The prebuilt workbook does not automatically enable request-log collection." },
+            { "id": "dependency-required", "text": "Install the deprecated Dependency Agent for every new performance-only VM deployment.", "explanation": "Performance collection uses AMA. The separate Map feature and Dependency Agent are deprecated and are not prerequisites for this plan." },
+            { "id": "topology-transaction", "text": "A Network Insights topology link proves the student's database transaction succeeded.", "explanation": "The link is a configuration relationship, not authenticated application evidence." }
+          ],
+          "correctIds": ["vm-destination", "storage-metrics-first"],
+          "explanation": "Each Insights experience has a specific data source and configuration boundary."
+        },
+        {
+          "id": "monitor-connection-check",
+          "kind": "single",
+          "prompt": "Four of twenty TCP 1433 checks from web-01 to the database failed, with a configured 10% failure threshold. Which conclusion is justified?",
+          "choices": [
+            { "id": "twenty-percent", "text": "The observed 20% failure rate exceeds the threshold; investigate that test's timeline and network or listener evidence.", "explanation": "The calculation is 4/20 times 100. It establishes a symptom for the configured connection and period, not its root cause." },
+            { "id": "four-percent", "text": "Only 4% failed, so the test meets the 10% threshold.", "explanation": "Four is the number of failures, not their percentage out of twenty." },
+            { "id": "database-authorized", "text": "Every student's database login succeeded because most TCP checks passed.", "explanation": "TCP probes do not prove application authentication or authorization, and some probes failed." }
+          ],
+          "correctIds": ["twenty-percent"],
+          "explanation": "Continuous monitoring supplies a timeline; targeted diagnostics and application evidence explain it."
+        }
+      ],
+      "takeaways": [
+        "A KQL pipeline transforms tables in order; removed columns cannot be used later.",
+        "Filter time and resource before summarizing, and explain the meaning of every output row.",
+        "Configure the actual VM monitoring destination and DCR rather than assuming every Insights view uses the same data.",
+        "Repeated connection tests, topology, traffic analytics, and application authorization answer different questions."
+      ],
+      "sourceIds": ["kql-start", "kql-datatable", "vm-enablement", "vm-metrics-experience", "vm-map-retirement", "ama-requirements", "ama-migration", "storage-insights", "network-insights", "connection-monitor", "traffic-schema", "alerts-types"]
+    },
+    {
+      "id": "monitor-alerts-and-actions",
+      "title": "Detect the right condition and notify the right person",
+      "summary": "Build and interpret a complete alert path, including state, action groups, maintenance schedules, and verification of delivered notifications.",
+      "objectives": [
+        "Choose metric, log search, or activity log signals from a concrete requirement.",
+        "Distinguish evaluation frequency, lookback window, aggregation, and threshold.",
+        "Configure reusable action groups and scoped alert processing rules.",
+        "Explain stateful and stateless alerts without assuming universal notification or resolution timing."
+      ],
+      "sections": [
+        {
+          "id": "alert-signal-and-scope",
+          "title": "An alert starts with a measurable question",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An alert rule is a saved instruction to examine a signal and create an alert when its condition is met. It is not the same thing as one fired alert. The scope identifies the monitored resource or resources; the signal identifies the evidence; the criterion defines the comparison. An action group supplies recipients or automated actions. An alert processing rule can change which action groups a matching fired alert invokes. Keeping these parts separate helps explain a common incident: the rule fired correctly, but nobody received the expected message."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use a metric alert when the needed measurement already exists as a supported metric, such as web-01's platform Percentage CPU. Use a log search alert when the question requires a KQL query, such as counting a particular application error after filtering event fields. Use an activity log alert for a matching management event, such as a resource deletion. Service Health and Resource Health alerts are activity-log-related types, not guest CPU thresholds. Select the simplest suitable signal instead of exporting every metric to logs merely to compare a number."
+            },
+            {
+              "type": "paragraph",
+              "text": "When configuring the rule, choose its monitored scope deliberately and set a useful name, description, severity, and owner. Severity expresses operational importance; it does not change how CPU is calculated. Dimensions can create separate evaluations for different response types or source-destination pairs. Verify that the selected resource and metric support the desired dimensions or multi-resource behavior. Do not assume one rule can combine every resource type and region. The operator also needs read access to the target, write permission for the rule location, and access to the chosen action group."
+            }
+          ]
+        },
+        {
+          "id": "criteria-and-evaluation",
+          "title": "Distinguish the measuring window from the checking clock",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose the school creates a static metric rule: average Percentage CPU greater than 80%, using a five-minute lookback window, evaluated every minute. At each evaluation, the service calculates the average over that recent window and compares it with 80. The one-minute frequency determines when to ask the question again. It does not shorten the five-minute period being measured, and it does not promise a notification at an exact second. Data arrival and service evaluation take time. Greater than 80 also differs from greater than or equal to 80."
+            },
+            {
+              "type": "paragraph",
+              "text": "An overlapping window smooths short spikes but can keep an incident active after the newest observation improves. For an explicit teaching calculation, assume five equally weighted available values of 85, 90, 95, 90, and 90. The average is 90, so the condition is true. If the next window contains 90, 95, 90, 90, and 20, its average is 77 and that evaluation is not breaching. Those facts describe evaluations, not a universal immediate resolution rule. Missing data needs investigation; it is not a substitute for a measured zero."
+            },
+            {
+              "type": "paragraph",
+              "text": "In a log search alert, first run the query and inspect its result shape. Choose whether the condition counts returned rows or aggregates a numeric column. A query that summarizes three errors into two groups returns two rows, so a row-count threshold measures groups. You can split evaluations by supported dimensions, such as computer, if each machine needs an independent alert. Check the lookback and evaluation frequency against collection delay. A query that looks for missing records can misfire when logs arrive late. Prefer evidence of a specific event when that answers the operational question."
+            },
+            {
+              "type": "callout",
+              "tone": "remember",
+              "title": "Keep the basic example independent of preview features",
+              "text": "These examples use static thresholds on platform metrics or conventional scheduled log queries. Current documentation labels query-based metric alerts for OpenTelemetry and Prometheus metrics as preview. Their workspace and query model should not be confused with the platform Percentage CPU rule taught here."
+            }
+          ]
+        },
+        {
+          "id": "state-and-response",
+          "title": "Acknowledge an incident without pretending it recovered",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A stateful alert tracks an ongoing condition. It fires when the condition is met and does not keep firing new actions for that same unresolved condition. Metric alerts are stateful by default but can be configured as stateless. Conventional log search alerts can also be configured for stateful behavior. For stateful metric alerts, the condition must be unmet for three consecutive checks before resolution. Stateful log search alerts use resolution periods that depend on evaluation frequency. Do not transfer the metric three-check rule to every alert type without checking its documented behavior."
+            },
+            {
+              "type": "paragraph",
+              "text": "A stateless alert can fire repeatedly when its condition is met. That does not mean an exact email must arrive on every evaluation: notification timing, rate limits, and action processing can affect delivery. Activity log alerts are event-driven and stateless. Their Fired monitor condition does not automatically become Resolved simply because the administrative event ended. A VM deletion is a historical event, not an ongoing numeric condition waiting to fall below a threshold. Treat its user response and investigation separately."
+            },
+            {
+              "type": "paragraph",
+              "text": "Monitor condition and user response are different fields. Fired or Resolved describes the monitoring system's condition. New, Acknowledged, or Closed describes what a human has done with the alert. Acknowledging a CPU alert tells the team someone is handling it; it does not reduce processor use. Closing a ticket should follow evidence that the required service works, not just changing a label. A second rule with identical criteria can still generate its own alert because Azure does not deduplicate all separately configured rules into one incident."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-acknowledged-cpu",
+              "prompt": "The administrator acknowledges a stateful CPU alert. CPU remains above the threshold. Does acknowledgement resolve the monitor condition or cause a fresh action every minute?",
+              "answer": "Neither. The alert remains fired while the condition persists, and acknowledgement changes only the human-response field.",
+              "explanation": "Stateful firing and resolution follow the rule's measured condition. A human response records ownership, not a new metric value."
+            }
+          ]
+        },
+        {
+          "id": "configure-action-groups",
+          "title": "Create a reusable and testable response",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "In Monitor > Alerts > Action groups, create a group such as school-operations in the approved resource group. Select a processing region consistent with organizational requirements, give it a recognizable display name, and add the intended notification receivers. Multiple alert rules can reuse the group, so changing an approved recipient is easier than editing every rule. An action group is not a Microsoft Entra security group and does not grant the recipient permission to administer a VM. It describes notifications and actions, not resource authorization."
+            },
+            {
+              "type": "paragraph",
+              "text": "Begin with an approved email receiver for the school operator. Current documentation requires new email receivers to complete one-time-passcode verification where enforced; a typed but unverified address may not receive alerts or test messages. Save the group before using its Test action. Choose a sample alert type and only the notifications or actions authorized for that test, then inspect success or failure details and confirm receipt. A sample action-group test verifies delivery behavior, not that a real rule selects the correct metric or fires under the intended workload."
+            },
+            {
+              "type": "paragraph",
+              "text": "Actions can also call a Logic App, function, runbook, or webhook. The receiving endpoint must understand the payload and have the required authentication and network access. The common alert schema can make integrations more consistent, but it does not grant permission to restart production. Actions are not guaranteed to run in your desired order, so put a dependent workflow inside an appropriately designed automation rather than depending on the order of two action-group entries. The manual lab uses notification only, avoiding accidental resource changes from a test."
+            }
+          ]
+        },
+        {
+          "id": "processing-rules-maintenance",
+          "title": "Suppress noise without destroying the evidence",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "During approved maintenance, the school wants CPU alerts to remain visible but not wake the on-call teacher. Create an alert processing rule from Monitor > Alerts. Choose the actual affected resources or resource group in the same subscription, then narrow by attributes such as severity or alert rule ID. Choose Suppress notifications, and specify the start, end, and timezone. A recurring schedule is useful for a regular window; a one-time schedule is safer for a one-off repair. Review scope carefully so unrelated failures elsewhere remain actionable."
+            },
+            {
+              "type": "paragraph",
+              "text": "An alert processing rule acts on matching fired alerts, not on raw telemetry. Suppression removes their action groups; it does not delete log records, stop metric collection, change thresholds, or prevent alert instances from being created. An Apply action group rule can instead add central routing, including for supported built-in alerts whose source has no action-group selector. Filters in this feature select alerts, not rows for ingestion. If both suppression and application rules match the same alert, suppression takes precedence."
+            },
+            {
+              "type": "paragraph",
+              "text": "Create and verify the processing rule ahead of maintenance: current guidance allows up to thirty minutes for changes to take effect. Alerts suppressed during the window are not queued for automatic notification when the window ends. If a stateful incident is still fired, there may be no new firing transition to deliver afterward. Review active alerts at the end of maintenance and hand over unresolved issues explicitly. Processing rules do not affect Azure Service Health alerts, so do not assume a subscription-wide suppression hides those notifications too."
+            }
+          ]
+        },
+        {
+          "id": "worked-alert-chain",
+          "title": "Worked example: preserve the incident, control its notification",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "A scheduled CPU-heavy school update",
+              "scenario": "An approved update on web-01 runs from 18:00 to 18:30 UTC. A stateful platform CPU rule evaluates each minute over five minutes. Its static threshold is average greater than 80%. The configured school-operations email receiver has already been verified and tested.",
+              "steps": [
+                { "action": "Keep the CPU rule enabled and configure a processing rule well in advance for only web-01's CPU alert during the approved window.", "why": "The school still needs incident evidence. Disabling broad monitoring would also hide unexpected behavior." },
+                { "action": "At 18:05, inspect the fictional five-value window of 85, 90, 95, 90, and 90 percent and the resulting fired alert.", "why": "Its average is 90%, so the criterion is met. The processing rule changes notification handling, not that calculation." },
+                { "action": "Confirm the alert is visible and its action group was suppressed, rather than treating the absence of email as a failed metric collection path.", "why": "Detection, routing, and delivery are separate stages. Troubleshoot the stage indicated by evidence." },
+                { "action": "At 18:30, review active alerts and application health manually. After the condition clears for the documented consecutive checks, verify resolution.", "why": "Suppressed notifications are not replayed automatically. The team must not assume maintenance ending has either resolved CPU pressure or sent a fresh page." }
+              ],
+              "result": "The school keeps a record of the CPU incident without unnecessary maintenance emails. Other resources remain monitored, and any unresolved condition is explicitly handed over rather than disappearing behind the schedule."
+            },
+            {
+              "type": "paragraph",
+              "text": "When the expected message is missing, inspect the chain in order: did data arrive, did the criterion match, was an alert created, did processing suppress or add actions, and did the chosen receiver succeed? Check the action-group test result and recipient verification without repeatedly forcing a production failure. Also record the intended severity and owner so a delivered alert has a clear response. Alert rules, monitored time series, query evaluation frequency, and notification channels can affect cost. Use the approved monitoring budget rather than claiming every alert configuration is free."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Detection, action, and processing are not synonyms",
+              "text": "Change an alert rule to change the measured condition. Change an action group to change its configured recipients or actions. Use an alert processing rule for scoped or scheduled additions and suppression of action groups on fired alerts. None of these is a substitute for filtering collected logs with the appropriate collection configuration."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "monitor-alert-frequency-check",
+          "kind": "single",
+          "prompt": "A metric rule evaluates every minute using a five-minute average. Which statement correctly separates those settings?",
+          "choices": [
+            { "id": "window-versus-clock", "text": "Every minute, it reevaluates a condition calculated over the recent five-minute window.", "explanation": "Frequency is the checking interval; the window is the period of data used in the calculation." },
+            { "id": "one-minute-only", "text": "It uses only the most recent one-minute value because evaluation happens every minute.", "explanation": "This ignores the explicitly configured five-minute window." },
+            { "id": "five-minute-delivery", "text": "It guarantees an email exactly every five minutes.", "explanation": "Neither the lookback window nor evaluation frequency is a universal delivery guarantee." }
+          ],
+          "correctIds": ["window-versus-clock"],
+          "explanation": "A checking schedule and a measurement window are independent parts of the condition."
+        },
+        {
+          "id": "monitor-alert-state-check",
+          "kind": "single",
+          "prompt": "A stateful platform metric alert remains above threshold after a human marks it Acknowledged. What happens?",
+          "choices": [
+            { "id": "still-fired", "text": "Its monitor condition remains Fired; acknowledgement records the human response.", "explanation": "Resolution depends on the measured condition and required checks, not the acknowledgement label." },
+            { "id": "human-resolved", "text": "It becomes Resolved immediately because somebody acknowledged it.", "explanation": "Acknowledgement does not change the metric or satisfy recovery criteria." },
+            { "id": "new-every-check", "text": "Acknowledgement forces a fresh stateful action at every evaluation.", "explanation": "Stateful rules do not repeatedly fire for the same unresolved condition merely because its user response changed." }
+          ],
+          "correctIds": ["still-fired"],
+          "explanation": "Monitor condition and user response answer different questions."
+        },
+        {
+          "id": "monitor-processing-check",
+          "kind": "multiple",
+          "prompt": "A matching alert processing rule suppresses action groups during maintenance. Select the two correct consequences.",
+          "choices": [
+            { "id": "visible-alert", "text": "The fired alert can remain visible even though its action groups are suppressed.", "explanation": "Processing modifies the response to the alert, not the underlying rule evaluation or stored event evidence." },
+            { "id": "no-replay", "text": "The suppressed actions are not automatically replayed when maintenance ends.", "explanation": "The operator must review ongoing incidents; suppression is not a delayed-notification queue." },
+            { "id": "remove-logs", "text": "Matching raw log records are removed from the workspace.", "explanation": "Alert processing filters alerts and changes action groups, not collected data." },
+            { "id": "all-service-health", "text": "This always suppresses Service Health alerts too.", "explanation": "Azure Service Health alerts are excluded from the documented processing-rule behavior." }
+          ],
+          "correctIds": ["visible-alert", "no-replay"],
+          "explanation": "Keep notification routing separate from data collection and incident retention."
+        },
+        {
+          "id": "monitor-action-group-check",
+          "kind": "single",
+          "prompt": "A saved action group's sample email test succeeds. What has this directly demonstrated?",
+          "choices": [
+            { "id": "test-delivery", "text": "The selected notification path handled that test; the real alert rule still needs its own configuration verification.", "explanation": "The sample test exercises the action group, not the real metric, scope, threshold, or workload." },
+            { "id": "all-thresholds", "text": "Every alert rule using the group has the correct production threshold.", "explanation": "An action-group test does not inspect or evaluate each attached rule's operational requirements." },
+            { "id": "recipient-admin", "text": "The recipient now has permission to restart web-01.", "explanation": "Receiving notifications does not grant Azure role-based administration rights." }
+          ],
+          "correctIds": ["test-delivery"],
+          "explanation": "Test detection and delivery as separate responsibilities."
+        }
+      ],
+      "takeaways": [
+        "Choose the signal that directly represents the required event or measurement.",
+        "Evaluation frequency, lookback window, threshold, dimensions, and state affect different parts of alert behavior.",
+        "Test action-group delivery without assuming that this validates the real alert rule.",
+        "Alert processing rules route or suppress actions on alerts; they do not filter raw monitoring data."
+      ],
+      "sourceIds": ["alerts-overview", "alerts-types", "action-groups", "processing-rules", "metric-aggregation", "kql-start"]
+    }
+  ],
+  "glossary": [
+    { "term": "Metric", "definition": "A numerical measurement associated with a time and resource, sometimes separated into labeled dimension values." },
+    { "term": "Time grain", "definition": "The width of a displayed or evaluated aggregation bucket; different from the full time range and from original sampling frequency." },
+    { "term": "Dimension", "definition": "A label defined for a metric that separates its time series, such as a response type or monitored source." },
+    { "term": "Log Analytics workspace", "definition": "An Azure resource holding Azure Monitor Logs tables with access, retention, and other management settings." },
+    { "term": "Azure Monitor workspace", "definition": "A separate metrics workspace used by experiences such as current OpenTelemetry VM metrics; not another name for Log Analytics." },
+    { "term": "Diagnostic setting", "definition": "Configuration selecting supported platform log categories or metrics and routing them to chosen destinations." },
+    { "term": "Azure Monitor Agent", "definition": "The supported guest collector that follows associated data collection rules; abbreviated AMA." },
+    { "term": "Data collection rule", "definition": "A DCR describes sources, processing, and destinations for a supported collection scenario; an association can apply it to a VM." },
+    { "term": "KQL pipeline", "definition": "A sequence of table transformations connected by pipes, where each operator receives the preceding result." },
+    { "term": "Action group", "definition": "A reusable collection of notification receivers and automated actions invoked for alerts." },
+    { "term": "Alert processing rule", "definition": "A rule that adds or suppresses action groups for matching fired alerts, optionally on a schedule." },
+    { "term": "Stateful alert", "definition": "An alert that tracks an ongoing condition and avoids repeatedly firing until that condition resolves." },
+    { "term": "Connection monitor", "definition": "A Network Watcher capability that repeatedly tests configured endpoints and records failed checks and round-trip time." },
+    { "term": "Insights", "definition": "A monitoring experience that presents a resource type's telemetry and investigations; its useful data still depends on the relevant collection path." }
+  ],
+  "sources": [
+    { "id": "metric-aggregation", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/metrics-aggregation-explained", "title": "Azure Monitor Metrics aggregation and display", "supports": "Aggregation definitions, time range versus grain and sampling, dimension filtering and splitting, weighted underlying averages, and missing values. Supports the independently calculated 36%/100% teaching example and aggregation checkpoint." },
+    { "id": "diagnostic-settings", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/platform/diagnostic-settings", "title": "Diagnostic settings in Azure Monitor", "supports": "Automatic platform metrics/activity logs versus opt-in resource logs; category routing, destinations, five-setting limit, regional Storage/Event Hubs constraints, Standard storage requirement, trusted services, flattened metric export, cost, and ingestion latency." },
+    { "id": "activity-log", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/platform/activity-log", "title": "Activity log in Azure Monitor", "supports": "Control-plane versus data-plane evidence, automatic collection, 90-day native retention, export, and interpretation of administrative events." },
+    { "id": "dcr-overview", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/data-collection/data-collection-rule-overview", "title": "Data collection rules in Azure Monitor", "supports": "DCR sources, transformations, destinations, associations, AMA collection, workspace transformations, and current preview qualification for DCR-based platform metric export." },
+    { "id": "ama-requirements", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-requirements", "title": "Azure Monitor Agent requirements", "supports": "VM extension permissions, supported-OS prerequisite, disk caching, Azure VM identity options, and Arc system-assigned identity requirement." },
+    { "id": "ama-network", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-network-configuration", "title": "Azure Monitor Agent network configuration", "supports": "Configuration and ingestion endpoints, outbound HTTPS, disabled HTTPS inspection, and private-link/DCE requirements. An installed extension alone does not prove connectivity." },
+    { "id": "ama-migration", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-migration", "title": "Migrate from Log Analytics agent to Azure Monitor Agent", "supports": "August 2024 MMA retirement, uploads potentially stopping after March 2, 2026, Arc prerequisites, DCR migration, duplicate-ingestion avoidance, and Heartbeat verification." },
+    { "id": "kql-start", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/logs/get-started-queries", "title": "Get started with log queries in Azure Monitor Logs", "supports": "Tables, case sensitivity, pipe semantics, where, projection, ordering, time filters, time-picker interaction, summarize, bin, and limits of unfiltered aggregations." },
+    { "id": "kql-datatable", "url": "https://learn.microsoft.com/en-us/kusto/query/datatable-operator", "title": "KQL datatable operator", "supports": "Inline typed table declaration for the original synthetic SchoolRequests records; it supplies query input rather than ingesting real monitoring data." },
+    { "id": "vm-enablement", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-enable-overview", "title": "Enable VM monitoring in Azure Monitor", "supports": "Current recommended OpenTelemetry metrics destination versus classic Log Analytics performance collection, AMA install, DCR creation and association, predefined classic counter configuration, workspaces, permissions, and Arc prerequisites." },
+    { "id": "vm-metrics-experience", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/vm/metrics-opentelemetry-guest", "title": "Metrics experience for virtual machines in Azure Monitor", "supports": "Current portal default, Azure Monitor workspace/PromQL versus Log Analytics/KQL, separate-query boundary, individual VM and Arc scope, classic VMSS support, no Private Link for new metrics path, and narrowly qualified free default metrics rather than free monitoring." },
+    { "id": "vm-map-retirement", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-maps-retirement", "title": "VM Insights Map and Dependency Agent retirement", "supports": "Dependency Agent is distinct from AMA; performance monitoring is unaffected; new portal onboarding stopped after September 30, 2025; Map and Dependency Agent retire June 30, 2028." },
+    { "id": "storage-insights", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/insights/storage-insights-overview", "title": "Monitor storage with Storage Insights", "supports": "Default platform metrics, portal scoping, capacity/performance/failure workbooks, API and response-type drilldown, latency comparison, custom thresholds, and underlying-feature cost qualifications." },
+    { "id": "network-insights", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/network-insights-overview", "title": "Network Insights", "supports": "Basic topology/health/metrics availability, scope selection, configured connectivity tests, traffic configuration, and navigation to targeted Network Watcher diagnostics. Legacy screenshots are not used as new-deployment instructions." },
+    { "id": "connection-monitor", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/connection-monitor-overview", "title": "Connection monitor overview", "supports": "Sources, destinations, test groups/configurations, TCP/HTTP/ICMP tests, source extensions, current Arc/AMA prerequisites, metrics and workspace results, thresholds, indeterminate data state, and continuous versus point-in-time evidence." },
+    { "id": "traffic-schema", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/traffic-analytics-schema", "title": "Traffic Analytics schema and aggregation", "supports": "NTANetAnalytics for VNet flow logs versus legacy AzureNetworkAnalytics_CL for NSG flow logs, different field naming, aggregation and processing delay rather than raw live packet capture." },
+    { "id": "alerts-overview", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-overview", "title": "Azure Monitor alerts overview", "supports": "Signal/scope/condition/action separation, stateful and stateless behavior, metric three-check resolution versus frequency-dependent log resolution, user response distinction, permissions, and lack of cross-rule deduplication." },
+    { "id": "alerts-types", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-types", "title": "Choose the right alert rule type", "supports": "Metric/log/activity choices, query row counting versus numeric-column measurements, dimension and multi-resource constraints, metric state default, stateless event behavior, latency caution, and preview query-based metric alerts." },
+    { "id": "action-groups", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/action-groups", "title": "Action groups", "supports": "Reusable notifications and automation, save-before-test procedure, sample-test meaning, email receiver verification, processing region, common schema, action concurrency, authentication, and network prerequisites." },
+    { "id": "processing-rules", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-processing-rules", "title": "Alert processing rules", "supports": "Same-subscription scope and filters, apply/suppress action groups, suppression precedence, preserved alert visibility, schedules/timezones, propagation delay, no notification replay, and Service Health exclusion." }
+  ],
+  "lab": {
+    "title": "Optional manual monitoring evidence exercise",
+    "purpose": "Practice the distinction between calculated query evidence, collection configuration, and notification delivery. The synthetic query exercise can be reasoned through without an Azure account.",
+    "prerequisites": [
+      "First calculate the supplied synthetic table results on paper. Azure execution is optional and must be authorized by the subscription owner.",
+      "For portal work, use an approved training subscription with an existing Log Analytics workspace and explicit permission to query it.",
+      "For optional collection inspection, have an existing supported training VM, approved AMA identity/DCR setup, and access to the relevant resource settings; do not alter production.",
+      "For optional notification testing, use an approved email recipient, permission to manage the test action group, and recipient verification where required."
+    ],
+    "costWarning": "This lesson executes nothing in Azure. A manual follow-through can incur existing VM, ingestion, retention, query-plan, alert, notification, and storage charges. Synthetic datatable queries do not ingest data, but do not assume an entire Azure workspace or query plan is free. Use an approved budget and avoid provisioning just to read the lesson.",
+    "steps": [
+      "Write the expected three filtered rows and two grouped rows from the seven synthetic records. Explain why the 09:10 row is excluded.",
+      "If authorized, open Logs in the approved workspace and run the complete synthetic declaration and first pipeline. Compare values, order, and column names with the lesson.",
+      "Retain the declaration and replace its final pipeline with the grouped query. Confirm 2/400 and 1/700, then explain why counting its result rows gives two rather than three.",
+      "Inspect an existing VM's Metrics using matching average and maximum time windows. Record units and grain without manufacturing CPU load.",
+      "Inspect the VM's AMA extension, identity, DCR association, and destination. Identify whether guest performance uses classic logs or an OpenTelemetry metrics workspace, then check actual recent arrivals in that path.",
+      "Inspect the chosen storage service's diagnostic categories and workspace destination without enabling every category. Compare that configuration with the default Storage Insights metric view.",
+      "If separately approved, create a narrowly named email-only test action group, verify the receiver, save it, run its sample test, and record receipt. Do not attach an automated restart action.",
+      "Draft a maintenance processing rule's intended scope, timezone, and end time without deploying it. Explain why a persistent stateful alert still needs manual review when the window ends."
+    ],
+    "expectedResults": [
+      "The synthetic filters return three rows; grouping returns a 09:00 bucket with two failures averaging 400 ms and a 09:05 bucket with one failure averaging 700 ms.",
+      "The learner identifies a real collection source and destination separately, or records a concrete missing prerequisite instead of declaring an empty view healthy.",
+      "An approved email-only test produces a recorded delivery result, not a claim that the production alert criterion was verified."
+    ],
+    "cleanup": [
+      "Delete only the explicitly created test action group after confirming no rule or processing rule now depends on it. Do not delete shared notification infrastructure.",
+      "Remove only new temporary lab settings if any were separately authorized, preserving pre-existing DCR associations, diagnostic settings, workspaces, and stored operational evidence.",
+      "Review any enabled collection or alerting for ongoing charges. Removing a test configuration does not retroactively remove retained data or stop unrelated resource costs."
+    ]
+  }
+}

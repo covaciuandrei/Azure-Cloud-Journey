@@ -1,0 +1,824 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-backup",
+  "title": "Azure Backup: protect, recover, and prove it",
+  "summary": "Choose the right vault and protection tier for the school application, build a real backup policy, recover safely, and use reports and alerts as evidence rather than reassurance.",
+  "priority": "core",
+  "priorityReason": "The official AZ-104 study guide effective April 17, 2026, checked September 20, 2026, explicitly requires creating both vault types, configuring backup policies, performing backup and restore, and interpreting reports and alerts. Workload qualifications and recovery testing make those administrative decisions meaningful; they are not predictions about exam question frequency.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/backup/backup-overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Create a Recovery Services vault.",
+    "Create an Azure Backup vault.",
+    "Create and configure a backup policy.",
+    "Perform backup and restore operations by using Azure Backup.",
+    "Configure and interpret reports and alerts for backups."
+  ],
+  "lessons": [
+    {
+      "id": "backup-vaults-and-protection-models",
+      "title": "Choose a vault by the thing you need to recover",
+      "summary": "Separate backup management from backup storage, match school workloads to supported vaults, and plan location, redundancy, identities, and prerequisites before enabling protection.",
+      "objectives": [
+        "Choose between Recovery Services vault and Backup vault for Azure VMs, Azure Files, managed disks, and blobs.",
+        "Explain operational snapshots, vaulted recovery points, and their different failure boundaries.",
+        "Describe the actual creation sequence for both vault types.",
+        "Check workload, region, agent, and authorization requirements without assuming universal support."
+      ],
+      "sections": [
+        {
+          "id": "recovery-before-products",
+          "title": "A backup answers a question about the past",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The fictional school's application stores lesson documents, homework submissions, and timetable data. At 14:10, a teacher accidentally replaces the timetable with an empty file. A second live copy of that file may receive the same change immediately. Backup solves a different problem: it preserves recoverable earlier states according to a policy. A recovery point identifies a state you can select for recovery. Before buying storage or clicking Enable backup, ask what must come back: one document, an entire file share, a disk, or a working virtual machine."
+            },
+            {
+              "type": "paragraph",
+              "text": "Recovery point objective, or RPO, means the amount of recent data loss the school is prepared to accept, expressed as time. If the newest usable point is 12:00 and the mistake occurs at 14:10, recovering it loses up to two hours and ten minutes of changes. Recovery time objective, or RTO, means the target time to get the required service working again. A four-hour backup schedule does not promise a four-hour recovery time. Copying data, creating resources, checking permissions, and testing the application all affect recovery time."
+            },
+            {
+              "type": "paragraph",
+              "text": "A vault is an Azure resource used to organize protection, policies, recovery points, and operations. Creating an empty vault does not protect everything in its resource group. You must select a supported data source, associate a suitable policy, satisfy permissions and prerequisites, and obtain a successful recovery point. Also, a vault managing an operation does not prove that the backup bytes are stored inside the vault. Operational backups can remain alongside the protected service, while vaulted backups place retained data in vault storage."
+            }
+          ]
+        },
+        {
+          "id": "match-workloads-to-vaults",
+          "title": "Two vault types, not two prices for the same feature",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Current choices for the workloads used in this module, checked September 20, 2026",
+              "headers": ["Data source and recovery need", "Vault type", "Important qualification"],
+              "rows": [
+                ["Azure VM, including its supported attached disks", "Recovery Services vault", "VM backup has its own agent, operating system, disk, policy, and restore support matrix."],
+                ["Azure Files share", "Recovery Services vault", "SMB shares are supported; NFS shares are not. Snapshot and vaulted protection have different region and recovery capabilities."],
+                ["Individual Azure managed disk", "Backup vault", "Azure Disk Backup manages incremental snapshots in your subscription. It does not copy them into vault storage."],
+                ["Supported Azure block blobs", "Backup vault", "Operational protection and vaulted protection are different options. Both require supported standard general-purpose v2 storage accounts."],
+                ["SQL Server or SAP HANA database inside an Azure VM", "Recovery Services vault", "Database-aware protection is a separate workload choice, not something every VM backup policy automatically configures."],
+                ["Supported on-premises Windows files using the MARS agent", "Recovery Services vault", "Microsoft Azure Recovery Services agent is Windows-only, not a Linux installation method. Backup Server and Data Protection Manager have separate support matrices."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Do not infer the vault from the word disk alone. Backing up the school's whole web VM uses the Recovery Services VM workflow. Independently protecting its document-import disk uses the Backup vault disk workflow. The latter does not capture the VM's complete configuration or coordinate an application spread across several disks. Similarly, mounting an Azure Files share inside a VM does not make its remote contents part of the VM's attached-disk backup. Protect the share as Azure Files if that is the data source you need to recover."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the data source before matching the interface",
+              "text": "Recovery Services vault and Backup vault are distinct resource types. A shared portal dashboard does not make their workloads interchangeable. First identify VM, file share, standalone managed disk, or blob protection; then select the supported vault and tier. Site Recovery replication and failover are not substitutes for selecting a historical backup point."
+            }
+          ]
+        },
+        {
+          "id": "where-recovery-data-lives",
+          "title": "Draw the storage boundary, not just the vault icon",
+          "blocks": [
+            {
+              "type": "diagram",
+              "title": "The vault can manage data without holding every copy",
+              "description": "The top path shows a VM snapshot used for quick recovery and a later vault copy managed by a Recovery Services vault. The bottom path shows a Backup vault managing standalone disk snapshots in a snapshot resource group. The management arrow on the bottom row is not a transfer into vault storage.",
+              "nodes": [
+                { "id": "school-vm", "label": "School VM", "detail": "Supported attached managed disks", "column": 0, "row": 0 },
+                { "id": "vm-snapshot", "label": "VM snapshot", "detail": "Shorter Instant Restore retention", "column": 1, "row": 0 },
+                { "id": "recovery-vault", "label": "Recovery Services", "detail": "Vaulted VM recovery points", "column": 2, "row": 0 },
+                { "id": "school-disk", "label": "Standalone disk", "detail": "One independently protected disk", "column": 0, "row": 2 },
+                { "id": "disk-snapshot", "label": "Snapshot group", "detail": "Operational snapshots in your subscription", "column": 1, "row": 2 },
+                { "id": "backup-vault", "label": "Backup vault", "detail": "Policy and orchestration for this disk", "column": 2, "row": 2 }
+              ],
+              "edges": [
+                { "from": "school-vm", "to": "vm-snapshot", "label": "Capture recovery state" },
+                { "from": "vm-snapshot", "to": "recovery-vault", "label": "Transfer selected backup to vault" },
+                { "from": "school-disk", "to": "disk-snapshot", "label": "Incremental snapshot" },
+                { "from": "backup-vault", "to": "disk-snapshot", "label": "Manage, not vault a copy" }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Locally redundant storage, LRS, keeps redundant copies within a location in the primary region. Zone-redundant storage, ZRS, spreads copies across availability zones in a supported region. Geo-redundant storage, GRS, also replicates to a secondary region. These choices address infrastructure failures; none alone supplies a policy for recovering yesterday's deleted document. For a Recovery Services vault, decide redundancy before configuring backup because the setting becomes unavailable for modification afterwards. Backup vault redundancy also cannot be changed after protecting items. Check the selected region's support rather than assuming every option appears everywhere."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-grs-disk-snapshot",
+              "prompt": "The school selects GRS on a Backup vault and protects a standalone managed disk with Azure Disk Backup. Has it obtained a geo-replicated vaulted copy of that disk?",
+              "answer": "No. This workload currently uses operational snapshots, not a vaulted disk copy.",
+              "explanation": "The vault setting does not change the disk workload's storage model. Snapshot location and redundancy govern those recovery points. A regional-recovery requirement needs a protection design that actually supports regional recovery."
+            }
+          ]
+        },
+        {
+          "id": "create-recovery-services-vault",
+          "title": "Worked example: create the school VM vault",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Plan rsv-school-ne before its first backup",
+              "scenario": "Assume an approved training subscription contains a supported Windows Server 2022 VM named school-web in North Europe. Its ordinary managed disks use platform-managed encryption, and the school wants a primary-region backup plus an eligible paired-region recovery option. This is a paper walkthrough, not a request to provision resources.",
+              "steps": [
+                { "action": "Inspect school-web's subscription, region, operating system, disk types, and backup status.", "why": "A convenient resource group name does not establish the VM's region or support. Existing protection and unsupported disk features can change the plan." },
+                { "action": "In the portal's Recovery Services vault creation flow, select the approved subscription, resource group rg-school-protection, name rsv-school-ne, and North Europe; review and create.", "why": "VM and vault must share a region. This example also keeps them in the same subscription instead of depending on cross-subscription backup preview support." },
+                { "action": "Before enabling any backup, open vault Properties and Backup Configuration, choose GRS, review Cross Region Restore eligibility, and enable it if the approved design requires it.", "why": "Choosing redundancy early avoids an unsupported later toggle. Cross Region Restore is an additional recovery capability with charges and workload restrictions, not an automatic failover." },
+                { "action": "Review security settings and access assignments, then create the VM policy and associate school-web with it.", "why": "The vault is only the container for the protection setup. Policy, permissions, and workload readiness are still required." },
+                { "action": "Request an initial backup and record the completed job and recovery point rather than stopping at the deployment notification.", "why": "Successful vault creation proves that the management resource exists, not that the VM is recoverable." }
+              ],
+              "result": "The design has a correctly located vault and a clear sequence for enabling protection. Paired-region restore remains subject to replicated vault recovery points, supported disks and regions, target resources, and permissions."
+            },
+            {
+              "type": "paragraph",
+              "text": "Current VM documentation supports cross-subscription backup in preview when the VM and Recovery Services vault are in the same region and tenant, with additional restrictions. Do not teach an absolute same-subscription rule, but do not silently build a production design around preview support either. A tenant is the Microsoft Entra identity directory associated with the subscriptions. Backup across subscriptions, restore across subscriptions, and moving an existing vault are three different operations with different rules."
+            }
+          ]
+        },
+        {
+          "id": "create-backup-vault",
+          "title": "Worked example: create the independent disk protection",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Give bv-school-ne an identity and a precise job",
+              "scenario": "A separate Standard SSD managed disk named school-import contains replaceable import files. The school needs short-term rollback of that disk, not a whole-VM recovery or a regional disaster solution. Assume the disk is in North Europe and the approved training subscription.",
+              "steps": [
+                { "action": "Search for Backup vaults, choose Add, and enter the approved subscription, rg-school-protection, bv-school-ne, and North Europe; review redundancy before creating the vault.", "why": "This is the Backup vault flow, not Recovery Services. The vault and disk must share a region; the vault's redundancy does not turn disk snapshots into vaulted backups." },
+                { "action": "Use a dedicated snapshot resource group, rg-school-disk-snapshots, in the disk's subscription, and identify the vault's managed identity.", "why": "The snapshots remain in the subscription. A separate group allows narrower access control, and the snapshot group cannot be changed on this backup instance after configuration." },
+                { "action": "Have an authorized administrator grant Disk Backup Reader on school-import and Disk Snapshot Contributor on the snapshot group to the vault identity.", "why": "The service identity needs permission to read the source and manage snapshots. The human being allowed to open the vault is a separate permission question." },
+                { "action": "Create an Azure Disks policy, select the disk and snapshot group in Configure backup, run validation, and resolve any readiness failures before confirming.", "why": "Validation checks support and role assignments. Role propagation can take time; retrying after propagation is safer than granting broad unrelated access." }
+              ],
+              "result": "The resulting backup instance connects one disk, one disk policy, and one snapshot resource group. An initial completed backup supplies evidence of protection. Restore will create a new disk, not replace the source in place."
+            }
+          ]
+        },
+        {
+          "id": "agents-and-consistency",
+          "title": "A readable snapshot is not always an application-consistent snapshot",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For ordinary application-consistent or file-system-consistent Azure VM backup, Azure Backup uses an extension through the Azure VM agent. This is not an instruction to install the separate Windows-only MARS agent on every VM. Supported Windows application-consistent backup coordinates application writes, while Linux application consistency requires suitable custom pre-backup and post-backup scripts. A crash-consistent point resembles the state after sudden power loss: applications may need their own recovery logic when restarted. A completed job therefore needs its reported consistency type interpreted against the application's requirement."
+            },
+            {
+              "type": "paragraph",
+              "text": "Agentless multi-disk crash-consistent VM backup is an Enhanced-policy option for supported VM sizes and disks, not permission to ignore the matrix. Current exclusions include Ultra Disks and Premium SSD v2 for this particular agentless mode, even though those disks have Enhanced VM backup support through other supported configurations. Similarly, independent Azure Disk Backup supports several managed-disk SKUs but does not coordinate simultaneous snapshots of several disks as one application unit. Before enabling protection, check OS support, VM agent health where required, disk encryption and access settings, and necessary network paths."
+            }
+          ]
+        },
+        {
+          "id": "files-and-blobs-qualifications",
+          "title": "The archive has more than one kind of storage",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For Azure Files, distinguish snapshot backup from vaulted backup. Snapshot recovery points stay in the source storage account; the vault's redundancy does not apply to them. Vaulted Azure Files backup is generally available, but its regional list differs from snapshot backup. Current support includes HDD and SSD SMB shares, not NFS shares. The vaulted tier supports general-purpose v2 and FileStorage accounts, including supported private-endpoint configurations, and requires storage account key access to remain enabled. Do not weaken a real storage account's policy casually: resolve a conflicting security requirement before choosing this protection method."
+            },
+            {
+              "type": "paragraph",
+              "text": "For Azure Blobs, both operational and vaulted protection target block blobs in standard general-purpose v2 accounts, not all objects called blobs. Operational backup uses storage features including point-in-time restore, versioning, change feed, and blob soft delete. It is local protection, with inherited limitations such as failure to restore a deleted container through point-in-time restore. Vaulted backup provides a separate retained copy but excludes archive-tier blobs, NFS 3.0 and SFTP accounts, and containers participating in other object replication. It currently requires the Backup vault's system-assigned identity rather than a user-assigned identity. Check the current region and feature matrix for the actual account."
+            }
+          ]
+        },
+        {
+          "id": "access-is-several-questions",
+          "title": "Management permission is not document permission",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure role-based access control, RBAC, determines who may manage backup resources. Backup Reader can inspect backup information, Backup Operator can perform supported backup and recovery operations, and Backup Contributor can manage policies and broader backup configuration. Scope still matters: creating resources in a target resource group or reading a source VM can require additional rights beyond the vault. Assign only the documented permissions needed for the operation. The vault's managed identity also has its own workload-specific assignments; it does not inherit the human administrator's access."
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep four questions separate. May this person request a restore through Azure's management plane? May the backup service identity access the source and destination resources? Can the recovery machine reach the required endpoints? May a student read the restored document through the application or storage data plane? A Backup Reader assignment does not grant a student a file-share login. Conversely, permission to restore data is sensitive because recovery can make copies available outside the original application. Protect recovery destinations, generated access material, and the people allowed to perform restores."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "backup-rsv-choice",
+          "kind": "single",
+          "prompt": "The school needs whole-VM recovery for a supported Azure VM in North Europe. Which initial plan is correct without relying on preview cross-subscription backup?",
+          "choices": [
+            { "id": "same-region-rsv", "text": "Create a Recovery Services vault in North Europe in the VM's subscription, then configure VM protection.", "explanation": "The VM workload uses a Recovery Services vault in the VM's region. Creating the vault is followed by policy, readiness checks, and backup." },
+            { "id": "remote-backup-vault", "text": "Create a Backup vault in any other region and register the whole VM there.", "explanation": "This chooses the wrong vault type and assumes unsupported cross-region VM backup placement." },
+            { "id": "empty-group-vault", "text": "Create any vault in the VM's resource group; the group membership protects the VM automatically.", "explanation": "Resource group membership neither chooses the correct regional workload support nor enables a backup policy." }
+          ],
+          "correctIds": ["same-region-rsv"],
+          "explanation": "Match workload and region, then explicitly enable protection. The question deliberately avoids preview dependencies."
+        },
+        {
+          "id": "backup-vault-disk-identity",
+          "kind": "multiple",
+          "prompt": "For the described Standard SSD standalone disk backup, which TWO assignments belong to the Backup vault's managed identity?",
+          "choices": [
+            { "id": "disk-reader", "text": "Disk Backup Reader on the source disk.", "explanation": "This documented role lets the service identity access the disk for backup." },
+            { "id": "snapshot-contributor", "text": "Disk Snapshot Contributor on the snapshot resource group.", "explanation": "The service manages incremental snapshots in this group, so it needs this separately scoped role." },
+            { "id": "student-files-login", "text": "A student login in the school application.", "explanation": "Application authentication does not authorize Azure snapshot management." },
+            { "id": "reader-human-only", "text": "Backup Reader assigned only to the human observer.", "explanation": "Read access for a person does not supply the required permissions to the vault identity." }
+          ],
+          "correctIds": ["disk-reader", "snapshot-contributor"],
+          "explanation": "The two service assignments have different scopes and purposes. The person configuring those assignments also needs authorization to grant them."
+        },
+        {
+          "id": "backup-tier-boundary",
+          "kind": "single",
+          "prompt": "A standalone disk is protected by Azure Disk Backup using a GRS Backup vault. Where are its current backup recovery data stored?",
+          "choices": [
+            { "id": "operational-snapshots", "text": "In operational snapshots in the configured snapshot resource group, not copied into vault storage.", "explanation": "The standalone disk solution currently uses the snapshot datastore regardless of the vault's GRS setting." },
+            { "id": "paired-vault-copy", "text": "Only in a paired-region vaulted copy because the vault is GRS.", "explanation": "The vault setting does not introduce a data-transfer capability that this workload does not support." },
+            { "id": "inside-vm-memory", "text": "Only in the running VM's memory until the next reboot.", "explanation": "Managed disk snapshots are Azure storage resources, not volatile guest memory." }
+          ],
+          "correctIds": ["operational-snapshots"],
+          "explanation": "Distinguish orchestration by a vault from actual storage in the vault."
+        },
+        {
+          "id": "backup-files-workload-limit",
+          "kind": "single",
+          "prompt": "An administrator proposes Azure Files backup for the school's NFS share because SMB shares are supported. What is the correct response under the current support matrix?",
+          "choices": [
+            { "id": "nfs-not-supported", "text": "Reject that assumption: Azure Files backup currently does not support NFS shares.", "explanation": "The protocol is a documented workload qualification, not a detail inherited from SMB support." },
+            { "id": "change-vault-name", "text": "Rename the Recovery Services vault to enable NFS support.", "explanation": "A resource name does not alter workload support." },
+            { "id": "install-mars-linux", "text": "Install MARS on Linux to turn the share into a supported Azure Files backup.", "explanation": "MARS is Windows-only, and installing an agent does not change the Azure Files workload matrix." }
+          ],
+          "correctIds": ["nfs-not-supported"],
+          "explanation": "Select protection based on the actual protocol and data source rather than a similar service name."
+        }
+      ],
+      "takeaways": [
+        "Choose the vault from the workload and intended recovery, not from its name or the shared portal dashboard.",
+        "An operational snapshot managed by a vault is not necessarily copied into vault storage.",
+        "Create vaults in supported locations and decide redundancy before protection locks that choice.",
+        "Human management rights, service identities, network paths, and application data access are separate checks.",
+        "Supported disk and agent combinations are narrower than a general statement that Azure VMs can be backed up."
+      ],
+      "sourceIds": ["backup-study-guide", "backup-general-support", "backup-create-rsv", "backup-create-bv", "backup-vm-support", "backup-files-support", "backup-disk-support", "backup-disk-configure", "backup-blob-support", "backup-rbac"]
+    },
+    {
+      "id": "backup-policy-restore-and-security",
+      "title": "Build a policy and choose a safe recovery",
+      "summary": "Turn recovery requirements into explicit schedules and retention, understand snapshot versus vault recovery, and protect recovery points against accidental or malicious deletion.",
+      "objectives": [
+        "Configure a realistic Azure VM policy with separate schedule, Instant Restore, and long-term retention decisions.",
+        "Compare Standard and Enhanced VM policies without applying their limits to other workloads.",
+        "Select file, disk, or VM recovery and explain original, alternate, cross-region, and cross-subscription limitations.",
+        "Distinguish soft delete, immutability, RBAC, and Resource Guard multiuser authorization."
+      ],
+      "sections": [
+        {
+          "id": "schedule-is-not-retention",
+          "title": "One policy answers several different questions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A backup policy is a reusable set of protection rules, not merely a daily alarm. Its schedule says when backups should start. Its retention says how long selected recovery points should remain available. These settings answer different school questions: 'Can we recover this afternoon's work?' and 'Can we inspect the approved timetable from last term?' Keeping a daily point for a year does not create a point every hour. Equally, frequent snapshots with short retention do not preserve evidence for an annual audit."
+            },
+            {
+              "type": "paragraph",
+              "text": "The policy also depends on the data source and storage tier. For Azure VM backup, Standard policy offers daily or weekly scheduling. Enhanced policy also supports multiple scheduled backups each day, with supported hourly intervals beginning at four hours. Weekly, monthly, and yearly retention labels select particular scheduled recovery points to keep longer; they are not instructions to run an otherwise unsupported once-a-month VM backup schedule. Select a schedule time and timezone explicitly. Azure VM backup does not automatically adjust its clock for daylight saving changes, which matters when a Romanian school expects the same local evening start all year."
+            }
+          ]
+        },
+        {
+          "id": "standard-enhanced-and-tiers",
+          "title": "Keep the fast copy and the long-lived copy separate",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A VM backup first creates a snapshot and later transfers backup data to the Recovery Services vault. A snapshot recovery point can support Instant Restore before vault transfer finishes. After transfer, the recovery point can show snapshot and vault availability. When the snapshot expires, a retained vault recovery point can still support recovery, generally with a longer data-transfer path. 'Instant' names the snapshot-based capability, not a promise that every VM or application becomes ready immediately."
+            },
+            {
+              "type": "table",
+              "caption": "VM policy settings are workload-specific, not universal Azure Backup limits",
+              "headers": ["Setting", "Standard VM policy", "Enhanced VM policy"],
+              "rows": [
+                ["Scheduled backups", "Daily or weekly", "Daily, weekly, or supported hourly intervals such as 4, 6, 8, or 12 hours"],
+                ["Instant Restore snapshot retention", "Daily policy: 1 to 5 days, default 2; weekly policy: fixed 5 days", "Generally 1 to 30 days, default 7, but frequency-dependent limits apply; weekly policies use 5 to 20 days"],
+                ["Four-hour snapshots throughout a day", "Not a Standard scheduled-policy option", "Maximum snapshot retention is 17 days for this hourly frequency, not 30"],
+                ["Longer vault retention", "Daily, weekly, monthly, and yearly retention selections", "Daily, weekly, monthly, and yearly retention selections; distinct from snapshot retention"],
+                ["Newer disk offerings", "Does not support Ultra Disk or Premium SSD v2 VM protection", "Supports eligible Ultra Disk and Premium SSD v2 configurations; check mode and region restrictions"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "For Enhanced hourly protection, frequent local snapshots do not mean every point is transferred to the vault. Current guidance transfers the last backup of the day; if that fails, the first backup of the next day is transferred. Choose vault retention separately, and never set snapshot retention longer than vault retention. The Enhanced policy page's default values, such as 180 daily days and 10 yearly years, are defaults rather than universal minimums or maximums. Once a VM uses Enhanced policy, switching back to Standard is not supported. Treat policy-type changes as planned changes, not a reversible troubleshooting trick."
+            }
+          ]
+        },
+        {
+          "id": "worked-vm-policy",
+          "title": "Worked example: a policy the school can actually explain",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Configure school-web-six-hour",
+              "scenario": "Assume school-web is an eligible managed VM in rsv-school-ne. The school accepts up to six hours of recent primary-region changes being at risk under healthy operation, wants quick rollback for seven days, and wants selected older evidence. It explicitly does not require six-hour-old recovery data in another region.",
+              "steps": [
+                { "action": "In the Recovery Services vault, open Backup policies, add an Azure Virtual Machine policy, and choose Enhanced with the name school-web-six-hour.", "why": "The workload choice determines the policy shape. Six-hour scheduled protection is not a Standard VM scheduling feature." },
+                { "action": "Choose Hourly scheduling every 6 hours, starting at 00:00 UTC with a 24-hour window.", "why": "This describes intended starts at 00:00, 06:00, 12:00, and 18:00 UTC without relying on seasonal Romanian clock changes. Start times are not guaranteed completion times." },
+                { "action": "Set Instant Restore snapshot retention to 7 days and daily vault retention to 30 days.", "why": "Recent rollback uses snapshots; the longer daily history remains in the vault. Seven days is within this frequency's supported snapshot range and does not exceed vault retention." },
+                { "action": "Retain a selected Sunday point for 12 weeks, the first Sunday's selected monthly point for 12 months, and a selected January point for 3 years.", "why": "Named calendar selections explain which evidence survives. They are not four additional independent backup schedules, and an overlapping point need not be counted as four full copies." },
+                { "action": "Review the policy, create it, associate school-web, trigger an initial backup, and inspect the job and resulting recovery-point tiers.", "why": "A saved policy does nothing for an unassociated VM, and a configured VM has not demonstrated successful protection until a usable point exists." }
+              ],
+              "result": "The school has an explicit, testable policy. It monitors actual point age against its six-hour objective and budgets for snapshots and vaulted history. It does not claim a six-hour regional-disaster RPO from frequent local snapshots."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-expired-instant-copy",
+              "prompt": "Assume the policy has run successfully for 20 days. A requested daily point is 10 days old and remains in the 30-day vault retention, but its 7-day snapshot has expired. Is recovery necessarily impossible?",
+              "answer": "No. The retained vault recovery point can still be used through a supported restore operation.",
+              "explanation": "Snapshot expiry removes the faster local recovery path, not a separately retained vault copy. Expect the vault restore path and validate the actual point before promising recovery time."
+            }
+          ]
+        },
+        {
+          "id": "other-workload-policy-boundaries",
+          "title": "Do not paste the VM policy onto a disk or share",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the school's standalone Standard SSD disk, an Azure Disks policy could take snapshots every six hours and keep them for seven days. Configure those values in the disk policy's Schedule and retention settings rather than choosing a VM policy with a similar name. Premium SSD v2 and Ultra Disk standalone backups currently support only twelve-hour or daily scheduling, unlike the shorter intervals available for Standard HDD, Standard SSD, and Premium SSD disks. Snapshot-count and time limits constrain retention, so validate the complete policy instead of assuming that every interval can be retained for a year."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Files snapshot backup has a 200-recovery-point ceiling, while vaulted Azure Files has different retention ranges and at most 30 days of snapshots. If several file-share snapshots are scheduled per day, only the last scheduled one is transferred to the vault. Azure Blobs operational protection is based on a recoverable time window rather than importing the VM's Instant Restore settings. These examples show why 'keep thirty days' is incomplete: you must state workload, tier, frequency, and any long-term selections before evaluating support or cost."
+            }
+          ]
+        },
+        {
+          "id": "choose-restore-granularity",
+          "title": "Restore the smallest useful thing without destroying evidence",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Begin recovery by identifying the affected data, the last known good time, and whether the source should remain untouched for investigation. Select a recovery point before the damaging change, not automatically the newest point. Check its consistency and available tier. Restore to an isolated alternate location when practical, verify the data, and then plan a controlled return to service. Replacing production immediately can discard useful newer files and hide the original cause."
+            },
+            {
+              "type": "table",
+              "caption": "Different recovery operations for different school incidents",
+              "headers": ["Need", "Supported approach", "Boundary to remember"],
+              "rows": [
+                ["One small file from an eligible VM point", "Use VM File Recovery, mount the recovery volumes on a compatible authorized machine, and copy the file", "Check OS, filesystem, encryption, and disk restrictions. The connection must be unmounted afterwards."],
+                ["A complete basic VM for a test", "Create a new VM from an eligible point", "Select target name, group, network, and subnet. Recheck access assignments and application configuration."],
+                ["VM disks for a customized rebuild", "Restore disks and use them with a deliberately configured VM", "Restored disks are not automatically a working application or the original special network configuration."],
+                ["Rollback of an existing eligible VM", "Replace existing disks", "Requires an existing supported unencrypted managed VM and appropriate permissions; original disks remain and may incur charges."],
+                ["Standalone managed disk protected by Azure Disk Backup", "Restore a new disk to an eligible target group", "Original-location replacement is not supported by that workload. It is not the VM Replace existing operation."],
+                ["Azure Files recovery", "Snapshot tier: full share or individual items to original or alternate location; vaulted tier: full share recovery", "Current vaulted Azure Files recovery does not offer file-level recovery. An older vaulted-only point may require restoring the full share first."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "For VM file recovery, the portal generates protected recovery software for an authorized user. Running it requires an administrator on a compatible machine and the documented outbound DNS, HTTPS, and recovery connection paths. This is not an SMB login to a normal share. Encrypted VM backups, Ultra Disk, and Premium SSD v2 have file-level restrictions, so do not promise this path for every VM. The mounted recovery point is read-only; copy the required file to an approved destination, verify it, then select Unmount Disks to invalidate access. Keep the generated password out of tickets and chat."
+            }
+          ]
+        },
+        {
+          "id": "worked-safe-restore",
+          "title": "Worked example: recover without immediately replacing production",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Find the last good timetable server",
+              "scenario": "A faulty deployment changes school-web at 13:10 UTC. The application owner confirms that the 12:00 recovery point was captured before the error. Assume this point is usable for creating a new basic VM, a private recovery subnet exists, and the administrator has documented vault, source, target, and staging permissions.",
+              "steps": [
+                { "action": "Open the protected VM's recovery flow and select the verified 12:00 point, checking consistency and whether snapshot or vault recovery is available.", "why": "The recovery date alone does not show whether the point predates the fault or which restore path will be used." },
+                { "action": "Choose Create new VM, name it school-web-recovery, and select the approved isolated resource group, subnet, and staging location where required.", "why": "An alternate copy preserves production evidence and avoids immediately overwriting newer data. Isolation prevents the test app from sending real notifications or processing live submissions." },
+                { "action": "Track the restore job to completion, then inspect boot, disk contents, required network settings, and role assignments on the new resource.", "why": "A successful data restore is not proof of a working application. Resource-scoped RBAC assignments on the original VM do not automatically transfer to a new VM." },
+                { "action": "Have the application owner verify the timetable and representative synthetic records; record the point used, elapsed recovery time, and remaining data gap.", "why": "This tests the school's actual recovery requirement and supplies evidence for its RPO and RTO." },
+                { "action": "Arrange an approved cutover only after verification, and configure backup if the restored VM has a new name or resource group.", "why": "A restored copy can become tomorrow's unprotected production resource if administrators assume the original backup association follows it." }
+              ],
+              "result": "The team has a tested recovery candidate and documented data loss, not an unverified overwrite. A file-only incident would normally justify a smaller recovery operation."
+            }
+          ]
+        },
+        {
+          "id": "cross-boundary-recovery",
+          "title": "Cross region and cross subscription are qualified features",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For eligible Azure VM protection, Cross Region Restore requires a GRS Recovery Services vault with the feature enabled and uses recovery points replicated to the paired secondary region. Local snapshots are not replicated by that feature. The supported operations create a VM or restore disks, not replace existing disks in the secondary region. Secondary availability can lag: current guidance gives up to 48 hours for items to become available after enabling the feature and a worst-case VM secondary RPO up to 36 hours. Frequent Enhanced snapshots do not remove the daily vault-transfer and replication delay."
+            },
+            {
+              "type": "paragraph",
+              "text": "Cross Subscription Restore for managed VMs stays within the same tenant and still needs permissions on the destination. Snapshot-tier points restore only within the protected VM subscription. Vault-tier points can restore to the protected VM or vault subscription; other subscription targets require Cross Subscription Restore enabled. Encrypted configurations have exclusions, including Azure Disk Encryption and customer-managed-key encrypted disks. Standalone Disk Backup supports eligible same-region cross-subscription restore, but not cross-region restore, and excludes customer-managed-key disk cross-subscription recovery. Vaulted Azure Files has cross-subscription and region-qualified cross-region support; snapshot-only Files does not inherit those vaulted capabilities."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "A recovery feature is not a universal transport",
+              "text": "A question about creating a VM in another subscription is not the same as backing it up to another subscription. A question about paired-region recovery is not answered by ZRS or by local snapshots. Check workload, tier, encryption, tenant, target region, feature settings, and permissions before selecting a cross-boundary operation."
+            }
+          ]
+        },
+        {
+          "id": "soft-delete-and-immutability",
+          "title": "Preserve recovery points when an administrator makes a mistake",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Soft delete postpones permanent loss after a deletion so an authorized administrator can recover the backup item during its retention window. Current Azure Backup guidance allows 14 to 180 days, with 14 days as the default. Undeleting a backup item returns it to the Stop protection with retain data state; resume protection deliberately if new backups are required. Do not confuse this safety window with the normal policy retention of active recovery points. Nor should you assume it restarts the deleted production application."
+            },
+            {
+              "type": "paragraph",
+              "text": "Secure-by-default enforcement is evolving by vault type, region, and client or API version. The current availability table lists Recovery Services vault enforcement as generally available across Azure public regions and national clouds. For Backup vaults it lists general availability in Australia East, West Central US, and East Asia, with public preview in the remaining public regions and national clouds. However, the same document's introduction still describes Recovery Services enforcement as preview. Treat this as a rollout documentation qualification, not a reason to promise identical behavior for every vault."
+            },
+            {
+              "type": "paragraph",
+              "text": "The documentation also conflicts about disabling soft delete in Backup vault preview regions: one paragraph allows portal disabling outside the three generally available regions, while a later note and API tables prohibit portal disabling. Its API section distinguishes newer preview interfaces from older API versions that may still permit disabling, and says general-availability enforcement applies across all versions. Check the actual vault, region, client, API version, and current guidance before designing administration or cleanup. Do not assume soft delete is always disableable or globally impossible to disable, and do not use older interfaces to bypass a protection requirement."
+            },
+            {
+              "type": "paragraph",
+              "text": "Operational Files and Blobs backups do not have this vault soft-delete protection. Operational disk backups and VM Instant Restore snapshots have additional exposure because their underlying snapshot resources can be directly accessed and deleted before the soft-delete period expires. Vaulted backup soft-delete retention has no additional retention charge for the default fourteen days, but extended retention is chargeable. Operational snapshot resource charges continue under their own pricing. These distinctions matter when estimating both recoverability and cleanup cost."
+            },
+            {
+              "type": "paragraph",
+              "text": "Immutability prevents destructive changes to protected vaulted recovery points. Enabled immutability can be reversible; enabled and locked immutability cannot be disabled. In the policy-based mode used here, reducing retention or deleting protected points early is blocked. Current Recovery Services guidance also describes fixed-duration immutability, which is not the same as protecting every point for its entire policy lifetime. Operational disk, blob, and file snapshots are outside vault immutability. Locked enforcement is not identical to universal write-once, read-many storage availability: that storage implementation still varies by region and workload. Do not lock a teaching vault merely to see what happens."
+            }
+          ]
+        },
+        {
+          "id": "resource-guard-and-change-control",
+          "title": "Separate the people who can request and authorize risky actions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Multiuser authorization, MUA, adds a Resource Guard permission check to protected critical vault operations. A different security administrator controls Resource Guard, and the backup administrator must not already possess the roles that authorize those operations there. For an approved change, temporary Backup MUA Operator access can be granted and later removed. Giving one administrator permanent control over both resources defeats the intended separation. Resource Guard can be placed in another subscription or tenant for stronger separation, but that adds identity and operational planning."
+            },
+            {
+              "type": "paragraph",
+              "text": "MUA is not simply a confirmation dialog, a second password, or a block on every operation. Its protected operations depend on vault type and configuration; restore protection is optional and not enabled by default in the current tables. Resource Guard does not authorize or prevent arbitrary changes made directly to the source storage resource. RBAC controls who can request operations, immutability blocks particular destructive changes, and soft delete gives recovery time after allowed deletions. Use them together. None compensates for retaining the wrong data or never testing a restore."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "backup-policy-six-hour",
+          "kind": "single",
+          "prompt": "The school needs scheduled VM backup starts every six hours throughout the day, seven-day Instant Restore, and thirty-day daily vault history. Which policy matches the stated requirements?",
+          "choices": [
+            { "id": "enhanced-separated-settings", "text": "Enhanced VM policy with a six-hour schedule, seven-day snapshot retention, and thirty-day daily vault retention.", "explanation": "Enhanced supports the scheduled frequency, and the two retention choices serve separate tiers within the described supported ranges." },
+            { "id": "standard-long-retention", "text": "Standard daily VM policy with thirty-day retention, because retention increases backup frequency.", "explanation": "Retention controls how long points survive, not how frequently they are captured." },
+            { "id": "snapshot-only-thirty", "text": "Any policy with thirty-day snapshots, because this automatically creates thirty-day vault history.", "explanation": "Snapshot and vault retention are distinct settings, and thirty-day snapshot retention is not valid for every frequency." }
+          ],
+          "correctIds": ["enhanced-separated-settings"],
+          "explanation": "Choose the workload-specific scheduler and configure each tier deliberately rather than using one number for every requirement."
+        },
+        {
+          "id": "backup-restore-file-tier",
+          "kind": "single",
+          "prompt": "A needed file exists only in an Azure Files recovery point in the vaulted tier. There is no corresponding snapshot point. Which current recovery approach is supported?",
+          "choices": [
+            { "id": "full-share-then-copy", "text": "Restore the full share to an approved alternate location, verify it, and retrieve the needed file.", "explanation": "The current vaulted Azure Files matrix supports full-share recovery, not file-level recovery. An alternate share avoids replacing unrelated live files." },
+            { "id": "vaulted-item-restore", "text": "Select vaulted item-level restore directly for that file.", "explanation": "Item-level recovery belongs to the supported snapshot-tier options, not the currently documented vaulted-tier options." },
+            { "id": "replace-disk", "text": "Use the VM Replace existing disks operation on the file share.", "explanation": "An Azure Files share is not a VM managed disk, so this is the wrong workload operation." }
+          ],
+          "correctIds": ["full-share-then-copy"],
+          "explanation": "The requested granularity does not override the recovery tier's supported methods."
+        },
+        {
+          "id": "backup-cross-region-snapshot",
+          "kind": "single",
+          "prompt": "The school has an eligible managed VM protected in a GRS Recovery Services vault with Cross Region Restore enabled. It has a recent local snapshot but no corresponding replicated vault point yet. Can it use that snapshot for paired-region recovery?",
+          "choices": [
+            { "id": "use-replicated-vault-point", "text": "No; choose an available replicated vault recovery point and account for its age.", "explanation": "Cross Region Restore uses replicated vaulted data, not the local Instant Restore snapshots." },
+            { "id": "snapshot-immediate-pair", "text": "Yes; every local snapshot is immediately copied to the paired region.", "explanation": "Frequent local snapshots do not imply equivalent vault-transfer or regional replication frequency." },
+            { "id": "replace-secondary", "text": "Yes; use Replace existing disks in the secondary region to avoid replication.", "explanation": "That operation is not the supported cross-region VM restore method and cannot bypass missing recovery data." }
+          ],
+          "correctIds": ["use-replicated-vault-point"],
+          "explanation": "GRS and an enabled feature provide a supported recovery path only when the needed data has actually reached that path."
+        },
+        {
+          "id": "backup-security-separation",
+          "kind": "single",
+          "prompt": "The school wants critical vault operations to require permissions controlled by another administrator. Which design directly provides that separation?",
+          "choices": [
+            { "id": "separate-resource-guard", "text": "Configure MUA with Resource Guard controlled by a different administrator, without giving the backup administrator permanent authorizing access there.", "explanation": "Protected critical operations require the additional Resource Guard authorization; separate control is the purpose of MUA." },
+            { "id": "grs-security", "text": "Change the vault from LRS to GRS and give both administrators the same permissions.", "explanation": "Storage replication does not add a separate authorization check for destructive operations." },
+            { "id": "single-owner", "text": "Give the backup administrator permanent ownership of both vault and Resource Guard.", "explanation": "The same person could authorize the critical action, defeating the intended separation." },
+            { "id": "retention-alert-only", "text": "Send an email after deletion instead of controlling the operation.", "explanation": "Notification helps detection but does not require separate authorization before a protected action." }
+          ],
+          "correctIds": ["separate-resource-guard"],
+          "explanation": "Use MUA for divided authorization, alongside rather than instead of RBAC, appropriate immutability, and soft delete."
+        }
+      ],
+      "takeaways": [
+        "Schedule determines capture frequency; retention determines which points remain, and snapshot retention is not vault retention.",
+        "Use Enhanced policy for supported multiple-daily VM scheduling, with frequency-qualified Instant Restore limits.",
+        "Select recovery granularity and destination deliberately, then test the application rather than only the restore job.",
+        "Cross-region and cross-subscription recovery depend on workload, tier, identity, encryption, settings, and available points.",
+        "Soft delete, immutability, and Resource Guard address different risks and must not be treated as interchangeable."
+      ],
+      "sourceIds": ["backup-create-rsv", "backup-vm-support", "backup-vm-enhanced", "backup-instant-restore", "backup-files-support", "backup-disk-support", "backup-vm-restore", "backup-vm-file-recovery", "backup-soft-delete", "backup-immutable", "backup-mua", "backup-rbac"]
+    },
+    {
+      "id": "backup-monitoring-and-operations",
+      "title": "Prove protection and keep recovery ready",
+      "summary": "Configure diagnostic reporting and actionable notifications, distinguish fresh job evidence from delayed trends, and operate backups without hiding failures or ignoring cost.",
+      "objectives": [
+        "Configure both vault types to send the right diagnostic categories to a Log Analytics workspace.",
+        "Explain report filters, historical retention, initial delay, and completed-day conventions.",
+        "Configure built-in Azure Monitor backup notifications with an action group and alert processing rule.",
+        "Use backup jobs, recovery points, restore tests, and cost evidence to make operational decisions."
+      ],
+      "sections": [
+        {
+          "id": "define-proof-of-protection",
+          "title": "Green tiles answer narrower questions than people think",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The head teacher asks whether the school application is safe. 'The dashboard is green' is too vague. State which resources must be protected, which policy each should use, the newest usable recovery point for each, and when recovery was last tested. A configured policy can coexist with repeated failures. A successful VM backup can coexist with an unprotected remote file share. A successful restore job can coexist with a broken application login. Useful operational evidence connects the school requirement to the specific resources and recovery operations that satisfy it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Maintain an expected protection inventory for school-web, its separate import disk, the document share, and any protected blob containers. Compare it with protected items or backup instances in the relevant vaults and the central protection view. Record workload and tier, not just resource names. If a source is renamed, replaced, or restored under a different name, check its protection association again. This catches the dangerous case in which every configured backup succeeds but a newly deployed production resource was never configured for backup."
+            },
+            {
+              "type": "table",
+              "caption": "Choose evidence that matches the question",
+              "headers": ["Question", "Evidence to inspect", "What it does not prove"],
+              "rows": [
+                ["Did last night's backup finish?", "The specific backup job, its stages, final status, and recovery point", "That every intended resource was included or that the application can recover"],
+                ["Who changed the policy?", "Relevant management activity and the recorded policy change", "That the next scheduled backup completed"],
+                ["Are failures or storage use increasing?", "Backup Reports over an appropriate completed historical interval", "The immediate status of today's still-running job"],
+                ["Will somebody respond to a failure?", "A generated alert, matching routing rule, and tested notification destination", "That someone has repaired the failure"],
+                ["Can the school resume work?", "A verified restore exercise and application checks", "That future recovery will work without continued monitoring"]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "configure-reporting-pipeline",
+          "title": "Reports need a collection pipeline",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Backup Reports use Azure Monitor Logs and workbooks. A Log Analytics workspace stores the collected records; a workbook presents filtered views and calculations over them. Creating a vault does not automatically send its complete diagnostic history into a workspace. Select an approved existing workspace or create one through the organization's process, decide who can read the data, and configure each participating vault to send the required diagnostics. The workspace can be in a different subscription or region from the vault, but the school's data-location rules and permissions still apply."
+            },
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                "On a Recovery Services vault, open Diagnostic settings and add a named setting. Choose Send to Log Analytics and the approved workspace. Select Resource specific rather than placing the modern backup categories in Azure diagnostics mode.",
+                "Select the supported modern Recovery Services categories: Core Azure Backup Data, Addon Azure Backup Job Data, Addon Azure Backup Policy Data, Addon Azure Backup Storage Data, Addon Azure Backup Protected Instance Data, and Azure Backup Operations. Save the setting.",
+                "On a Backup vault, add its own diagnostic setting to the intended workspace. Select its Core, Job, Policy, and Protected Instance backup data categories. Backup vault events already use resource-specific tables; a separate Addon Storage event is not applicable there.",
+                "Set workspace or table retention to the reporting horizon. If the school needs ninety days of trends, verify that the relevant records are retained that long instead of assuming the default thirty-day workspace retention is sufficient.",
+                "Open Backup Reports, choose the correct workspace, subscriptions, vaults, workload filters, and completed historical range. Confirm records arrive before trusting a chart."
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Resource-specific means that structured backup events go to dedicated tables such as CoreAzureBackup and AddonAzureBackupJobs rather than one general legacy table. Merely collecting the old Azure Backup Reporting Data category is not the recommended new setup. Likewise, the legacy Addon Azure Backup Alerts category represents classic alerts, not a general export of current Azure Monitor alerts. Use modern diagnostic categories for reports and the Azure Monitor notification path for current alerts."
+            }
+          ]
+        },
+        {
+          "id": "report-delay-and-interpretation",
+          "title": "A blank report can mean that the data is not ready",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "After diagnostics are configured, the initial push can take up to 24 hours. Backup Reports exclude the current partial day and work with completed UTC days. Microsoft recommends starting to view them two days after configuration. This makes them useful for historical analysis, not a replacement for checking an urgent job directly. Adding a diagnostic setting today is also not a promise that every missing historical record from before collection will appear."
+            },
+            {
+              "type": "paragraph",
+              "text": "Report filters can change the apparent answer. Confirm the workspace first, then the subscriptions, vaults, data sources, and time range. Some filters affect only widgets positioned to their right or below. Cloud storage and protected-instance values describe the end of the selected period rather than a sum of every daily reading. Items deleted during the interval may not appear in the end-of-period inventory. A report showing fewer items is therefore a reason to investigate with the protection inventory and change history, not proof that those resources never existed."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-report-is-empty",
+              "prompt": "At 15:00 UTC, the school enables diagnostics. At 16:00, a backup job is completed but Backup Reports is empty. Should it delete and recreate the vault?",
+              "answer": "No. First verify the diagnostics destination, categories, permissions, filters, and documented reporting delay.",
+              "explanation": "Initial ingestion may take up to 24 hours, and today's partial day is excluded from the report. The completed job and recovery point are better immediate evidence; destructive vault changes would not fix those reporting conventions."
+            },
+            {
+              "type": "paragraph",
+              "text": "Report coverage also depends on the workload and report. The consolidated support table currently includes Azure Blob operational backup, not an unqualified promise of every vaulted Blob measure. Separate out-of-box reports have their own scopes. Check that the selected report supports the source before diagnosing a missing row as a failed backup. Report availability and a successfully executed query are evidence of collection, not independent proof that the backup contains the required school data."
+            }
+          ]
+        },
+        {
+          "id": "configure-backup-alerts",
+          "title": "An alert in the portal is not an email in somebody's inbox",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Use built-in Azure Monitor alerts for supported critical backup events rather than designing a new solution around classic backup alerts. In each vault's Properties, inspect Monitoring Settings and confirm job-failure alerts are enabled. They are enabled by default for the supported scenarios but can be switched off. Security alerts for supported destructive operations are generated by the service; routing their notifications is a separate administrative choice. Built-in alerts do not require a Log Analytics reporting pipeline to generate their standard signals."
+            },
+            {
+              "type": "paragraph",
+              "text": "Create or select an action group containing the approved response channel, such as the school's IT duty mailbox. Then create an alert processing rule whose scope covers the intended vault resources, filters the required alerts, and applies that action group. Include both vault types if both are part of the plan; a filter limited to Recovery Services vault resources will not cover Backup vault resources. Decide whether the rule is always active or follows a deliberate schedule. A processing rule routes or suppresses notifications for existing alerts; it does not turn an unhealthy backup into a healthy one."
+            },
+            {
+              "type": "paragraph",
+              "text": "Test the notification channel, inspect the rule's scope and filters, and use an approved harmless alert exercise to verify the complete path where possible. Do not delete backup data to generate a test security event. Check recipient delivery, notification timestamps, and any overlapping suppression rule. A test message reaching the action group proves that destination can receive messages; it does not by itself prove that a real backup alert matches the processing rule. Keep the detection, routing, and human response checks separate."
+            }
+          ]
+        },
+        {
+          "id": "worked-reports-and-alerts",
+          "title": "Worked example: build useful evidence for both vaults",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "From two vaults to one accountable morning review",
+              "scenario": "The school uses rsv-school-ne for VM and Files protection and bv-school-ne for its standalone disk. The IT team needs historical weekly trends and prompt notifications of supported backup or restore failures. Assume an approved workspace and duty mailbox already exist.",
+              "steps": [
+                { "action": "Configure the modern diagnostic categories for each vault into the approved workspace, using resource-specific mode for Recovery Services, and verify the intended ninety-day log retention.", "why": "Historical trends require actual collection and enough retained data. Different vault types do not expose identical diagnostic categories." },
+                { "action": "Confirm built-in job-failure alerts are enabled, create the duty action group, and configure a processing rule covering the two specific vaults.", "why": "Generation and notification are separate. Selecting both resources avoids accidentally excluding the standalone disk vault." },
+                { "action": "Test delivery without changing production protection, then check that the rule's filters and schedule would include the intended Azure Backup alerts.", "why": "A working mailbox cannot compensate for a rule that selects the wrong resource or suppresses the alert at night." },
+                { "action": "The next morning, inspect current jobs and recovery-point age directly. After the initial reporting delay and completed days, review historical job failures and policy adherence in Backup Reports.", "why": "Immediate operational evidence and delayed trend evidence answer different questions." },
+                { "action": "Assign an owner to each unexplained gap, repair its cause, rerun an appropriate backup, and record the resulting point and notification evidence.", "why": "A closed alert alone is not a repair. The replacement successful point and the investigated cause support closure." }
+              ],
+              "result": "The team has a reporting pipeline, a notification path, and an operational response procedure. It can explain both what is protected now and what happened over the reporting period."
+            }
+          ]
+        },
+        {
+          "id": "diagnose-without-weakening",
+          "title": "Follow the failed stage instead of removing safeguards",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "When a VM backup fails, record the resource, job identifier, start time with timezone, failed stage, error code, and newest successful point. A snapshot-stage error suggests checking VM agent or extension readiness, application consistency, disk support, and connectivity where required. A later transfer error is a different investigation. For disk backup, verify the vault identity's documented disk and snapshot-group roles and allow role assignments time to propagate. Do not grant subscription-wide ownership simply because a readiness check was run immediately after adding a narrow role."
+            },
+            {
+              "type": "paragraph",
+              "text": "For Files or Blobs, compare the actual storage protocol, account type, network settings, and enabled features with the workload matrix. A new unsupported setting can break protection even when the vault is unchanged. Diagnose a restore failure separately: the point can exist while a target region has insufficient capacity, a target group lacks permissions, a key is unavailable, or a destination conflicts with the operation. Preserve logs and the point; do not delete and rebuild the protection relationship as the first reaction."
+            },
+            {
+              "type": "paragraph",
+              "text": "After repairing the demonstrated cause, run an appropriate backup or recovery test and inspect the result. Acknowledge an alert to show someone owns the incident; close it when the operational evidence supports closure. If custom log-based alerts are needed, design them around actual ingestion delay and the right source tables, rather than assuming the workbook is a live event stream. Successful notification, successful job, and successful application validation are three separate milestones."
+            }
+          ]
+        },
+        {
+          "id": "capacity-and-retained-data",
+          "title": "Retained protection consumes billable capacity",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Backup cost depends on the workload, protected instance charging where applicable, stored data, redundancy, snapshots, retention, and data change rate. A 100 GB disk with small daily changes is not necessarily billed as thirty independent 100 GB copies, but neither is it free because only changes are captured. Enhanced VM snapshot accounting includes an initial full snapshot plus incremental changes. More frequent or longer-retained snapshots can increase cost. Check actual pricing and storage-consumption evidence rather than multiplying a policy's day count by the source disk size and treating that as an exact invoice."
+            },
+            {
+              "type": "paragraph",
+              "text": "Stopping protection while retaining data usually preserves billable backup data rather than canceling all charges. Soft-delete pricing is also scoped: the default fourteen-day vaulted retention has no additional retention charge, but extended retention is chargeable, and operational snapshot resource charges continue. Restored disks, test VMs, staging files, and retained original disks can add separate charges. Reports require consideration of log ingestion and retention; notifications and custom monitoring can also cost money. A report showing stable protected-instance count does not establish that total backup and recovery spending is stable."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use a change request before shortening retention. Identify who needs older points, which workloads use the policy, and whether immutability or Resource Guard blocks the action. A lower number is not an immediate safe cost reduction, and retained or soft-deleted data can outlive the change. Review only resources you own during cleanup. Never manually remove service-managed recovery snapshots merely because their names look old; the backup service manages dependencies and expiry, and deletion can compromise recoverability."
+            }
+          ]
+        },
+        {
+          "id": "operational-review-rhythm",
+          "title": "A small repeatable routine beats occasional panic",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Each school morning, compare the expected inventory with protection state, investigate failed or missing jobs, and check the age of usable points against each workload's objective. Weekly, review completed-period reports for repeated failures, policy drift, and storage growth. At an agreed interval and after significant application changes, restore synthetic data in an isolated environment and measure the time until the actual application check succeeds. Keep a short record of the selected point, restore destination, validation result, observed data gap, and cleanup."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Choose configuration or interpretation, not a comforting screenshot",
+              "text": "For historical backup reporting, think diagnostic settings, Log Analytics, supported reports, retention, and filters. For built-in backup notifications, think alert generation, action group, and alert processing rule. For proof of recovery, think a usable point and a verified restore. Closing an alert, seeing a chart, and restoring an application are not equivalent outcomes."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "backup-report-categories",
+          "kind": "single",
+          "prompt": "The school is creating a new Recovery Services vault reporting setup. Which configuration is the recommended basis for Backup Reports?",
+          "choices": [
+            { "id": "modern-resource-specific", "text": "Send the modern backup diagnostic categories to the intended Log Analytics workspace in resource-specific mode.", "explanation": "The current reporting pipeline uses dedicated backup tables with the documented categories. The destination and retention still need verification." },
+            { "id": "action-group-only", "text": "Create an email action group and assume historical diagnostic data is stored automatically.", "explanation": "An action group routes notifications; it does not configure the backup reporting data pipeline." },
+            { "id": "wrong-diagnostics-mode", "text": "Send the modern Recovery Services backup categories in Azure diagnostics mode because the mode never affects reports.", "explanation": "The modern Recovery Services reporting events require resource-specific mode for Backup Reports." }
+          ],
+          "correctIds": ["modern-resource-specific"],
+          "explanation": "Configure collection explicitly and match category to destination mode."
+        },
+        {
+          "id": "backup-report-empty-first-day",
+          "kind": "single",
+          "prompt": "Diagnostics were enabled one hour ago, and today's completed backup is visible in its job details but not in Backup Reports. What is the best next action?",
+          "choices": [
+            { "id": "check-delay-and-filters", "text": "Verify collection and filters, use job and recovery-point evidence now, and allow the documented initial and completed-day reporting delay.", "explanation": "The initial push can take up to 24 hours, and the report excludes the current partial day. This explains why a recent job can precede report visibility." },
+            { "id": "delete-vault-to-refresh", "text": "Delete the vault to force the workbook to refresh.", "explanation": "Deleting protection is destructive and does not correct reporting conventions." },
+            { "id": "assume-no-backup", "text": "Conclude that the completed job must be fictional because the chart is empty.", "explanation": "The job and report have different update paths and time conventions; their temporary difference is not proof of missing recovery data." }
+          ],
+          "correctIds": ["check-delay-and-filters"],
+          "explanation": "Use the appropriate evidence source while checking the reporting pipeline."
+        },
+        {
+          "id": "backup-alert-routing",
+          "kind": "single",
+          "prompt": "A supported built-in Azure Backup failure alert exists in Azure Monitor, but the duty mailbox receives nothing. Which configuration directly addresses notification routing?",
+          "choices": [
+            { "id": "processing-rule-action-group", "text": "An alert processing rule matching the intended vault and alert, applying the tested duty-mailbox action group.", "explanation": "The alert already exists. Scope, filters, suppression, schedule, and the action group determine whether its notification is routed." },
+            { "id": "longer-snapshot-retention", "text": "Increase Instant Restore retention so that Azure Monitor discovers the mailbox.", "explanation": "Backup retention does not configure a notification destination." },
+            { "id": "workspace-retention-only", "text": "Increase workspace retention and make no alert-routing change.", "explanation": "Historical log retention does not attach an action group to the existing built-in alert." }
+          ],
+          "correctIds": ["processing-rule-action-group"],
+          "explanation": "Alert generation and notification delivery are separate stages that must each be checked."
+        },
+        {
+          "id": "backup-evidence-after-repair",
+          "kind": "multiple",
+          "prompt": "A disk backup failed because the vault identity lacked its documented snapshot-group role. After assigning the correct role and allowing propagation, which TWO observations provide meaningful evidence of recovery readiness?",
+          "choices": [
+            { "id": "completed-point", "text": "A new completed backup job with an available recovery point.", "explanation": "This shows that the repaired permissions allowed the configured protection operation to produce recovery data." },
+            { "id": "validated-restore", "text": "A permitted test restore to a new disk with the required synthetic data verified.", "explanation": "This tests the documented alternate-location disk recovery path and confirms the data the school needs." },
+            { "id": "closed-alert-only", "text": "The operator changes the alert state to Closed without another operation.", "explanation": "A human-set alert state is not evidence that backup or restore now works." },
+            { "id": "retained-free", "text": "Protection is stopped with retained data, proving that all charges and failures have disappeared.", "explanation": "Retained data can remain billable, and stopping future attempts does not demonstrate restored protection." }
+          ],
+          "correctIds": ["completed-point", "validated-restore"],
+          "explanation": "Successful capture and verified recovery provide stronger evidence than an administrative state change."
+        }
+      ],
+      "takeaways": [
+        "Inventory, jobs, recovery points, historical reports, notifications, and restore tests supply different evidence.",
+        "Configure diagnostics on each vault and use the correct categories and destination mode.",
+        "Interpret Backup Reports using their supported workload scope, filters, initial delay, and completed UTC days.",
+        "Built-in alert generation is separate from action-group notification routing.",
+        "Retention, operational snapshots, restored resources, logs, and monitoring can continue to incur charges."
+      ],
+      "sourceIds": ["backup-reports", "backup-diagnostics", "backup-alerts", "backup-vm-support", "backup-disk-configure", "backup-disk-support", "backup-files-support", "backup-blob-support", "backup-instant-restore", "backup-soft-delete", "backup-vm-restore", "backup-immutable"]
+    }
+  ],
+  "glossary": [
+    { "term": "Recovery point", "definition": "A recoverable state identified by backup time, consistency, and available storage tier." },
+    { "term": "Recovery point objective (RPO)", "definition": "The maximum age of lost changes that an organization is prepared to accept, expressed as time." },
+    { "term": "Recovery time objective (RTO)", "definition": "The target elapsed time to restore the required service, including application validation rather than only data transfer." },
+    { "term": "Recovery Services vault", "definition": "The Azure vault type used for workloads including Azure VM and Azure Files backup, with workload-specific protection and recovery capabilities." },
+    { "term": "Backup vault", "definition": "A different Azure vault type used for workloads including standalone managed disk and blob protection; not all managed backups are copied into its storage." },
+    { "term": "Operational backup", "definition": "Protection using snapshots or native data-protection features near the source, with workload-specific limits and failure boundaries." },
+    { "term": "Vaulted backup", "definition": "Protection that retains backup data in vault storage rather than relying only on source-side operational recovery data." },
+    { "term": "Instant Restore", "definition": "The Azure VM snapshot-based recovery capability, with a separate snapshot retention setting and no guarantee of instant application readiness." },
+    { "term": "Retention", "definition": "Rules determining how long recovery points or diagnostic records remain available; distinct from how frequently they are created." },
+    { "term": "Crash consistency", "definition": "A captured state resembling sudden power loss, which can require application or filesystem recovery after restoration." },
+    { "term": "Soft delete", "definition": "A time-limited recoverable state after deletion, subject to workload, tier, vault, and regional enforcement qualifications." },
+    { "term": "Immutability", "definition": "Protection against destructive changes to applicable vaulted recovery points; locking the setting prevents it from being disabled." },
+    { "term": "Resource Guard", "definition": "The separately controlled Azure resource providing additional authorization for configured critical backup operations." },
+    { "term": "Managed identity", "definition": "An Azure-managed service identity that can receive scoped permissions, distinct from the human configuring backup." },
+    { "term": "Action group", "definition": "An Azure Monitor configuration of notification or automation destinations used when matching alerts need a response." },
+    { "term": "Alert processing rule", "definition": "A rule that applies or suppresses notification actions for matching generated alerts within a defined scope and schedule." }
+  ],
+  "sources": [
+    { "id": "backup-study-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "AZ-104 study guide effective April 17, 2026", "supports": "Official scope checked September 20, 2026: creating both vault types, configuring backup policy, performing backup and restore, and configuring and interpreting reports and alerts." },
+    { "id": "backup-general-support", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-support-matrix", "title": "Azure Backup general support matrix", "supports": "Recovery Services workload choices, Windows-only MARS distinction, regional vault relationship, redundancy qualifications, and separation of snapshot and vaulted capabilities. Workload-specific matrices override broad frequency summaries." },
+    { "id": "backup-create-rsv", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-create-rs-vault", "title": "Create and configure a Recovery Services vault", "supports": "Recovery Services vault creation fields, same-region placement, redundancy before protection, GRS requirement for Cross Region Restore, up-to-48-hour initial secondary availability, and workload-qualified secondary RPO." },
+    { "id": "backup-create-bv", "url": "https://learn.microsoft.com/en-us/azure/backup/create-manage-backup-vault", "title": "Create and delete Backup vaults", "supports": "Backup vault creation flow, subscription and group selection, naming and regional choice, redundancy decision before protected items, and deletion dependencies." },
+    { "id": "backup-vm-support", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-support-matrix-iaas", "title": "Support matrix for Azure VM backups", "supports": "VM agent versus MARS and agentless protection, consistency and operating system qualifications, same-region cross-subscription backup preview, Enhanced-only agentless mode and disk exclusions, daily or weekly Standard schedules, daylight-saving behavior, and disk, SKU, and restore restrictions." },
+    { "id": "backup-vm-enhanced", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-azure-vms-enhanced-policy", "title": "Back up an Azure VM using Enhanced policy", "supports": "Enhanced VM policy creation, hourly intervals, daily vault transfer for hourly backup, snapshot retention limits including four-hour maximum of seventeen days, independent retention defaults, supported newer disks, and no Enhanced-to-Standard reversal." },
+    { "id": "backup-instant-restore", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-instant-restore-capability", "title": "Azure Backup Instant Restore capability", "supports": "Snapshot and transfer stages, snapshot versus vault point availability, Standard daily one-to-five-day and weekly five-day snapshot retention, Enhanced weekly five-to-twenty-day retention, frequency qualifications, snapshot billing, and service-managed cleanup." },
+    { "id": "backup-files-support", "url": "https://learn.microsoft.com/en-us/azure/backup/azure-file-share-support-matrix", "title": "Support matrix for Azure Files backup", "supports": "Current SMB rather than NFS support, snapshot versus vaulted regional lists, GA vaulted support, supported HDD and SSD shares and account kinds, key-access prerequisite, retention and point limits, last daily snapshot vault transfer, vaulted full-share-only restore, and qualified cross-boundary recovery." },
+    { "id": "backup-disk-support", "url": "https://learn.microsoft.com/en-us/azure/backup/disk-backup-support-matrix", "title": "Azure Disk Backup support matrix", "supports": "Operational-only standalone managed disk protection, supported SKUs and interval differences, snapshot-group and regional constraints, new-disk rather than original-location recovery, same-region cross-subscription support, and customer-managed-key cross-subscription exclusions." },
+    { "id": "backup-disk-configure", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-managed-disks", "title": "Back up Azure Disks using the portal", "supports": "Disk policy schedule and retention rules, dedicated snapshot group, managed identity Disk Backup Reader and Disk Snapshot Contributor roles, readiness validation and propagation delay, operational storage boundary, and on-demand job verification." },
+    { "id": "backup-blob-support", "url": "https://learn.microsoft.com/en-us/azure/backup/blob-backup-support-matrix", "title": "Support matrix for Azure Blobs backup", "supports": "Operational versus vaulted support for block blobs in standard general-purpose v2 accounts; local feature dependencies; deleted-container recovery limitation; archive, protocol, and object replication exclusions; regional qualifications; and system-assigned identity requirement for vaulted protection." },
+    { "id": "backup-vm-restore", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-azure-arm-restore-vms", "title": "Restore Azure VM data in the portal", "supports": "Create-new, restore-disks, and replace-existing choices and prerequisites; recovery-point tier restrictions for cross-subscription and cross-region restore; staging resources; post-restore permissions and network checks; and need to configure protection for differently named restored VMs." },
+    { "id": "backup-vm-file-recovery", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-azure-restore-files-from-vm", "title": "Recover files from Azure VM backup", "supports": "Authorized recovery software generation, compatible machine and elevated execution requirements, network prerequisites, read-only recovery volumes, encrypted VM limitation, copying selected files, and explicit unmount to invalidate recovery access." },
+    { "id": "backup-soft-delete", "url": "https://learn.microsoft.com/en-us/azure/backup/secure-by-default", "title": "Secure by default with soft delete for Azure Backup", "supports": "Fourteen-to-180-day retention with fourteen-day default, Stop protection with retain data after undelete, vault/region/client/API-qualified GA and preview enforcement, contradictory rollout statements about preview and portal disabling, operational Files and Blobs exclusions, direct snapshot deletion risks, and extended-retention versus operational resource charges. Checked September 20, 2026." },
+    { "id": "backup-immutable", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-azure-immutable-vault-concept", "title": "Immutable vault for Azure Backup", "supports": "Enabled versus irreversibly locked immutability, policy-based versus fixed-duration protection, operations blocked, operational snapshot exclusions, and distinction between service-enforced locked immutability and region/workload-specific WORM storage implementation." },
+    { "id": "backup-mua", "url": "https://learn.microsoft.com/en-us/azure/backup/multi-user-authorization-concept", "title": "Multiuser authorization using Resource Guard", "supports": "Separate Resource Guard ownership, temporary Backup MUA Operator access, critical-operation configuration by vault type, optional restore protection, and exclusion of direct source-resource operations." },
+    { "id": "backup-rbac", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-rbac-rs-vault", "title": "Use Azure RBAC to manage backup recovery points", "supports": "Backup Reader, Operator, and Contributor distinctions; creation and policy permissions; separate source, vault, target, and staging scopes for restore; and workload-specific disk role requirements rather than application data permission." },
+    { "id": "backup-reports", "url": "https://learn.microsoft.com/en-us/azure/backup/configure-reports", "title": "Configure Azure Backup reports", "supports": "Workspace and workbook reporting architecture, report-specific workload support, diagnostic setup, historical retention, initial up-to-24-hour data push, recommendation to wait two days, completed UTC days, filter behavior, and end-of-period inventory and capacity interpretation." },
+    { "id": "backup-diagnostics", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-azure-diagnostic-events", "title": "Diagnostic events for Azure Backup", "supports": "Modern diagnostic categories for each vault type, Recovery Services resource-specific mode, Backup vault resource-specific-only events and absence of separate storage category, dedicated tables, and separation of legacy alert events from modern notification routing." },
+    { "id": "backup-alerts", "url": "https://learn.microsoft.com/en-us/azure/backup/backup-azure-monitoring-alerts", "title": "Manage Azure Monitor based backup alerts", "supports": "Built-in security and supported failure alert generation, default job-failure settings on both vaults, modern rather than classic alerting, action groups and processing-rule scope, alert state management, diagnostic-dependent custom log alerts, and notification charging qualifications." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect, recover synthetic data, and verify evidence",
+    "purpose": "Practice the same protection and monitoring decisions without touching real school records. This optional exercise is for a human in an approved disposable training environment; no Azure provisioning or commands are executed by this course.",
+    "prerequisites": [
+      "Instructor-approved access to an existing disposable supported VM, Recovery Services vault, and policy, with a recent recovery point containing only synthetic files.",
+      "An existing isolated recovery network and approved target resource group, plus documented permissions for the vault, source, target, staging resources, and monitoring configuration.",
+      "An approved Log Analytics workspace and a notification destination you are allowed to use. Agree a spending limit and recovery-resource cleanup owner before starting.",
+      "Read the current workload and restore matrix for the actual operating system, disks, encryption, and region. If any prerequisite is unavailable, perform the lesson's paper walkthrough instead."
+    ],
+    "costWarning": "Backup storage, operational snapshots, retained data, restored disks and VMs, staging files, log ingestion and retention, and some notifications can incur charges. Stopping a test VM does not remove disk or backup charges. Locked immutability and enforced soft delete can prevent immediate cleanup; do not change those protections for this exercise.",
+    "steps": [
+      "Record the exact training resource IDs, vault type, region, policy schedule, snapshot retention, and vault retention. Compare them with the requirements in the worked example.",
+      "Inspect the newest completed backup job and its recovery point. If the instructor authorizes an on-demand backup, request it through the portal and observe its final status rather than assuming submission means success.",
+      "With explicit instructor approval, restore the synthetic VM to a new isolated test name, or use an already prepared restored copy for observation only. Never choose Replace existing on a shared or production resource.",
+      "Verify the synthetic timetable file and a harmless application operation. Record the selected point, point age, recovery elapsed time, and any permissions or network steps needed.",
+      "Inspect or, if specifically authorized, add training-only diagnostic settings to the approved workspace. Verify categories and mode, and compare immediate job evidence with reports after the documented completed-day delay.",
+      "Inspect the training action group and processing rule. Send an approved channel test and check scope, filters, schedule, and suppression; do not create a failure by deleting backup data.",
+      "Review the resource and cost inventory with the instructor, then perform only the narrow cleanup agreed below."
+    ],
+    "expectedResults": [
+      "You can distinguish vault creation, policy assignment, a completed backup, an available point, and a verified application recovery.",
+      "A new recovery resource does not automatically inherit every original access assignment or backup association.",
+      "Backup Reports can lag behind job evidence, while notification delivery requires a matching rule and working action group.",
+      "You can identify billable resources and retained data without assuming that stopping protection or closing an alert deletes them."
+    ],
+    "cleanup": [
+      "Delete only the specifically recorded disposable restored VM, disks, network artifacts, and staging files created for this exercise, after the instructor confirms they are not needed. Preserve shared networks, original resources, and existing backup points.",
+      "If file recovery was used, unmount its recovery disks and remove generated recovery access material from the test machine. Do not leave recovery connections open.",
+      "Remove only training-only diagnostic settings, alert processing rules, or action groups that you added and that no other resource uses. Do not delete the shared workspace.",
+      "Leave soft delete, immutability, and Resource Guard protections intact. If retained or soft-deleted backup data remains, record its expiry, expected ongoing charges, and cleanup owner rather than trying to bypass protection."
+    ]
+  }
+}

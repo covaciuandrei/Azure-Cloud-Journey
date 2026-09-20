@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "domainId": "monitoring-recovery",
+  "reviewedAt": "2026-09-20",
+  "objectives": [
+    {
+      "objectiveId": "mo-01",
+      "lessons": [
+        {
+          "moduleId": "azure-monitor",
+          "lessonId": "monitor-metrics-logs-and-collection",
+          "sectionIds": [
+            "metric-grain-and-dimensions",
+            "worked-collection-plan"
+          ],
+          "checkpointIds": [
+            "monitor-aggregation-check",
+            "monitor-dimension-check"
+          ],
+          "evidence": "The learner calculates the 36% average and 100% maximum from five explicit CPU observations, distinguishes sampling, chart grain and full time range, and explains metric units, missing values, and dimension splits. The worked collection plan applies average versus maximum to the school's incident without unnecessarily installing a guest collector."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-02",
+      "lessons": [
+        {
+          "moduleId": "azure-monitor",
+          "lessonId": "monitor-metrics-logs-and-collection",
+          "sectionIds": [
+            "four-collection-paths",
+            "configure-diagnostic-settings",
+            "ama-and-dcr",
+            "worked-collection-plan"
+          ],
+          "checkpointIds": [
+            "monitor-diagnostic-check",
+            "monitor-guest-check"
+          ],
+          "evidence": "The learner separates platform metrics, activity logs, service logs and guest events; selects diagnostic categories and valid destinations; and builds a guest collection path using AMA, identity, connectivity and an associated DCR. The worked school plan configures activity export and Windows event collection, then verifies arriving evidence rather than treating a saved setting or empty workspace as success."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-03",
+      "lessons": [
+        {
+          "moduleId": "azure-monitor",
+          "lessonId": "monitor-kql-and-insights",
+          "sectionIds": [
+            "kql-table-and-scope",
+            "kql-filter-and-project",
+            "kql-summarize-results",
+            "kql-real-table",
+            "worked-insights-investigation"
+          ],
+          "checkpointIds": [
+            "monitor-kql-result-check",
+            "monitor-kql-shape-check"
+          ],
+          "evidence": "Seven explicitly synthetic typed rows are traced through datetime and resource filters, projection, five-minute binning, summarize and chronological ordering to exact output tables. The worked investigation applies those results to a defined incident. A separate read-only Heartbeat query teaches real-table prerequisites and missing-computer limitations, while checkpoints distinguish grouped output rows from the failures summarized inside them."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-04",
+      "lessons": [
+        {
+          "moduleId": "azure-monitor",
+          "lessonId": "monitor-alerts-and-actions",
+          "sectionIds": [
+            "alert-signal-and-scope",
+            "criteria-and-evaluation",
+            "state-and-response",
+            "configure-action-groups",
+            "processing-rules-maintenance",
+            "worked-alert-chain"
+          ],
+          "checkpointIds": [
+            "monitor-alert-frequency-check",
+            "monitor-alert-state-check",
+            "monitor-processing-check",
+            "monitor-action-group-check"
+          ],
+          "evidence": "The learner chooses metric, log or activity signals; computes threshold evaluations; separates window, frequency, state and user response; and configures a reusable tested action group. The worked maintenance chain keeps a stateful CPU alert visible while a scoped scheduled processing rule suppresses actions, explicitly teaching propagation, no replay, Service Health exclusion, and notification routing rather than raw-data filtering."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-05",
+      "lessons": [
+        {
+          "moduleId": "azure-monitor",
+          "lessonId": "monitor-kql-and-insights",
+          "sectionIds": [
+            "configure-vm-insights",
+            "interpret-storage-insights",
+            "network-insights-and-connection-monitor",
+            "worked-insights-investigation"
+          ],
+          "checkpointIds": [
+            "monitor-insights-check"
+          ],
+          "evidence": "The learner configures AMA/DCR-based guest monitoring and distinguishes current OpenTelemetry Azure Monitor workspace/PromQL from classic Log Analytics VM Insights/KQL, including VMSS and Private Link limits. Storage and network sections teach actual portal scoping, prerequisite collection, capacity, latency, response-type and connectivity interpretation. The worked incident compares all three experiences over one interval without mistaking a topology map or missing telemetry for application health."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-06",
+      "lessons": [
+        {
+          "moduleId": "azure-monitor",
+          "lessonId": "monitor-kql-and-insights",
+          "sectionIds": [
+            "network-insights-and-connection-monitor",
+            "worked-insights-investigation"
+          ],
+          "checkpointIds": [
+            "monitor-connection-check"
+          ],
+          "evidence": "The learner configures a school web-to-database Connection monitor test group, endpoints, TCP 1433 test, frequency, thresholds, workspace and source extension. Four failures out of twenty are calculated as 20%, then the worked incident uses continuous history to choose targeted Network Watcher route, security and listener investigation. Current VNet Traffic Analytics table naming is distinguished from legacy NSG analytics, and neither TCP success nor topology is treated as proof of application authorization."
+        },
+        {
+          "moduleId": "network-watcher",
+          "lessonId": "choose-a-diagnostic-tool",
+          "sectionIds": [
+            "tuple-direction",
+            "one-test-or-history",
+            "worked-intermittent-ticket"
+          ],
+          "checkpointIds": [
+            "tool-history-check",
+            "tool-tuple-check"
+          ],
+          "evidence": "The existing networking lesson adds exact local and remote tuple selection for an inbound IP flow verify test, contrasts Connection troubleshoot with repeated Connection monitor history, and works through a listener-restart incident using monitor, Next hop, security, packet and guest evidence. This supplements the new monitoring configuration lesson without changing the networking module or equating a present successful test with historical availability."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-07",
+      "lessons": [
+        {
+          "moduleId": "azure-backup",
+          "lessonId": "backup-vaults-and-protection-models",
+          "sectionIds": [
+            "match-workloads-to-vaults",
+            "where-recovery-data-lives",
+            "create-recovery-services-vault"
+          ],
+          "checkpointIds": [
+            "backup-rsv-choice"
+          ],
+          "evidence": "The learner matches Azure VM and supported Azure Files protection to a Recovery Services vault rather than a Backup vault. A worked creation sequence chooses subscription, resource group, region and redundancy before protection, associates a supported workload and policy, and verifies a recovery point instead of treating empty-vault creation as successful backup."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-08",
+      "lessons": [
+        {
+          "moduleId": "azure-backup",
+          "lessonId": "backup-vaults-and-protection-models",
+          "sectionIds": [
+            "match-workloads-to-vaults",
+            "where-recovery-data-lives",
+            "create-backup-vault",
+            "access-is-several-questions"
+          ],
+          "checkpointIds": [
+            "backup-vault-disk-identity",
+            "backup-tier-boundary"
+          ],
+          "evidence": "The learner creates a Backup vault design for standalone managed-disk protection, selects the region and snapshot resource group, assigns the vault identity's scoped permissions, and validates readiness. The worked example distinguishes operational snapshots from data copied into vault storage, so selecting vault geo-redundancy is not mistaken for cross-region protection of disk snapshots."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-09",
+      "lessons": [
+        {
+          "moduleId": "azure-backup",
+          "lessonId": "backup-policy-restore-and-security",
+          "sectionIds": [
+            "schedule-is-not-retention",
+            "standard-enhanced-and-tiers",
+            "worked-vm-policy",
+            "other-workload-policy-boundaries"
+          ],
+          "checkpointIds": [
+            "backup-policy-six-hour"
+          ],
+          "evidence": "The learner distinguishes schedule, retention and tier, then configures a concrete Enhanced VM policy with multiple daily captures, snapshot retention, daily vaulted retention and longer calendar selections. The worked policy associates the protected VM and verifies its initial point. Standard versus Enhanced and workload-specific limits prevent reusing one retention range or consistency promise for every backup product."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-10",
+      "lessons": [
+        {
+          "moduleId": "azure-backup",
+          "lessonId": "backup-policy-restore-and-security",
+          "sectionIds": [
+            "choose-restore-granularity",
+            "worked-safe-restore",
+            "cross-boundary-recovery"
+          ],
+          "checkpointIds": [
+            "backup-restore-file-tier",
+            "backup-cross-region-snapshot"
+          ],
+          "evidence": "The learner selects file, share, disk or whole-VM recovery according to the protected workload and tier, then works through restoring an alternate isolated VM from a verified pre-incident point. The example checks job results, actual application data and renewed protection before use. Cross-region and cross-subscription options are qualified by workload, region, vault copy, identity and supported restore behavior rather than promised universally."
+        },
+        {
+          "moduleId": "azure-backup",
+          "lessonId": "backup-monitoring-and-operations",
+          "sectionIds": [
+            "diagnose-without-weakening"
+          ],
+          "checkpointIds": [
+            "backup-evidence-after-repair"
+          ],
+          "evidence": "The operational investigation checks the failed backup's actual evidence, repairs the specific prerequisite without broadly weakening access, then requires a successful backup job and usable recovery point. This extends restore reasoning into ongoing protection rather than counting a configuration change alone as recovery readiness."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-11",
+      "lessons": [
+        {
+          "moduleId": "site-recovery",
+          "lessonId": "recovery-rpo-rto-and-replication",
+          "sectionIds": [
+            "recovery-time-budgets",
+            "recovery-data-path",
+            "recovery-support-and-placement",
+            "recovery-prerequisite-checks",
+            "recovery-policy-and-points",
+            "recovery-enable-replication",
+            "recovery-readiness-and-changes"
+          ],
+          "checkpointIds": [
+            "recovery-budget-check",
+            "recovery-placement-check",
+            "recovery-consistency-check",
+            "recovery-disk-readiness-check"
+          ],
+          "evidence": "The learner calculates independent RPO and RTO windows, distinguishes asynchronous replication from backup, and chooses consistent recovery points. The worked Azure-to-Azure configuration selects a suitable Recovery Services vault, source VMs, target network, cache, disks and replication policy, then verifies initial replication, current lag and readiness. Regional, agent, storage, capacity and application dependencies are checked before claiming protection."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-12",
+      "lessons": [
+        {
+          "moduleId": "site-recovery",
+          "lessonId": "recovery-test-failover-and-failback",
+          "sectionIds": [
+            "recovery-test-steps",
+            "recovery-point-selection",
+            "recovery-actual-failover",
+            "recovery-application-verification",
+            "recovery-commit-and-reprotect",
+            "recovery-failback-verification"
+          ],
+          "checkpointIds": [
+            "recovery-test-isolation-check",
+            "recovery-point-choice-check",
+            "recovery-commit-check",
+            "recovery-failback-check"
+          ],
+          "evidence": "The learner rehearses failover in an isolated network and cleans up the drill without stopping production replication. A worked actual regional switchover controls source writes, selects the Azure-to-Azure failover point and network, observes shutdown and job results, and verifies data, DNS and user access. Commit, reverse replication through reprotect, and verified failback are taught as distinct steps, without promising zero data loss."
+        }
+      ]
+    },
+    {
+      "objectiveId": "mo-13",
+      "lessons": [
+        {
+          "moduleId": "azure-backup",
+          "lessonId": "backup-monitoring-and-operations",
+          "sectionIds": [
+            "configure-reporting-pipeline",
+            "report-delay-and-interpretation",
+            "configure-backup-alerts",
+            "worked-reports-and-alerts"
+          ],
+          "checkpointIds": [
+            "backup-report-categories",
+            "backup-report-empty-first-day",
+            "backup-alert-routing"
+          ],
+          "evidence": "The learner configures the supported reporting diagnostic categories for both vault types and their Log Analytics destination, selects reporting scope and retention, and accounts for delayed summaries. The worked operations example routes supported backup alerts through an action group and alert processing rule, then reconciles immediate job evidence with later reports instead of treating an empty report or absent email as proof of successful backup."
+        }
+      ]
+    }
+  ]
+}
