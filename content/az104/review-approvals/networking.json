@@ -1,0 +1,42 @@
+[
+  {
+    "id": "virtual-networks",
+    "digest": "224884a7da62bf0dfb962f14dffd2a4107898e900f1d6c17e3eac4a584ce0a2e",
+    "note": "Previously approved foundations retained byte-for-byte. Current networking audit confirms nw-01 and nw-03 conceptual/configuration evidence, exact CIDR arithmetic, reservations, static NIC versus guest DHCP, and API-qualified outbound behavior. Existing lesson progress revisions remain unchanged."
+  },
+  {
+    "id": "network-security-groups",
+    "digest": "b7f82653166a96331bbcf88d9757f0e3bc6455de47ae4280ab42d5e39c0daa2f",
+    "note": "Parent reviewed the complete focused changes and all coverage targets. Ordered service-endpoint/subnet/account rules, private-endpoint fields and Basic Bastion deployment now teach configuration in core content, with independent authorization, current SKU restrictions and real fresh-connection evidence. Existing keys and IDs are preserved; two revised lessons appropriately require renewed study."
+  },
+  {
+    "id": "azure-dns",
+    "digest": "957963ddd139952860044e365a54063d59c07d09a5a94364cc270668ef6f466e",
+    "note": "Previously approved text retained. Independent current audit confirms public zone/record/delegation/alias steps, TTL arithmetic, private links and hybrid resolver paths. Coverage nw-11 points to substantive configuration examples and relevant checks, not only naming definitions."
+  },
+  {
+    "id": "vnet-peering",
+    "digest": "b357d362400e78ae040b48c6bccfcb1b121a2be4f3a0870b78bdc62bc31b0b85",
+    "note": "Previously approved text retained. Current audit confirms reciprocal peering, nonoverlap and permissions, modern resize-and-sync, gateway transit, nontransitivity and complete NVA return paths. The nw-02 coverage evidence correctly names worked direct and transit configurations."
+  },
+  {
+    "id": "routing",
+    "digest": "84ef4968cc68090ab527c820c0623084ace51ac808a5548c70fbf4d20b1f34b6",
+    "note": "Previously approved routing module retained. Current audit confirms actual source-subnet UDR configuration, prefix/source preference exceptions, NIC and guest forwarding, symmetric paths and effective-route evidence. No broad custom-routes-always-win claim or DNS/connectivity conflation is introduced."
+  },
+  {
+    "id": "load-balancer",
+    "digest": "d24460bb183b60fd8a08c1bf9f3af5ee574f654ff2cf24a27bcc9bc1a0222755",
+    "note": "Parent independently reviewed all new frontend steps and the added checkpoint against current public-IP and load-balancer requirements. nw-03 and nw-12 now have self-contained public/internal configuration and validation, not an optional-lab dependency. Existing flow/probe/NAT/SNAT/HA reasoning remains approved; only the changed lesson revision is invalidated."
+  },
+  {
+    "id": "application-gateway",
+    "digest": "97eecccfe43bfbb8bd08895e7ebbde3bfec040ba46044f8ca60f8979f54c8d68",
+    "note": "Previously approved supporting module retained. Current audit confirms Basic v2 preview and separate TCP/TLS preview qualifications, two TLS legs, WAF boundaries and certificate/probe troubleshooting. The nw-13 supporting target does not confuse HTTP 200-399 App Gateway probes with Load Balancer's HTTP 200."
+  },
+  {
+    "id": "network-watcher",
+    "digest": "cadbe0253a32de3083b80e7f39a2f8b89c1853e6bc6d05029c5c74e2adadb45d",
+    "note": "Previously approved diagnostics module retained. Current audit confirms layered investigation, exact tuples, agent prerequisites, repeated monitoring versus snapshots, VNet flow logs and NSG-log retirement scope. nw-05 and the monitoring cross-reference use actual worked diagnostic cases and scoped checkpoints."
+  }
+]

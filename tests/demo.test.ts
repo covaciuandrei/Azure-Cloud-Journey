@@ -9,6 +9,7 @@ import { DEMO_QUESTION_COUNT } from "../src/domain/demo.js";
 import { createDemoRepository } from "../src/web/demo-repository.js";
 import { createAttempt, reduceAttempt, scoreAttempt } from "../src/web/engine.js";
 import { loadCoursePublication } from "../tools/course/publication.js";
+import { assembleCourse } from "../tools/course/assemble.js";
 import { createDemoBank } from "../tools/demo/fixtures.js";
 import { DEMO_PUBLIC_DIRECTORY, exportDemo } from "../tools/demo/export.js";
 import { validateExplanation } from "../tools/learning/validate.js";
@@ -65,13 +66,24 @@ test("demo repository supports a complete local practice session and rejects a n
   await assert.rejects(createDemoRepository("https://demo.example/", fetcher).loadCatalog());
 });
 
-test("public authoring reproduces the identical reviewed course release and served bytes", async () => {
+test("public authoring reproduces the approved networking release and deterministic active course", async () => {
+  const networking = await assembleCourse(process.cwd(), "networking");
+  assert.equal(networking.releaseId, "c_3719e538e709f4665b46506b2bfe5f20a8138c70b55ea304b498257bd02a3e39");
+  assert.equal(hash(json(networking)), "e78da1ebcce706c4c7a0dc006a09b8a6933f98195ab2e445fa101abc680e835c");
+  assert.equal(networking.modules.length, 8);
+  assert.equal(networking.modules.flatMap((module) => module.lessons).length, 21);
+  assert.equal(networking.modules.flatMap((module) => module.lessons.flatMap((lesson) => lesson.checkpoints)).length, 87);
   const course = await loadCoursePublication();
-  assert.equal(course.pointer.releaseId, "c_0888a1dd6a7bbc057b0d968e73168763e890ec3738a65a80db61baf9863b3e00");
-  assert.equal(course.pointer.sha256, "d88357128e65dabc3a49249a9ad6106159f8356e34fac5d1e913acc1760430f6");
-  assert.equal(course.pointer.modules, 8);
-  assert.equal(course.pointer.lessons, 21);
-  assert.equal(course.pointer.checkpoints, 86);
+  assert.equal(course.pointer.sha256, hash(json(course.course)));
+  assert.deepEqual((await loadCoursePublication()).pointer, course.pointer);
+  if (course.course.schemaVersion === 2) {
+    assert.equal(course.pointer.modules, 21);
+    assert.equal(course.pointer.lessons, 59);
+    assert.equal(course.course.coverage.reduce((sum, domain) => sum + domain.objectives.length, 0), 82);
+  } else {
+    assert.equal(course.pointer.releaseId, networking.releaseId);
+    assert.equal(course.pointer.checkpoints, 87);
+  }
 });
 
 test("demo export needs only public source files, preserves private outputs, and rejects symlink output", async () => {
@@ -80,14 +92,14 @@ test("demo export needs only public source files, preserves private outputs, and
     await mkdir(resolve(root, "public/data"), { recursive: true });
     await mkdir(resolve(root, "dist"), { recursive: true });
     await mkdir(resolve(root, ".data/clean-bank"), { recursive: true });
-    await cp("content/networking", resolve(root, "content/networking"), { recursive: true });
-    await cp("content/course.json", resolve(root, "content/course.json"));
+    await cp("content", resolve(root, "content"), { recursive: true });
     await cp("public/favicon.svg", resolve(root, "public/favicon.svg"));
     const sentinels = ["public/data/sentinel.json", "dist/sentinel.txt", ".data/clean-bank/sentinel.txt"];
     for (const path of sentinels) await writeFile(resolve(root, path), "leave unchanged");
     const first = await exportDemo(root);
     assert.equal(first.questions, DEMO_QUESTION_COUNT);
-    assert.equal(first.lessons, 21);
+    const active = await loadCoursePublication();
+    assert.equal(first.lessons, active.pointer.lessons);
     assert.deepEqual(await exportDemo(root), first);
     for (const path of sentinels) assert.equal(await readFile(resolve(root, path), "utf8"), "leave unchanged");
     await assert.rejects(loadCleanBank(root), /ENOENT/, "demo must not become a production-bank fallback");
@@ -98,7 +110,8 @@ test("demo export needs only public source files, preserves private outputs, and
     await rm(output, { recursive: true });
     await symlink(resolve(root, "public"), output, "dir");
     await assert.rejects(exportDemo(root), /Unsafe directory/);
-    const approvals = resolve(root, "content/networking/review-approvals.json");
+    const approvals = resolve(root, active.course.schemaVersion === 2
+      ? "content/az104/review-approvals/identity-governance.json" : "content/networking/review-approvals.json");
     const changed = JSON.parse(await readFile(approvals, "utf8")) as Array<{ digest: string }>;
     changed[0]!.digest = "0".repeat(64);
     await writeFile(approvals, json(changed));

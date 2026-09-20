@@ -6,8 +6,8 @@
   },
   {
     "id": "network-security-groups",
-    "digest": "3211dbe1c8455b5dd8eefd57e3fc907c6947b779a756a6ea039fc0c81b21346d",
-    "note": "Reviewed rule priorities, independent subnet/NIC decisions, defaults and stateful-flow examples. Private endpoint and service endpoint addressing and authorization are separated. Bastion Developer, dedicated SKUs and Premium private-only exceptions are explicit. Optional lab remains configuration-only and cost-scoped."
+    "digest": "b7f82653166a96331bbcf88d9757f0e3bc6455de47ae4280ab42d5e39c0daa2f",
+    "note": "Reviewed rule priorities, independent subnet/NIC decisions, defaults and stateful flows. The full-domain audit adds ordered service-endpoint, private-endpoint and Basic Bastion configuration with explicit assumptions, independent data authorization, correct public-IP SKU, and fresh positive/negative validation. Parent reviewed the full additions and current Public IP documentation. Existing IDs and answer keys are preserved; optional labs remain unexecuted and cost-scoped."
   },
   {
     "id": "azure-dns",
@@ -26,8 +26,8 @@
   },
   {
     "id": "load-balancer",
-    "digest": "5f3cc496382d8b54cb28db5916072e9849a243ba7ec7010fc0d6f4c580291e22",
-    "note": "Reviewed all three lessons and worked calculations. L4 flow mapping, translated backend ports, independent probe paths, current NAT v2 distinctions, explicit egress, SNAT arithmetic and HA topology limits are appropriately qualified. Manual lab costs and cleanup are explicit; no live Azure deployment was performed."
+    "digest": "d24460bb183b60fd8a08c1bf9f3af5ee574f654ff2cf24a27bcc9bc1a0222755",
+    "note": "Reviewed all three lessons and calculations, then independently reviewed the added public/internal frontend worked configuration and its two-answer checkpoint. Static public IPs are Azure-allocated; Regional Standard compatibility, Standard v2 NAT-only restriction, internal address availability, NIC pool, HTTP 200 probe, translated ports, explicit egress and actual HTTPS validation are scoped correctly. Original IDs and keys remain; no live Azure deployment was performed."
   },
   {
     "id": "application-gateway",
