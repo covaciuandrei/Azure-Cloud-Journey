@@ -1,0 +1,362 @@
+{
+  "schemaVersion": 1,
+  "domainId": "storage",
+  "reviewedAt": "2026-09-20",
+  "objectives": [
+    {
+      "objectiveId": "st-01",
+      "lessons": [
+        {
+          "moduleId": "storage-access",
+          "lessonId": "storage-network-boundaries",
+          "sectionIds": [
+            "storage-public-firewall",
+            "storage-service-endpoints",
+            "storage-private-dns",
+            "storage-exceptions",
+            "network-boundary-worked"
+          ],
+          "checkpointIds": [
+            "storage-network-public-rules",
+            "storage-network-private-dns",
+            "storage-network-auth-separation",
+            "storage-network-trusted-exception"
+          ],
+          "evidence": "The learner configures a selected-source public endpoint using subnet service endpoints and matching virtual network rules, then redesigns the same school archive for a service-specific private endpoint with DNS and office routing. The worked application separates the actual requester, public firewall enforcement, private connectivity, trusted exceptions, management visibility, and data permission instead of treating them as one switch."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-02",
+      "lessons": [
+        {
+          "moduleId": "storage-access",
+          "lessonId": "storage-authorization-and-sas",
+          "sectionIds": [
+            "sas-three-families",
+            "sas-fields-validity",
+            "sas-grant-worked",
+            "sas-revocation"
+          ],
+          "checkpointIds": [
+            "storage-sas-least-privilege",
+            "storage-sas-expiry-and-key-disable"
+          ],
+          "evidence": "The lesson compares all three SAS families by signing authority, services, resource scope, and revocation. The school photograph example creates a read-only Blob user delegation grant with an Entra-authorized issuer, a bounded validity window, HTTPS, an adapted creation command, and positive and negative usage tests. Current service-version expansions and optional user-bound behavior are distinguished from ordinary bearer SAS."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-03",
+      "lessons": [
+        {
+          "moduleId": "storage-access",
+          "lessonId": "storage-authorization-and-sas",
+          "sectionIds": [
+            "sas-stored-policy",
+            "sas-revocation"
+          ],
+          "checkpointIds": [
+            "storage-sas-stored-policy"
+          ],
+          "evidence": "The printing-partner worked application creates a container policy, binds blob-scoped service SAS links to its identifier, and revokes those links through policy expiry or deletion. Teaching explains supported resource containers, the five-policy limit, unduplicated policy and token constraints, propagation, and the risk of reusing a revoked identifier. It explicitly rejects stored policies for account and user delegation SAS."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-04",
+      "lessons": [
+        {
+          "moduleId": "storage-access",
+          "lessonId": "storage-authorization-and-sas",
+          "sectionIds": [
+            "authorize-identity-scopes",
+            "account-keys-rotation",
+            "sas-revocation"
+          ],
+          "checkpointIds": [
+            "storage-access-key-rotation",
+            "storage-sas-expiry-and-key-disable"
+          ],
+          "evidence": "The learner distinguishes two equivalent secret account keys from public/private key pairs and storage encryption keys. A staged worked rotation moves and tests direct clients, replaces dependent key-signed SAS links, regenerates the retiring key, and repeats safely for the alternate key. The lesson also traces key-listing privilege, rotation reminders, shared-key disablement impacts, and the independence of user delegation signatures."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-05",
+      "lessons": [
+        {
+          "moduleId": "storage-access",
+          "lessonId": "files-identity-and-permissions",
+          "sectionIds": [
+            "files-access-protocols",
+            "files-identity-options",
+            "files-kerberos-prerequisites",
+            "files-share-rbac",
+            "files-ntfs-layers",
+            "files-permissions-worked"
+          ],
+          "checkpointIds": [
+            "files-identity-source-choice",
+            "files-permission-intersection",
+            "files-default-rbac-interaction",
+            "files-protocol-and-identity-boundary"
+          ],
+          "evidence": "The lesson selects among AD DS, Entra Domain Services, and Entra Kerberos for SMB, with one source per account and explicit device, synchronization, ticket, and protocol prerequisites. The timetable worked application assigns ordinary share roles and directory ACLs and evaluates teacher, student, and archivist operations. Default-share grants, privileged administrative exceptions, and current cloud-only documentation and Preview qualifications are taught without replacing the hybrid core."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-06",
+      "lessons": [
+        {
+          "moduleId": "storage-accounts",
+          "lessonId": "storage-services-and-accounts",
+          "sectionIds": [
+            "services-follow-access-patterns",
+            "kind-performance-and-tier",
+            "names-and-service-addresses",
+            "flat-or-hierarchical",
+            "worked-school-account-plan"
+          ],
+          "checkpointIds": [
+            "storage-account-service-choice",
+            "storage-account-kind-and-sku",
+            "storage-account-name-check",
+            "storage-account-hns-conflict"
+          ],
+          "evidence": "The school account planning application translates access patterns into Blob, Files, Queue, or Table service choices and compatible account kind, performance, redundancy, namespace, endpoint, and security settings. Learners validate names, distinguish standard and premium specializations, and reject an HNS configuration that conflicts with required versioning or object replication instead of treating account creation as sufficient proof of data access."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-07",
+      "lessons": [
+        {
+          "moduleId": "storage-accounts",
+          "lessonId": "storage-redundancy-and-replication",
+          "sectionIds": [
+            "redundancy-failure-domains",
+            "six-redundancy-options",
+            "redundancy-support-gates",
+            "worked-regional-recovery",
+            "failover-is-not-backup"
+          ],
+          "checkpointIds": [
+            "storage-redundancy-choice",
+            "storage-last-sync-reasoning"
+          ],
+          "evidence": "The lesson distinguishes synchronous local or zone copies from asynchronous regional replication across all six redundancy choices. Worked applications select a qualified RA-GZRS configuration and calculate a seven-minute regional recovery uncertainty interval from Last Sync Time. Learners evaluate service, account, region, archive, and failover constraints while separating secondary reads, write failover, and independent protection from accidental deletion."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-08",
+      "lessons": [
+        {
+          "moduleId": "storage-accounts",
+          "lessonId": "storage-redundancy-and-replication",
+          "sectionIds": [
+            "object-replication-prerequisites",
+            "object-policy-and-selection",
+            "object-replication-network-gates",
+            "worked-object-replication",
+            "replication-deletions-and-verification"
+          ],
+          "checkpointIds": [
+            "storage-object-prerequisites",
+            "storage-object-selection-and-writes"
+          ],
+          "evidence": "The worked school publication replica enables eligible account prerequisites, source change feed, and both accounts' versioning, then associates matching source and destination policies and selects approved old and new block blobs. The learner explains why unsupported object types, omitted selection criteria, HNS, destination writes, deleted source content, and unverified endpoint or account access assumptions prevent an automatic whole-account mirror."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-09",
+      "lessons": [
+        {
+          "moduleId": "storage-accounts",
+          "lessonId": "storage-encryption-and-transfer",
+          "sectionIds": [
+            "encryption-at-rest-and-in-transit",
+            "customer-managed-key-prerequisites",
+            "key-rotation-and-availability",
+            "encryption-scopes-and-infrastructure",
+            "worked-encryption-design"
+          ],
+          "checkpointIds": [
+            "storage-encryption-controls",
+            "storage-cmk-new-account"
+          ],
+          "evidence": "The encryption design application chooses customer-controlled account encryption using a protected vault and authorized managed identity, rather than confusing it with access-key rotation. It explains default Microsoft-managed encryption, wrapping-key availability and rotation, container or blob encryption scopes, qualified infrastructure double encryption, and the separate requirement for transport encryption."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-10",
+      "lessons": [
+        {
+          "moduleId": "storage-accounts",
+          "lessonId": "storage-encryption-and-transfer",
+          "sectionIds": [
+            "storage-explorer-access-layers",
+            "azcopy-copy-versus-sync",
+            "worked-safe-document-transfer",
+            "transfer-diagnostics-and-exam"
+          ],
+          "checkpointIds": [
+            "storage-transfer-authorization",
+            "storage-safe-sync-preview"
+          ],
+          "evidence": "The worked transfer attaches an explicitly authorized Blob container, confirms source and destination direction, previews changes, preserves destination-only documents, and verifies completed transfers. Learners distinguish Storage Explorer sign-in from actual data authorization and understand why AzCopy copy, synchronization, delete-destination options, and retry or resume operations have different data-safety consequences."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-11",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "files-shares-snapshots-recovery",
+          "sectionIds": [
+            "file-service-and-protocols",
+            "files-account-and-billing-models",
+            "files-network-and-authorization",
+            "create-office-share-worked"
+          ],
+          "checkpointIds": [
+            "files-protocol-check"
+          ],
+          "evidence": "The office share application creates and configures a storage-account-based SMB share and evaluates a separately qualified NFS alternative. Learners select compatible account and resource models, media, billing, redundancy, protocol, capacity, network reachability, authentication, and permissions rather than assuming all shares support the same settings or recovery features."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-12",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "blob-containers-tiers-lifecycle",
+          "sectionIds": [
+            "objects-and-containers",
+            "flat-and-hierarchical-namespaces",
+            "container-creation-and-access"
+          ],
+          "checkpointIds": [
+            "container-boundary-check"
+          ],
+          "evidence": "The container creation application chooses a valid private container name, creates named block blobs, checks authorization separately from creation, and tests intended access. Teaching distinguishes containers from file shares, flat blob-name prefixes from HNS directories, and account-level permission to allow anonymous access from the container's actual anonymous access setting."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-13",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "blob-containers-tiers-lifecycle",
+          "sectionIds": [
+            "blob-tier-decisions",
+            "tier-duration-and-redundancy",
+            "archive-retrieval-plan"
+          ],
+          "checkpointIds": [
+            "online-tier-check",
+            "tier-duration-check"
+          ],
+          "evidence": "Learners select among online hot, cool, and cold tiers and offline archive using access frequency, retrieval latency, and account-qualified retention charges. Worked applications calculate remaining early-deletion exposure, reject unsupported archive redundancy, and plan rehydration without assuming instant access or inventing fixed monetary prices."
+        },
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "files-shares-snapshots-recovery",
+          "sectionIds": [
+            "files-account-and-billing-models",
+            "files-tier-selection-worked"
+          ],
+          "checkpointIds": [
+            "files-tier-check"
+          ],
+          "evidence": "A separate Files worked application compares transaction optimized, hot, and cool access tiers where applicable with SSD and provisioned billing choices. It prevents learners from assigning Blob archive behavior or Blob minimum-duration rules to mounted file shares and qualifies choices by storage-account or standalone resource model."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-14",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "blob-versioning-and-recovery",
+          "sectionIds": [
+            "recovery-scopes",
+            "soft-delete-settings",
+            "blob-overwrite-recovery",
+            "container-restore-walkthrough",
+            "hns-recovery-boundaries"
+          ],
+          "checkpointIds": [
+            "soft-delete-scope-check",
+            "hns-retention-check"
+          ],
+          "evidence": "Worked applications configure independent blob and container soft-delete retention windows, calculate recovery deadlines, recover an overwritten blob under stated feature assumptions, and restore a deleted container. The lesson distinguishes those recovery scopes from storage-account deletion and explains HNS overwrite and versioning limitations rather than promising that every deletion or modification is recoverable."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-15",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "files-shares-snapshots-recovery",
+          "sectionIds": [
+            "share-snapshots",
+            "file-restore-worked",
+            "share-soft-delete-worked",
+            "files-recovery-boundaries-and-exam"
+          ],
+          "checkpointIds": [
+            "snapshot-file-check",
+            "share-delete-check"
+          ],
+          "evidence": "The snapshot application recovers one damaged file from a read-only point-in-time share snapshot without overwriting unrelated live files. A separate application undeletes a whole storage-account-based share within its retention window. Teaching applies current SMB and NFS qualifications and explicitly distinguishes classic share soft delete from standalone share support and individual-file recovery."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-16",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "blob-containers-tiers-lifecycle",
+          "sectionIds": [
+            "lifecycle-rule-design",
+            "lifecycle-worked-timeline",
+            "lifecycle-execution-and-exam"
+          ],
+          "checkpointIds": [
+            "lifecycle-filter-age-check"
+          ],
+          "evidence": "The lifecycle timeline applies prefix and tag conditions to selected school archive blobs and evaluates separate age clocks for current blobs and historical versions or snapshots. The learner coordinates tier and deletion actions, accounts for dependencies before deleting current data, and explains asynchronous processing, HNS tag-filter limits, and why lifecycle rules cannot rehydrate archived blobs."
+        }
+      ]
+    },
+    {
+      "objectiveId": "st-17",
+      "lessons": [
+        {
+          "moduleId": "blob-and-file-data",
+          "lessonId": "blob-versioning-and-recovery",
+          "sectionIds": [
+            "version-history",
+            "version-recovery-walkthrough",
+            "retention-costs-and-exam"
+          ],
+          "checkpointIds": [
+            "version-delete-check",
+            "version-promote-check"
+          ],
+          "evidence": "The worked V1, V2, and V3 history traces automatic version creation, deletion leaving no current blob under the stated versioning configuration, and promotion of verified older content into a new current version. It distinguishes immutable historical versions from direct editing and considers HNS incompatibility, protection limits, and retained-data storage costs."
+        }
+      ]
+    }
+  ]
+}

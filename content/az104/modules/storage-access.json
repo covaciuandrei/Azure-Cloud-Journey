@@ -1,0 +1,795 @@
+{
+  "schemaVersion": 1,
+  "id": "storage-access",
+  "title": "Storage access: reach the service, then prove permission",
+  "summary": "Protect the school archive with explicit network boundaries, identity-based data permissions, carefully limited sharing, and layered Azure Files permissions.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 guide effective April 17, 2026 explicitly includes storage firewalls, shared access signatures, stored access policies, account keys, and identity-based Azure Files access. These lessons teach each decision separately so a working connection is not mistaken for safe authorization.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/storage/common/authorize-data-access",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Configure Azure Storage firewalls and virtual networks.",
+    "Create and use shared access signature tokens.",
+    "Configure stored access policies.",
+    "Manage access keys.",
+    "Configure identity-based access for Azure Files."
+  ],
+  "lessons": [
+    {
+      "id": "storage-network-boundaries",
+      "title": "Build a network boundary without confusing it with permission",
+      "summary": "Follow a document request through public endpoint restrictions, service endpoints, private endpoints, DNS, and the separate authorization decision.",
+      "objectives": [
+        "Separate network reachability, data authorization, management authorization, and application sign-in.",
+        "Choose public IP rules, subnet service endpoints, or private endpoints for a stated requirement.",
+        "Explain why private DNS and explicit public access settings matter.",
+        "Evaluate trusted-service exceptions without trusting every Azure application."
+      ],
+      "sections": [
+        {
+          "id": "access-four-questions",
+          "title": "Four different questions behind one download button",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Imagine that Ana opens the school's archive website and selects a photograph. Her browser, the web application, and Azure Storage are separate participants. Application sign-in answers whether Ana may use the school website. Network reachability answers whether the machine making the storage request can reach the right endpoint. Storage data authorization answers whether the presented identity or credential may read that photograph. Management authorization answers whether an administrator may change the storage account's settings. Passing one test does not automatically pass the others."
+            },
+            {
+              "type": "paragraph",
+              "text": "A storage endpoint is the service address to which a client sends requests. In Azure's public cloud, an example Blob endpoint is schoolarchive26.blob.core.windows.net. The name is fictional and availability is not implied. A public endpoint does not mean anonymous data: a publicly reachable endpoint can still require authorization. Equally, private means a network path, not permission to every object. First identify whether the browser downloads directly or the web server downloads on its behalf. The firewall must permit the actual requester, not whichever machine happens to display the download button."
+            }
+          ]
+        },
+        {
+          "id": "storage-public-firewall",
+          "title": "Restrict the public endpoint to known sources",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The storage firewall controls data-plane requests through the public endpoint. For a selected-networks design, change public network access from unrestricted access to selected virtual networks and IP addresses, with default denial, then add only the required sources. An IP rule describes a permitted public IPv4 address or supported public address range. It does not grant read or write rights. Conversely, a valid credential cannot override a firewall refusal. Storage Explorer on an administrator's laptop is a client like any other and must be inside the allowed network boundary."
+            },
+            {
+              "type": "paragraph",
+              "text": "The school office laptop might use private address 192.168.10.24 behind an internet router. Azure sees the office's public outbound address, not that private laptop address. Obtain the actual outbound address from the network administrator; do not add 192.168.10.24 as a storage public IP rule. Addresses such as 203.0.113.40 in our paper examples are reserved documentation addresses, not usable school connections. If a provider changes the office's public address, a previously correct rule can stop matching. Review these dependencies before locking down the account."
+            },
+            {
+              "type": "paragraph",
+              "text": "IP rules have important limits. They accept public IPv4 addresses, not private network ranges or IPv6. Use individual address entries rather than /31 or /32 ranges. Same-region Azure clients communicate using private Azure addresses, so their apparent public outbound address is not a reliable way to restrict storage access; use a virtual network rule or private endpoint instead. Storage firewall restrictions do not control Azure Resource Manager management operations. Seeing an account, or listing containers through an available management-plane operation, is therefore not proof that downloading a blob is permitted."
+            }
+          ]
+        },
+        {
+          "id": "storage-service-endpoints",
+          "title": "A service endpoint identifies a subnet, not a private storage address",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A virtual network, or VNet, is an Azure private network; a subnet is one of its address ranges. A storage service endpoint lets storage recognize traffic from an enabled subnet and keeps the service traffic on the Azure backbone. The account still uses its public service endpoint. You need both the subnet's service endpoint configuration and a storage virtual network rule that allows that subnet. Enabling the endpoint alone is not permission to every storage account, and adding an unrelated IP rule is not a substitute for the subnet rule."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the school web VM in subnet 10.20.1.0/24, a selected-networks account can allow that subnet while rejecting an office browser outside Azure. The service endpoint does not assign the storage account an address from 10.20.1.0/24. It also does not extend the subnet's identity to every office laptop over an ordinary internet connection. If the application redirects Ana's browser to a storage URL, that browser must have its own allowed path. If the web VM fetches the document and serves it to Ana, the VM is the storage requester."
+            },
+            {
+              "type": "paragraph",
+              "text": "The current storage firewall documentation distinguishes Microsoft.Storage, the regional service endpoint, from Microsoft.Storage.Global, which supports storage accounts in any region. Paired-region and read-access secondary scenarios have documented support and need disaster-recovery planning. Only one of those storage endpoint types can be associated with a subnet at a time. Choose according to the accounts and regions actually required; do not treat Global as a permission to arbitrary accounts. The account's network rule and data authorization are still necessary. A deleted and recreated subnet must be explicitly authorized again."
+            }
+          ]
+        },
+        {
+          "id": "storage-private-dns",
+          "title": "A private endpoint needs the right name resolution",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A private endpoint creates a network interface with a private address in your VNet and connects it to a particular storage service using Azure Private Link. For example, a Blob private endpoint might have address 10.20.3.5. Select the target subresource deliberately: blob is not file. A Blob endpoint does not privately expose Azure Files. For a hierarchical namespace account using Data Lake operations, plan both blob and dfs endpoints because some operations require or redirect between the two. The endpoint connection must also be approved by the resource owner."
+            },
+            {
+              "type": "paragraph",
+              "text": "Continue using the normal service hostname in the application. With correct private DNS, schoolarchive26.blob.core.windows.net follows the private-link alias and resolves to 10.20.3.5 for the intended clients. The corresponding private DNS zone is privatelink.blob.core.windows.net, linked to the relevant VNet. For Azure Files, use its separate privatelink.file.core.windows.net zone and file endpoint. Do not replace the application's hostname with a raw private IP or a privatelink hostname: correct service names matter for certificates, client behavior, and authentication."
+            },
+            {
+              "type": "paragraph",
+              "text": "Creating a private endpoint does not automatically turn off the public endpoint. Disable or explicitly restrict public network access separately, and inspect retained resource-instance and trusted-service exceptions. Public endpoint firewall rules are not the mechanism that authorizes private endpoint traffic. A connected office needs a route, such as a properly configured VPN, and DNS forwarding or resolution that returns the private address. A VNet link alone does not teach an on-premises DNS server about the zone. A private IP answer without a route still fails; a route without the correct DNS answer may send traffic to the public endpoint instead."
+            },
+            {
+              "type": "diagram",
+              "title": "Two paths, one separate data-permission decision",
+              "description": "The public path requires the storage firewall to admit the source. The private path requires correct DNS, routing, and an approved Blob private endpoint. Either admitted request still needs valid authorization to read the private photograph.",
+              "nodes": [
+                { "id": "storage-office-client", "label": "Office client", "detail": "Public outbound address on an internet path", "column": 0, "row": 0 },
+                { "id": "storage-public-gate", "label": "Public endpoint", "detail": "Selected-source storage firewall rules", "column": 1, "row": 0 },
+                { "id": "storage-vnet-client", "label": "VNet client", "detail": "Normal hostname resolves to 10.20.3.5", "column": 0, "row": 2 },
+                { "id": "storage-private-gate", "label": "Blob private endpoint", "detail": "Approved connection, private address and route", "column": 1, "row": 2 },
+                { "id": "storage-data-auth", "label": "Data authorization", "detail": "Check identity or signature, scope and operation", "column": 2, "row": 1 }
+              ],
+              "edges": [
+                { "from": "storage-office-client", "to": "storage-public-gate", "label": "Public DNS and network path" },
+                { "from": "storage-public-gate", "to": "storage-data-auth", "label": "Only if network rules allow" },
+                { "from": "storage-vnet-client", "to": "storage-private-gate", "label": "Private DNS and network path" },
+                { "from": "storage-private-gate", "to": "storage-data-auth", "label": "Private does not grant data rights" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "storage-exceptions",
+          "title": "Trusted means a documented service operation, not all of Azure",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Some platform services operate outside subnets you can select. Storage supports documented trusted-service exceptions and supported resource-instance rules for these cases. A trusted Azure service exception is not an allow-every-Azure-application switch. The supported service and operation must be on Microsoft's list, and the documented authentication requirements still apply. A student's arbitrary VM or web app does not become trusted because it runs in Azure or shares the subscription. For supported services, a resource-instance rule can identify a particular resource rather than admitting a broad network range."
+            },
+            {
+              "type": "paragraph",
+              "text": "Resource-instance rules require the instance and storage account to be in the same Microsoft Entra tenant, although their subscriptions can differ. Managed identity permissions determine what a supported instance can do after the network exception admits it. Record why each exception exists and what data role it needs. Current firewall limitations also warn that previously configured trusted-service exceptions and resource-instance rules can remain effective when public network access is disabled. Therefore, audit exceptions as part of a private-only design rather than assuming one switch removed every alternate path."
+            }
+          ]
+        },
+        {
+          "id": "network-boundary-worked",
+          "title": "Work through the school's two different clients",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Choose a subnet boundary, then a private-only boundary",
+              "scenario": "The archive uses a general-purpose v2 account, private blobs, and an authorized application identity. The school web VM is in an Azure subnet. The office laptop is outside Azure. First the requirement permits a restricted public endpoint; a later requirement demands private network access. No resources are created in this example.",
+              "steps": [
+                { "action": "For the first requirement, enable the appropriate storage service endpoint on the VM subnet and allow that subnet in the account's selected-network rules.", "why": "The account must recognize and allow the subnet. A service endpoint satisfies the subnet-bound public endpoint design without pretending storage has a private VNet address." },
+                { "action": "Keep the application's data role scoped to the archive container and test a permitted read from the web VM.", "why": "The network rule does not assign data rights. A read test establishes both a usable path and appropriate authorization for that operation." },
+                { "action": "Predict that a direct download from the office laptop fails unless its own path is allowed, even if Ana signed in to the website.", "why": "A browser redirect changes which client contacts storage. Website sign-in does not make the laptop a member of the VM subnet." },
+                { "action": "For the later requirement, plan an approved Blob private endpoint, a linked private DNS zone, and a VPN plus DNS forwarding for the office.", "why": "The office needs private connectivity and correct name resolution. Merely adding a Blob private endpoint inside Azure cannot connect a remote laptop." },
+                { "action": "Restrict or disable the public endpoint, review exceptions, then verify the normal Blob hostname resolves privately from both intended locations.", "why": "Otherwise the public path can remain available, or one client can still receive a public DNS answer. Test from each real resolver rather than assuming all clients share one view." },
+                { "action": "Retest an allowed read and a deliberately unauthorized write using a nonadministrative identity.", "why": "The private route should work without expanding permissions. A successful read and rejected write demonstrate the intended least-privilege boundary." }
+              ],
+              "result": "The first design admits an Azure subnet through the public endpoint. The second uses private addressing and explicitly controls remaining public access. Neither design grants Ana or the application unrestricted data permissions."
+            }
+          ]
+        },
+        {
+          "id": "network-boundary-predict",
+          "title": "Predict the result before changing a role",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "storage-public-dns-prediction",
+              "prompt": "The Blob private endpoint is approved and the laptop has a VPN route, but its DNS server still returns a public endpoint address. Public network access is disabled and no applicable exception exists. Will assigning Storage Blob Data Contributor repair the download?",
+              "answer": "No. Repair the DNS path so the normal hostname resolves to the private endpoint address.",
+              "explanation": "The request is attempting the disabled public path. A data role cannot change DNS or enable that network path. After DNS is corrected, the client still needs an appropriate data role, but granting write and delete rights would be unnecessary if it only needs to read."
+            }
+          ]
+        },
+        {
+          "id": "network-boundary-diagnose",
+          "title": "Collect evidence in the order the request needs it",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Troubleshoot one operation with a recorded client, hostname, protocol, time, and intended identity. Check the DNS answer, route and transport reachability, public firewall or private endpoint configuration, then the service's authorization error. A 403 response can involve network restrictions or an authorization mismatch; the number alone does not identify the cause. Read the detailed storage error and applicable logs. Check whether a testing tool silently chose an account key instead of the user's identity, because an administrator's successful test can hide an ordinary user's missing data role."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use a change plan that preserves the administrative management path and identifies authorized test clients before applying network restrictions. Do not solve a failed test by permanently allowing all networks and distributing an account key. That changes two security layers at once and obscures which was wrong. Similarly, opening a client network firewall does not change a storage firewall rule. For SMB file shares, the client must also reach the required SMB transport, commonly TCP 445; a successful HTTPS portal session does not prove SMB transport is open."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Read the required boundary precisely",
+              "text": "A subnet-restricted public service endpoint and a private endpoint with private DNS solve different requirements. Choose private endpoints when the stated need is a private storage IP or private on-premises connectivity. Choose service endpoints with virtual network rules when an allowed-subnet public endpoint is sufficient. Neither replaces data authorization, and enabling either does not make every service in the account accessible through it."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "storage-network-public-rules",
+          "kind": "single",
+          "prompt": "A same-region Azure VM must read private blobs through a public endpoint restricted to its subnet. It already has the correct data role. Which configuration matches the requirement?",
+          "choices": [
+            { "id": "network-service-and-rule", "text": "Enable the appropriate storage service endpoint on the subnet and allow the subnet in the storage virtual network rules.", "explanation": "Both pieces establish the permitted subnet path. The existing data role supplies the separate authorization." },
+            { "id": "network-private-ip-rule", "text": "Add the VM's private address as a storage public IP firewall rule.", "explanation": "Public IP rules do not accept private network addresses and are not the same-region subnet access mechanism." },
+            { "id": "network-role-only", "text": "Assign subscription Owner and leave the subnet blocked.", "explanation": "Increasing management privilege does not admit a blocked data-plane network path and is far broader than required." }
+          ],
+          "correctIds": ["network-service-and-rule"],
+          "explanation": "The requirement names a public endpoint with a subnet boundary, not a private IP. Configure the service endpoint and matching account network rule."
+        },
+        {
+          "id": "storage-network-private-dns",
+          "kind": "single",
+          "prompt": "A Blob private endpoint is approved, public access is disabled, and a VPN client has a route but resolves the normal Blob hostname publicly. No exception applies. What is the focused repair?",
+          "choices": [
+            { "id": "network-add-write", "text": "Grant write permissions on the container.", "explanation": "Write permission cannot redirect a request away from the disabled public endpoint." },
+            { "id": "network-fix-dns", "text": "Configure the client's DNS resolution path to return the Blob private endpoint address for the normal service hostname.", "explanation": "Correct private name resolution directs the already routed client to the intended private endpoint." },
+            { "id": "network-use-file-endpoint", "text": "Change the Blob client to use the account's file endpoint.", "explanation": "The file endpoint serves Azure Files, not the requested blob. Service subresources are not interchangeable." }
+          ],
+          "correctIds": ["network-fix-dns"],
+          "explanation": "DNS, routing, endpoint approval, and data authorization are separate prerequisites. This scenario specifically identifies incorrect DNS."
+        },
+        {
+          "id": "storage-network-auth-separation",
+          "kind": "single",
+          "prompt": "A student can view the storage account settings in the portal, but a private blob download fails from a blocked home network. What does the settings view prove?",
+          "choices": [
+            { "id": "network-settings-only", "text": "The student has sufficient management access for that settings view, not necessarily a permitted data path or data role.", "explanation": "Management operations are outside storage data-plane firewall enforcement and do not by themselves establish data authorization." },
+            { "id": "network-all-data", "text": "Every blob must be readable because the portal displays the account.", "explanation": "Resource visibility is not equivalent to data access." },
+            { "id": "network-firewall-broken", "text": "The storage firewall is broken because it did not hide the account settings.", "explanation": "The firewall is designed to control data-plane network access, not hide Azure Resource Manager resources." }
+          ],
+          "correctIds": ["network-settings-only"],
+          "explanation": "Evaluate the particular operation and plane. The ability to view configuration does not establish permission to download data."
+        },
+        {
+          "id": "storage-network-trusted-exception",
+          "kind": "single",
+          "prompt": "The trusted Azure services exception is enabled. A student's unrelated Azure web app has no allowed subnet, private path, supported resource-instance rule, or qualifying trusted operation. May it bypass the storage firewall simply because it runs in Azure?",
+          "choices": [
+            { "id": "network-all-azure", "text": "Yes, every Azure application is a trusted service.", "explanation": "The exception covers documented services and operations, not arbitrary customer applications." },
+            { "id": "network-same-subscription", "text": "Yes, if it shares the storage subscription.", "explanation": "Subscription membership alone is neither a qualifying network exception nor data authorization." },
+            { "id": "network-no-blanket", "text": "No. It needs a supported and explicitly permitted network path, plus the required data authorization.", "explanation": "Network exceptions have specific eligibility. Even eligible services must satisfy the documented authorization requirements." }
+          ],
+          "correctIds": ["network-no-blanket"],
+          "explanation": "Trusted-service access is scoped by service and purpose, not by the general fact that a workload is hosted in Azure."
+        }
+      ],
+      "takeaways": [
+        "Identify the actual storage requester before designing its network boundary.",
+        "Storage firewall rules restrict the public data endpoint, not Azure Resource Manager management access.",
+        "Service endpoints preserve the public endpoint; private endpoints introduce service-specific private addresses.",
+        "Private DNS, routing, endpoint approval, and authorization must all be correct.",
+        "Review documented trusted-service and resource-instance exceptions even when disabling public network access."
+      ],
+      "sourceIds": ["access-network-rules", "access-network-limits", "access-private-endpoints", "access-trusted-services", "access-authorize"]
+    },
+    {
+      "id": "storage-authorization-and-sas",
+      "title": "Choose identities, rotate keys, and share only the intended data",
+      "summary": "Understand the authority behind each credential, create a least-privilege sharing plan, and choose a revocation mechanism that actually matches the SAS type.",
+      "objectives": [
+        "Distinguish data roles from management roles and account keys.",
+        "Plan a two-key rotation without unexpectedly breaking applications or signed links.",
+        "Compare service, account, and user delegation SAS scopes and signing credentials.",
+        "Configure a stored access policy only for supported service SAS use.",
+        "Calculate validity windows and choose a realistic revocation plan."
+      ],
+      "sections": [
+        {
+          "id": "authorize-identity-scopes",
+          "title": "Prefer an identifiable caller to a shared master secret",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Authentication establishes who or what is calling; authorization decides which operations that caller may perform. Microsoft Entra ID provides identities for people and applications. A managed identity is an Azure-managed application identity that can obtain tokens without storing an application password in source code. Azure role-based access control, or RBAC, assigns a role to a principal at a scope. For example, Storage Blob Data Reader at the school archive container permits reading its blobs, rather than granting access to every account in the subscription."
+            },
+            {
+              "type": "paragraph",
+              "text": "A management Reader role can show account configuration without allowing blob content reads. Storage Blob Data Contributor supplies data read, write, and delete operations; it is not a synonym for generic Contributor. Be careful, however: management roles such as Contributor can include permission to list account keys. When Shared Key is allowed, someone who retrieves that broad credential can access data using it instead of their own data role. Therefore, distinguish direct data permissions from management powers that can obtain credentials or change security settings. Avoid granting key-listing rights as a shortcut for normal archive readers."
+            }
+          ]
+        },
+        {
+          "id": "account-keys-rotation",
+          "title": "Two account keys are a rotation mechanism, not two permission levels",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A storage account has two access keys, commonly named key1 and key2. Both are powerful shared secrets. They are not a public-key/private-key pair, and key2 is not a read-only key. A client can use either to authorize Shared Key requests or sign service and account shared access signatures. These access keys are also different from the encryption keys protecting stored bytes. Rotating an access key does not select customer-managed encryption. Store unavoidable shared secrets in a protected secret store, restrict retrieval and regeneration rights, and never paste real keys into a lesson, repository, browser screenshot, or support conversation."
+            },
+            {
+              "type": "example",
+              "title": "Rotate without stranding a school uploader",
+              "scenario": "A legacy uploader still requires Shared Key. All its active instances use key1, and key2 is valid but unused. Two partner service SAS links were also signed with key1. The school has recorded these dependencies and can replace those partner links.",
+              "steps": [
+                { "action": "Move all uploader instances to key2 through the protected configuration channel, then verify successful uploads.", "why": "Regenerating key1 first would immediately break clients still using it. A verified move establishes that key1 is no longer needed for the uploader." },
+                { "action": "Issue replacement partner links signed with key2, using the intended limited scope, and coordinate their switch.", "why": "Changing the uploader's connection configuration does not re-sign existing SAS links. The two old links remain dependent on key1." },
+                { "action": "Regenerate key1 after the dependency checks, then move the uploader to the new key1 and test again.", "why": "Regeneration invalidates the old key value and the service or account SAS signatures based on it. New key1 is a different secret." },
+                { "action": "Replace any remaining key2-signed links and move remaining key2 clients before regenerating key2.", "why": "The second rotation needs the same dependency discipline. Rotating both keys together removes the safe alternative." }
+              ],
+              "result": "Both keys can be refreshed without a planned uploader outage if each move is completed and tested first. The old key1-signed links do not magically survive; replacement is part of the plan. User delegation SAS tokens are not invalidated by this account-key rotation."
+            },
+            {
+              "type": "paragraph",
+              "text": "For an actual leak, containment can be more urgent than preserving an old client's access. Identify affected applications, regenerate the compromised key or disable Shared Key as appropriate, and communicate the impact. A rotation reminder or key expiration policy is not an automatic secret replacement engine. It warns about age; an administrator or approved automation must carry out the safe rotation. Test actual requests, not merely whether the portal displays a new key value."
+            }
+          ]
+        },
+        {
+          "id": "sas-three-families",
+          "title": "A signed permission slip has a specific issuer and scope",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A shared access signature, or SAS, is a signed token that a client supplies with a storage request, commonly as URL query parameters. It can limit the resource, permitted operations, time interval, protocol, and sometimes source address. Ordinary SAS links are bearer credentials: anyone holding a usable link can exercise its permissions. The signature prevents a recipient from simply editing read permission into delete permission. It does not encrypt the document or hide the token from someone who sees the full URL. Use HTTPS and treat the token as a secret."
+            },
+            {
+              "type": "table",
+              "caption": "Compare signing authority and supported scope before choosing a SAS",
+              "headers": ["Type", "Signing credential", "Scope and services", "Stored access policy"],
+              "rows": [
+                ["Service SAS", "A storage account key.", "Resources in one service: Blob including Data Lake, Files REST, Queue, or Table. A blob or container can be narrower than a whole account.", "Supported on the relevant blob container, file share, queue, or table."],
+                ["Account SAS", "A storage account key.", "One or more storage services and selected service, container, or object resource types. It can grant service operations that a service SAS cannot.", "Not supported. Define its constraints in the token."],
+                ["User delegation SAS", "A temporary user delegation key obtained through Microsoft Entra authorization.", "Blob and Data Lake are the established teaching path. Current REST support also includes Files, Queues, and Tables with version 2025-07-05 or later and compatible clients.", "Not supported. The delegation key and token lifetimes both constrain access."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "The service name in service SAS does not mean unrestricted service administration. A container-scoped Blob SAS can allow listing blobs inside that container, but that is different from listing all containers in an account. An account SAS can cover those broader service or container resource-type operations when its selected permissions permit them. Azure Files SAS access uses the REST interface, not an SMB drive-mount password. Choose the smallest resource and operations that solve the task rather than selecting every permission because a tool offers a convenient checkbox."
+            },
+            {
+              "type": "paragraph",
+              "text": "For an account SAS, selecting a service and selecting a resource type are separate constraints. Blob service with the object resource type and read permission can authorize a blob read, but cannot list the account's containers. Listing containers needs the service resource type and list permission; listing blobs inside a container needs the container resource type and list permission. That broader account SAS is not tied to one named container in the way a service SAS can be. If the school only wants to share one photograph, this extra account-level flexibility is an unnecessary expansion of authority."
+            },
+            {
+              "type": "paragraph",
+              "text": "Documentation checked on September 20, 2026 is not fully synchronized: older authorization tables still say user delegation is Blob-only, while the SAS overview, detailed REST reference, and version 2025-07-05 change log document Files, Queues, and Tables. Do not memorize the older restriction as universal, or assume every installed SDK supports the newer services. The detailed reference also describes optional user-bound SAS requiring the named recipient's Entra token, and version 2026-04-06 adds dynamic signed request constraints. Our ordinary Blob SAS examples use neither extension. Do not apply their extra identity or request requirements to every existing SAS."
+            }
+          ]
+        },
+        {
+          "id": "sas-fields-validity",
+          "title": "Read a token as constraints, not as a reusable password",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "At the planning level, identify the resource address, signed permissions, expiry, HTTPS-only requirement, and signing mechanism. In common Blob SAS fields, sp describes permissions, se expiry, spr permitted protocol, sr resource scope, and sig the signature. A user delegation SAS also carries the delegation key's identity and validity information. Generate tokens with a supported tool or library rather than assembling a cryptographic signature by hand. Sharing a completed token does not share the account key itself, but a broadly scoped token can still cause substantial damage and billable traffic."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use explicit UTC timestamps, meaning the common global time reference, not an unlabeled local school clock. Keep the validity interval short enough for the task and allow for client clock skew and retries. A start time set to the exact current instant can fail on a client whose clock differs. A user delegation key can be valid for at most seven days, and a SAS cannot remain usable beyond its signing key's validity even if its own expiry says otherwise. An IP restriction further narrows use; it never creates permission through a storage firewall."
+            },
+            {
+              "type": "prediction",
+              "id": "sas-key-window-prediction",
+              "prompt": "In a paper timeline with synchronized clocks, a Blob user delegation key expires at 14:00 UTC. A SAS signed by that key says it expires at 16:00 UTC. The download begins at 13:50 UTC and all other conditions are satisfied. How much usable validity remains?",
+              "answer": "At most ten minutes, until 14:00 UTC, not two hours and ten minutes.",
+              "explanation": "The earlier deadline controls: 14:00 minus 13:50 is ten minutes. At 14:00 the signing key is no longer valid. A token expiry cannot extend that key. Real transfers should leave renewal and retry margin rather than relying on a request at the exact boundary."
+            }
+          ]
+        },
+        {
+          "id": "sas-stored-policy",
+          "title": "Keep supported service SAS constraints on the server",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A stored access policy is a named set of SAS constraints stored on a blob container, file share, queue, or table. A service SAS references its signed identifier. The policy can supply start time, expiry, and permissions so the administrator can later change or revoke access for the associated signatures. This is not an Azure RBAC role, an Azure Policy governance rule, or a universal SAS registry. Account SAS and user delegation SAS cannot reference stored access policies. If the requirement insists on an Entra-signed SAS, promising policy-based revocation would select an incompatible mechanism."
+            },
+            {
+              "type": "paragraph",
+              "text": "Configure the policy on the resource container, not separately on every contained blob. Up to five stored access policies can exist on each supported container, share, queue, or table at once; many service SAS tokens can reference one policy. Specify a particular start, expiry, or permission constraint in either the token or the policy, not both. When updating the resource's policy collection, preserve policies that should remain. Creation or updates can take up to thirty seconds to propagate, so plan an observation interval rather than declaring failure immediately."
+            },
+            {
+              "type": "example",
+              "title": "End a temporary printing contract",
+              "scenario": "A legacy printing partner accepts service SAS links. The school deliberately permits Shared Key for this account and needs one revocation point for the partner's read-only links to approved posters. This is a compatibility choice, not a recommendation to replace supported Entra access.",
+              "steps": [
+                { "action": "Create a policy named poster-printing on the approved-posters container, with read-only permission and the agreed expiry.", "why": "The policy centralizes constraints for the partner. It belongs on the container and can govern service SAS links for its blobs." },
+                { "action": "Generate blob-scoped service SAS links referencing poster-printing and test an intended read and a rejected write.", "why": "A shared policy does not require sharing every blob. Blob scope limits each link, and the tests confirm the permissions are not wider than intended." },
+                { "action": "At contract cancellation, expire or delete that policy and verify that associated links stop working after propagation.", "why": "The server-side policy is the targeted revocation mechanism for this family of SAS. Merely deleting a local copy of the URL would not revoke copies already held by the partner." },
+                { "action": "Record the revoked identifier and do not casually recreate the same policy for another contract.", "why": "Reusing a policy identifier can reconnect still-valid signatures to a new policy. A fresh contract needs an intentionally new access plan." }
+              ],
+              "result": "The partner's policy-bound service SAS links can be revoked together without rotating an account-wide key. Unrelated ad hoc SAS tokens and user delegation SAS tokens are not governed by this policy."
+            }
+          ]
+        },
+        {
+          "id": "sas-grant-worked",
+          "title": "Give an external reviewer one photograph, not the archive",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Construct and test a least-privilege user delegation grant",
+              "scenario": "A teacher wants an external reviewer to read ceremony.jpg for twenty minutes. The account uses private containers but permits the reviewer's network path. The school's issuing application has the necessary Entra-authorized access. No real SAS or storage resource is created here.",
+              "steps": [
+                { "action": "Authenticate the teacher to the school application and verify that sharing this photograph is allowed.", "why": "Azure Storage cannot infer school business rules. The issuing application must decide whether the teacher may request a share before issuing a credential." },
+                { "action": "Use the application's identity to obtain a Blob user delegation key valid for the intended interval.", "why": "This avoids retrieving the account key. The identity needs the generate-user-delegation-key action at account, resource group, or subscription scope, not just a container-scoped data role." },
+                { "action": "Combine container-scoped read permission with a narrowly assigned account-scope delegator role if those separate permissions are the chosen design.", "why": "Obtaining a delegation key does not itself grant unlimited blob access. The effective delegated access is constrained by the issuer's data authorization and the SAS permissions." },
+                { "action": "Generate a SAS for ceremony.jpg with read permission, HTTPS only, and expiry at 12:20 UTC for a 12:00 UTC paper start.", "why": "Twenty minutes is 12:20 minus 12:00. A container-wide token with write or delete permission would exceed the task; the signing key must cover this interval too." },
+                { "action": "Deliver the URL privately and test the allowed read, a write attempt, another blob, and an expired request.", "why": "The correct outcomes are read success and denial of the other operations. Test tools must not silently add an administrator's other credential." },
+                { "action": "Plan early revocation and remove the token from logs and shared notes.", "why": "An ordinary SAS may be copied while valid. Short expiry reduces the exposure window but does not make secret handling or incident response unnecessary." }
+              ],
+              "result": "The reviewer receives a limited, time-bound Blob credential rather than an account key or a public container. A valid token still cannot overcome a blocked network path or grant operations beyond the issuer's effective data permission."
+            },
+            {
+              "type": "code",
+              "language": "azurecli",
+              "code": "az storage blob generate-sas \\\n  --account-name \"ACCOUNT_NAME\" \\\n  --container-name \"CONTAINER_NAME\" \\\n  --name \"ceremony.jpg\" \\\n  --permissions r \\\n  --expiry \"EXPIRY_UTC\" \\\n  --https-only \\\n  --auth-mode login \\\n  --as-user \\\n  --full-uri",
+              "explanation": "Read-only sharing syntax for an existing blob, not a provisioning command and not executed by this course. For an approved manual test only, first sign in to the intended tenant with an identity holding the Blob data and delegation-key permissions taught above. Replace ACCOUNT_NAME and CONTAINER_NAME with approved existing resources and EXPIRY_UTC with a short future UTC timestamp such as YYYY-MM-DDTHH:MM:SSZ with actual digits. The CLI obtains the delegation key implicitly. The r flag requests read only; login and as-user select user delegation rather than an account key. The full-uri output is a secret usable URL, not harmless diagnostic text. A token-only result must be joined to the blob address with a question mark before its query parameters. Microsoft code-sample search and the linked CLI creation guide ground this adapted, narrowed example."
+            }
+          ]
+        },
+        {
+          "id": "sas-revocation",
+          "title": "Revoke the authority that actually signed the request",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For an ad hoc service or account SAS, there is no central list of individual tokens to delete. Expiry ends its validity; regenerating its signing account key invalidates signatures based on that key and can affect many other clients. A service SAS bound to a stored policy can instead be controlled through that policy. For user delegation SAS, revoke user delegation keys or change the issuer's relevant RBAC or hierarchical-namespace ACL permissions. These credentials and permissions can be cached, so do not promise instant universal invalidation. Account-key rotation is not its revocation mechanism."
+            },
+            {
+              "type": "paragraph",
+              "text": "Disallowing Shared Key rejects account-key-authorized access and account-key-signed service or account SAS requests; Blob user delegation SAS remains an Entra-based path. Inventory tools, applications, automation, Azure Files access methods, and persistent shell storage before changing this account-wide setting. A portal operation or older client may still be trying to use a key. Move each workload to a supported identity path and test it rather than assuming that enabling Entra somewhere converted every request. Distinguish an expected authorization denial from data loss: disabling a credential path does not delete stored documents."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Storage does not maintain an inventory of every SAS generated offline by a client holding a signing key. Record issuance in the school's broker application without logging full token secrets, and monitor service access and failures. For ordinary SAS links, do not assume that a successful request proves the intended human used it. The optional user-bound extension adds an identity requirement, but that property must be deliberately configured with compatible clients. It does not retroactively bind older bearer SAS links."
+            }
+          ]
+        },
+        {
+          "id": "sas-access-distinction",
+          "title": "Choose the narrowest compatible authority",
+          "blocks": [
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the required operation and revocation method",
+              "text": "For supported application access, prefer Entra identity and a scoped data role. For temporary Blob sharing, prefer user delegation SAS when compatible. Stored access policy requirements specifically select a supported service SAS pattern, not account or user delegation SAS. Cross-service or service-level operations may require account SAS. Key rotation, SAS expiry, delegation-key revocation, and stored-policy revocation solve different problems; naming all four is not enough unless the chosen mechanism matches the credential."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "storage-sas-least-privilege",
+          "kind": "single",
+          "prompt": "An Entra-authorized school service needs to share one blob for twenty minutes without using an account key. The reviewer's network path is permitted. Which design fits?",
+          "choices": [
+            { "id": "sas-use-user-delegation", "text": "Use a read-only, blob-scoped user delegation SAS whose expiry fits inside the delegation key's validity.", "explanation": "It avoids the account key and limits resource, operation, and time. The issuer must also hold the necessary data and delegation-key permissions." },
+            { "id": "sas-share-key-two", "text": "Share key2 because it is the public, read-only account key.", "explanation": "Both account keys are powerful secret credentials. Neither is a public or read-only key." },
+            { "id": "sas-account-all", "text": "Use an account SAS for every service with read, write, and delete permissions.", "explanation": "This uses an account key and grants far more scope and operations than reading one blob requires." }
+          ],
+          "correctIds": ["sas-use-user-delegation"],
+          "explanation": "The narrow Entra-backed Blob grant satisfies the stated task. Network permission remains separate and is explicitly provided in the scenario."
+        },
+        {
+          "id": "storage-sas-stored-policy",
+          "kind": "single",
+          "prompt": "A legacy partner uses service SAS links for blobs in approved-posters. You need a server-side control to revoke those related links without rotating the account key. Which configuration is valid?",
+          "choices": [
+            { "id": "sas-policy-container", "text": "A stored access policy on approved-posters referenced by those service SAS links.", "explanation": "The container policy can control service SAS links for the container or its blobs and can be expired or deleted to revoke associated access." },
+            { "id": "sas-policy-delegation", "text": "A stored access policy referenced by a user delegation SAS.", "explanation": "User delegation SAS does not support stored access policies." },
+            { "id": "sas-policy-account", "text": "A stored access policy attached to an account SAS for all storage services.", "explanation": "Account SAS is ad hoc and does not support a stored access policy." }
+          ],
+          "correctIds": ["sas-policy-container"],
+          "explanation": "The policy mechanism is supported specifically for service SAS. Account-wide key rotation would have a broader impact."
+        },
+        {
+          "id": "storage-access-key-rotation",
+          "kind": "single",
+          "prompt": "All legacy clients use key1 and key2 is valid and unused. Service SAS links are also signed with key1. What should a planned key1 rotation account for?",
+          "choices": [
+            { "id": "keys-regenerate-both", "text": "Regenerate both keys first, then update clients whenever convenient.", "explanation": "That removes both working alternatives and immediately breaks clients depending on old credentials." },
+            { "id": "keys-clients-only", "text": "Move clients to key2; existing key1-signed SAS links never need attention.", "explanation": "Regenerating key1 invalidates SAS signatures based on it, even after application connection settings change." },
+            { "id": "keys-move-and-reissue", "text": "Move and test clients on key2, replace dependent key1-signed links, then regenerate key1.", "explanation": "Both direct key consumers and SAS consumers must be included before the old key is retired." }
+          ],
+          "correctIds": ["keys-move-and-reissue"],
+          "explanation": "Two keys enable a safe transition only when every dependency on the retiring key is handled."
+        },
+        {
+          "id": "storage-sas-expiry-and-key-disable",
+          "kind": "multiple",
+          "prompt": "Select two true statements. Assume normal Blob user delegation SAS, compatible clients, and no unrelated network failures.",
+          "choices": [
+            { "id": "sas-key-expiry-controls", "text": "A SAS claiming 16:00 expiry still stops being usable when its delegation key expires at 14:00.", "explanation": "The key's earlier expiry bounds the signed token's usable lifetime." },
+            { "id": "sas-disable-shared-key", "text": "Disallowing Shared Key blocks account-key-signed SAS requests but does not itself block a valid Blob user delegation SAS.", "explanation": "The authorization families are different. User delegation uses Entra-backed delegation rather than an account access key." },
+            { "id": "sas-policy-all-types", "text": "Deleting any container policy revokes all SAS types for every blob in the account.", "explanation": "Only service SAS signatures associated with that specific policy are governed by it." },
+            { "id": "sas-rotate-delegation", "text": "Regenerating key1 is the normal way to revoke all user delegation SAS tokens.", "explanation": "User delegation SAS tokens are not signed with key1. Revoke delegation keys or change relevant issuer permissions instead." }
+          ],
+          "correctIds": ["sas-key-expiry-controls", "sas-disable-shared-key"],
+          "explanation": "Check both the credential family and all validity constraints. A token cannot extend its key, and a Shared Key setting is not a blanket denial of Entra-backed data access."
+        }
+      ],
+      "takeaways": [
+        "Data RBAC and management powers differ, but key-listing management privileges can expose broad data credentials.",
+        "Both account keys are secrets with equivalent authority; rotate them through a verified alternate-key transition.",
+        "A SAS is a scoped signed credential, not an encryption mechanism or firewall bypass.",
+        "Stored access policies govern supported service SAS only, with a maximum of five policies per resource container.",
+        "Use current service-version documentation for newer user delegation support and optional user-bound extensions.",
+        "Revocation must match the signing mechanism and account for caching, affected clients, and safe credential replacement."
+      ],
+      "sourceIds": ["access-authorize", "access-keys", "access-sas-overview", "access-sas-rest", "access-sas-version", "access-stored-policy", "access-shared-key", "access-sas-cli", "access-service-sas", "access-account-sas"]
+    },
+    {
+      "id": "files-identity-and-permissions",
+      "title": "Give people an Azure Files share without giving away the account key",
+      "summary": "Choose a supported SMB identity source, understand Kerberos prerequisites, and combine share-level roles with file and directory permissions.",
+      "objectives": [
+        "Choose among AD DS, Microsoft Entra Domain Services, and Microsoft Entra Kerberos for an SMB workload.",
+        "Separate SMB Kerberos authentication from FileREST authorization and NFS access.",
+        "Configure scoped share-level RBAC and ordinary file or directory ACLs together.",
+        "Reason through a hybrid school identity example and the qualified cloud-only alternative."
+      ],
+      "sections": [
+        {
+          "id": "files-access-protocols",
+          "title": "A mapped drive uses a different conversation from a website",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure Files can present a managed network file share to applications that expect ordinary files, directories, and file operations. Server Message Block, or SMB, is the protocol commonly used for Windows shared drives. The protocol is not the identity system: a share still needs a supported way to authenticate the caller and determine permissions. In this lesson, the school uses an SMB share named staff-documents in a storage-account-based deployment. The share and its documents are fictional; we do not create or mount anything automatically."
+            },
+            {
+              "type": "paragraph",
+              "text": "Distinguish SMB from the Azure Files REST interface, which uses web requests and supports its own authorization patterns, and from Network File System, or NFS, which has a different access model. A SAS URL for a FileREST operation is not an SMB login password. The SMB identity choices here do not configure identity-based authentication for NFS shares. Similarly, the fact that a user can browse a share through an administrative portal session does not prove their mapped drive will authenticate as their personal identity."
+            },
+            {
+              "type": "paragraph",
+              "text": "Using a storage account key to mount a share grants powerful access without normal per-user accountability. It can be useful only in carefully controlled administrative or compatibility situations, not as the password distributed to the staff room. Identity-based access lets Ioana and Mihai receive different permissions and lets membership changes express school policy. Network restrictions remain in force: a valid identity does not open TCP 445 or fix an incorrect private DNS answer."
+            }
+          ]
+        },
+        {
+          "id": "files-identity-options",
+          "title": "Choose the identity source the clients can actually use",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Kerberos is a ticket-based authentication protocol. Instead of sending a user's password to the file service for every read, the client obtains a service ticket from a trusted identity system and presents it to Azure Files. A domain is an identity and administration environment; a domain controller supplies traditional Active Directory services. Microsoft Entra ID is not simply a cloud-hosted traditional domain controller. The three supported Azure Files SMB identity sources connect these concepts in different ways."
+            },
+            {
+              "type": "table",
+              "caption": "Storage-account-based Azure Files SMB identity sources",
+              "headers": ["Identity source", "Suitable starting point", "Important prerequisites and limits"],
+              "rows": [
+                ["Active Directory Domain Services, or AD DS", "The school already runs a traditional domain and wants its existing identities and ACLs.", "Register the storage account with AD DS. Clients need the documented domain relationship or explicit-credential path and connectivity to domain controllers. Sync users or applicable groups to Entra for specific RBAC assignments."],
+                ["Microsoft Entra Domain Services", "The organization already uses a managed domain in Azure for compatible applications.", "Clients need the managed-domain configuration and reachability. This is a managed domain service, not ordinary Entra sign-in on an arbitrary device."],
+                ["Microsoft Entra Kerberos", "Supported Entra-joined or hybrid-joined clients need cloud-issued SMB tickets.", "The established hybrid path uses AD DS identities synchronized to Entra. The newer cloud-only path has separate client, configuration, and release-status qualifications."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Enable one identity source per storage account; it applies to the account's file shares. Do not enable AD DS for one share and Entra Kerberos for another share in the same account and expect independent identity configurations. Use a separate account if the requirements genuinely need separate account-level identity choices. The account is registered for the chosen authentication method; it is not a Windows server you can sign in to and administer locally. AD DS domain controllers may be on premises or hosted on Azure VMs, but required connectivity and permissions do not disappear because the servers moved."
+            }
+          ]
+        },
+        {
+          "id": "files-kerberos-prerequisites",
+          "title": "Do not turn a supported scenario into a universal claim",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the standard Microsoft Entra Kerberos hybrid path, synchronize the required AD DS users and groups to Microsoft Entra ID, use supported and updated clients that are Entra joined or hybrid joined, enable the identity source on the storage account, grant the required application consent, and enable client cloud-ticket retrieval. An AD-only joined device is not automatically equivalent to an Entra-joined device in this standard path. Alternative documented cloud-trust configurations have their own prerequisites. A personal browser login is not device join and does not perform this configuration."
+            },
+            {
+              "type": "paragraph",
+              "text": "Hybrid users can obtain cloud-issued tickets for Azure Files without direct domain-controller connectivity for the normal file access flow. That does not mean every administrative operation is independent of AD DS. Configuring hybrid ACLs with Windows File Explorer or icacls requires appropriate domain-controller connectivity and a supported administrative client. Current Files-specific documentation also provides portal and REST-based ACL configuration for Entra Kerberos identities. Keep the user's access path and the administrator's permission-configuration path separate when planning a remote school office."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Cloud-only support is a separately qualified path",
+              "text": "As checked September 20, 2026, Files-specific setup documentation supports cloud-only Entra Kerberos identities, including supported updated Windows 11 or Windows Server 2025 clients and cloud-group configuration. The broader Entra Kerberos overview still labels cloud-only support Preview. Do not state either that cloud-only access is impossible everywhere or that every Entra user on every device has unrestricted generally available SMB access. This course treats that path as preview-qualified pending confirmation of the exact deployment's current service status; scored examples use the explicit hybrid baseline."
+            },
+            {
+              "type": "paragraph",
+              "text": "Cloud-only ACLs are not configured with File Explorer or icacls in the current Files-specific support table; use the supported Azure portal or REST-based tooling. The Files-specific ACL documentation explicitly retains the share and file permission layers for these identities, so do not generalize a broad overview's simplified RBAC-only description. Also review Conditional Access with the identity administrator: Entra Kerberos SMB access cannot complete an MFA challenge for the storage application. The documented exception is scoped to that storage application, not an instruction to disable multifactor authentication for the whole school tenant."
+            }
+          ]
+        },
+        {
+          "id": "files-share-rbac",
+          "title": "First permit access to the share",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Share-level authorization is the first permission boundary after authentication. For the normal least-privilege pattern, assign an Azure Files SMB data role to a specific Entra user or group at the particular file share's scope. Use Access control (IAM) on the share, choose the intended role, select the correct identity, and save the assignment. Groups make staff changes easier than separate assignments for every person. For hybrid groups, ensure the group represented in Entra corresponds to the AD DS group carried in the Kerberos ticket."
+            },
+            {
+              "type": "table",
+              "caption": "Ordinary SMB share roles are not interchangeable with generic resource roles",
+              "headers": ["Role", "Share-level capability", "What it does not imply"],
+              "rows": [
+                ["Storage File Data SMB Share Reader", "Read files and directories.", "Cannot make an ordinary user a writer merely because a file ACL allows modification."],
+                ["Storage File Data SMB Share Contributor", "Read, write, and delete files and directories.", "Does not bypass restrictive file ACLs or automatically grant ACL administration."],
+                ["Storage File Data SMB Share Elevated Contributor", "Read, write, delete, and permission-modification capabilities.", "File permissions still matter for ordinary access; this is not a reason to make every student an administrator."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A default share-level permission is a different option: it applies to all authenticated identities and all shares in the account, with file ACLs supplying further restrictions. It can support documented AD DS scenarios without individual Entra synchronization, so synchronization is not a universal statement covering every design. If a default permission and a specific RBAC assignment both apply, the higher share-level permission wins. A specific Reader assignment cannot reduce a broad default Contributor grant. Prefer explicit groups and a default of None for the school's selective access plan. Allow role changes to propagate and retest before adding unnecessary broader roles."
+            }
+          ]
+        },
+        {
+          "id": "files-ntfs-layers",
+          "title": "Then evaluate the directory and file permissions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An access control list, or ACL, contains entries describing which identities may perform which operations on a file or directory. Azure Files SMB supports Windows ACLs, often called NTFS permissions because they are familiar from Windows's file system. Entries can apply directly or be inherited from a parent directory. The share role is a broad entrance gate; the directory and file ACLs provide the detailed room-by-room policy. For ordinary users with the standard SMB share roles, an operation needs permission at both layers. One layer cannot compensate for the other denying it."
+            },
+            {
+              "type": "paragraph",
+              "text": "For example, share Contributor with a Read-only ACL on exam-plans does not allow editing exam plans. Share Reader with Modify on a document's ACL still gives only reading through that share. With no share permission and no applicable default, even a permissive file ACL cannot open the entrance gate. Evaluate effective group membership, inherited entries, and relevant Deny entries rather than looking at just one Allow entry. The simplified examples below state that no extra groups, Deny entries, defaults, or privileged credentials affect the result."
+            },
+            {
+              "type": "paragraph",
+              "text": "Configure ACLs using an authorized administrator and a method supported for the identity source. The current Files documentation describes Storage File Data SMB Admin for identity-based administration and taking ownership when necessary. Ordinary reads under that role still encounter ACLs until the appropriate ownership and permission changes are made. A storage-key mount, by contrast, has powerful immediate access. Privileged data roles and backup-semantics operations are also special cases, not the ordinary user model. Never test student isolation while connected using an account key and then conclude that students can bypass ACLs."
+            },
+            {
+              "type": "paragraph",
+              "text": "When applying an ACL to a folder, distinguish the folder itself, future child objects, and existing descendants. In the current portal ACL editor for Entra Kerberos, inheritable changes affect future direct children; they do not automatically rewrite all existing descendants. Recursive permission repair is a deliberate administrative operation with its own impact. Check a newly created file and an existing file, preserve intended owners and staff access, and avoid recursively granting everyone Full Control merely to make a test pass."
+            }
+          ]
+        },
+        {
+          "id": "files-permissions-worked",
+          "title": "Work out who may change the school timetable",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Layer permissions for teachers, students, and an archivist",
+              "scenario": "The staff-documents SMB share uses correctly configured AD DS authentication. The relevant groups are synchronized to Entra, clients have the required domain connectivity, and share-role changes have propagated. No default share permission, extra group grants, Deny entries, or privileged credentials apply. The existing timetables folder has deliberately configured ACLs.",
+              "steps": [
+                { "action": "Assign the Teachers group Storage File Data SMB Share Contributor on staff-documents, and grant that group Modify on timetables and its intended contents.", "why": "Both gates allow editing and deleting the intended files. A Contributor role by itself would not establish the folder's effective ACL." },
+                { "action": "Assign Students Storage File Data SMB Share Reader, while keeping their timetables ACL at Read.", "why": "Students can consult the timetable but cannot change it. There is no need to give them the storage account key." },
+                { "action": "Give the Archivists group share Contributor but only Read on timetables, while allowing Modify on a separate archive folder.", "why": "One share can contain directories with different rules. The archivist can organize the archive without altering the current timetable." },
+                { "action": "Evaluate Ioana in Teachers: a timetable read and edit succeed under the stated assumptions.", "why": "Both the share Contributor grant and folder Modify permission admit those operations." },
+                { "action": "Evaluate Mihai in Students and Ana in Archivists: both can read the timetable, but neither can edit it.", "why": "Mihai is restricted by both layers. Ana passes the share write gate but fails the timetable file-permission gate." },
+                { "action": "Test with each person's identity and record both successful reads and rejected edits, including an existing file.", "why": "A test made with a storage key or a privileged administrator would not verify the ordinary layered permission design or inherited permissions on real files." }
+              ],
+              "result": "Two authorization layers express different rules without separate keys per person. The same share-level Contributor role can produce different effective access on different folders because the ACL layer remains active."
+            }
+          ]
+        },
+        {
+          "id": "files-ticket-prediction",
+          "title": "Predict what a broader default does",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "files-default-permission-prediction",
+              "prompt": "An ordinary hybrid user has a specific SMB Share Reader assignment. The account also grants all authenticated identities a default SMB Share Contributor permission. The target file's ACL allows Modify, and no other restrictions apply. Is the specific Reader assignment a read-only cap?",
+              "answer": "No. The higher Contributor permission applies at the share layer, and the file ACL also permits modification.",
+              "explanation": "The account default and the specific assignment are compared within the share layer before combining that result with the file ACL. A weaker specific role does not deny a stronger applicable share grant. Remove the unwanted broad default or redesign the permissions instead of assuming Reader overrides it."
+            }
+          ]
+        },
+        {
+          "id": "files-identity-troubleshooting",
+          "title": "Diagnose the failed layer rather than resetting everything",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For a failed mount, first record the normal file hostname, client network, protocol, configured identity source, and actual user. Confirm DNS and TCP connectivity, then the client's supported join state and ability to obtain the correct Kerberos service ticket. Confirm the identity source is enabled on the account and that the relevant domain or cloud-ticket prerequisites are satisfied. A copied SAS will not repair an SMB ticket problem. A broad subscription role will not turn an unsupported device into a supported Kerberos client."
+            },
+            {
+              "type": "paragraph",
+              "text": "If the mount works but editing one folder fails, inspect the effective share-level grants, group membership, and that folder's ACL. Check whether role propagation or cached tickets are delaying a recent change and use a controlled fresh sign-in when appropriate. Inspect inherited permissions on existing children rather than relying on what a newly created test file allows. Compare successful and failing operations from the same identity and path before changing configuration. This narrows the diagnosis without replacing secure access with a shared master key."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Identity source, share role, and ACL are separate decisions",
+              "text": "A question about authenticating an SMB user selects a supported identity source and client prerequisites. A question about entering a share selects the appropriate share-level data permission. A question about one folder's effective operations requires the ACL layer too. Do not answer an SMB identity problem with a FileREST SAS, confuse Entra Domain Services with Entra Kerberos, or turn a qualified hybrid example into a claim that every cloud-only or guest user is supported."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "files-identity-source-choice",
+          "kind": "single",
+          "prompt": "The school has synchronized hybrid AD DS identities and supported, correctly configured Entra-joined Windows clients. Staff need cloud-issued tickets for an SMB share without contacting on-premises domain controllers for ordinary file access. Which source fits that stated path?",
+          "choices": [
+            { "id": "files-choose-entra-kerberos", "text": "Microsoft Entra Kerberos, with its account, consent, client, and permission prerequisites completed.", "explanation": "This is the documented hybrid cloud-ticket path. ACL administration through some Windows tools may still need domain-controller connectivity." },
+            { "id": "files-choose-sas-password", "text": "A user delegation SAS pasted as the SMB password.", "explanation": "Azure Files SAS authorization applies to REST operations, not an SMB mount password." },
+            { "id": "files-choose-browser-login", "text": "Any browser Entra login, with no device or account configuration.", "explanation": "A browser login does not configure device join, ticket retrieval, the account identity source, or share permissions." }
+          ],
+          "correctIds": ["files-choose-entra-kerberos"],
+          "explanation": "The scenario deliberately includes the supported hybrid prerequisites. It does not assert universal support for arbitrary devices or every identity type."
+        },
+        {
+          "id": "files-permission-intersection",
+          "kind": "single",
+          "prompt": "Ana has SMB Share Contributor on the share but only Read on the timetable file's effective ACL. No default, extra grants, Deny entries, or privileged credentials apply. What can she do to that file?",
+          "choices": [
+            { "id": "files-read-only", "text": "Read it, but not edit or delete it.", "explanation": "The ACL limits the file operation even though the share role permits broader actions." },
+            { "id": "files-contributor-wins", "text": "Read, edit, and delete it because Contributor always overrides ACLs.", "explanation": "The ordinary SMB Share Contributor role does not bypass file ACLs." },
+            { "id": "files-nothing", "text": "Nothing, because the two permission layers must have identical names.", "explanation": "Their labels do not need to match. An operation succeeds when both layers permit that operation." }
+          ],
+          "correctIds": ["files-read-only"],
+          "explanation": "For ordinary SMB access, combine the effective share permission with the effective file permission instead of selecting whichever sounds more powerful."
+        },
+        {
+          "id": "files-default-rbac-interaction",
+          "kind": "single",
+          "prompt": "An authenticated ordinary user has an explicit SMB Share Reader assignment, a default SMB Share Contributor permission, and Modify on the target file's ACL. No other restrictions apply. Which statement is correct?",
+          "choices": [
+            { "id": "files-reader-cap", "text": "The explicit Reader assignment always caps the default at read-only.", "explanation": "A lower explicit role is not a denial. The higher applicable share-level permission is used." },
+            { "id": "files-contributor-default", "text": "The share layer allows Contributor operations, and the file ACL permits modification.", "explanation": "The broad default supplies the higher share permission. The file ACL also allows the requested edit." },
+            { "id": "files-default-anonymous", "text": "A default share permission makes the share anonymous and disables Kerberos.", "explanation": "Default share permission applies to authenticated identities; it does not remove authentication." }
+          ],
+          "correctIds": ["files-contributor-default"],
+          "explanation": "Evaluate grants within the share layer first, then the file layer. A broad default can defeat the intended narrow RBAC design."
+        },
+        {
+          "id": "files-protocol-and-identity-boundary",
+          "kind": "multiple",
+          "prompt": "Select two correct planning statements for the storage-account-based SMB design taught here.",
+          "choices": [
+            { "id": "files-one-account-source", "text": "Only one SMB identity source is enabled per storage account, applying to its file shares.", "explanation": "Independent per-share identity-source configurations are not supported within that account model." },
+            { "id": "files-keep-two-layers", "text": "Ordinary user access requires appropriate share permission and appropriate directory or file permissions.", "explanation": "Authentication and network access do not remove either authorization layer." },
+            { "id": "files-any-entra-device", "text": "Every Entra user on any device can mount the share immediately after browser sign-in.", "explanation": "Identity source, client support, join state, ticket configuration, network reachability, and permissions all have prerequisites." },
+            { "id": "files-nfs-same-auth", "text": "Choosing an SMB Kerberos source automatically enables the same identity model on NFS shares.", "explanation": "NFS has a different access model; the Azure Files SMB identity configuration is not universal protocol authentication." }
+          ],
+          "correctIds": ["files-one-account-source", "files-keep-two-layers"],
+          "explanation": "Scope authentication claims to the protocol and account model. Preserve the ordinary share-plus-ACL authorization model rather than generalizing administrative exceptions."
+        }
+      ],
+      "takeaways": [
+        "Kerberos authenticates SMB identities; it is not the same as FileREST SAS authorization or NFS access.",
+        "Choose one supported identity source per storage account and complete the source-specific client prerequisites.",
+        "Hybrid Entra Kerberos and newer cloud-only support have different setup and support qualifications.",
+        "For normal users, effective share permission and effective file or directory permission must both allow the operation.",
+        "Default share grants can be broader than explicit assignments; Reader does not cancel an applicable Contributor default.",
+        "Validate access using ordinary identities, not storage keys or privileged administrative sessions."
+      ],
+      "sourceIds": ["access-files-identity", "access-files-kerberos", "access-files-share-rbac", "access-files-acls", "access-kerberos-status", "access-network-limits"]
+    }
+  ],
+  "glossary": [
+    { "term": "Endpoint", "definition": "A named service destination. Public or private describes its network path, not whether data is anonymously accessible." },
+    { "term": "Data plane", "definition": "Operations on service data, such as reading a blob or writing a file, distinct from managing the Azure resource configuration." },
+    { "term": "Service endpoint", "definition": "Subnet configuration that allows an Azure service to recognize the subnet while retaining the service's public endpoint." },
+    { "term": "Private endpoint", "definition": "A private VNet network interface connected to one service subresource through Private Link, requiring appropriate DNS, routing, and approval." },
+    { "term": "Managed identity", "definition": "An Azure-managed application identity that obtains tokens without an application secret stored in code." },
+    { "term": "RBAC", "definition": "Role-based access control, assigning a defined role to a principal at a particular scope." },
+    { "term": "Shared Key", "definition": "Authorization using a powerful secret storage account access key. The two account keys are equivalent secrets, not public and private halves." },
+    { "term": "SAS", "definition": "A shared access signature: a signed credential constraining resources, operations, validity, and other request conditions." },
+    { "term": "User delegation key", "definition": "A temporary signing key obtained using Entra authorization, used to sign user delegation SAS rather than exposing an account key." },
+    { "term": "Stored access policy", "definition": "Server-side constraints on a supported resource container that can govern associated service SAS tokens, but not account or user delegation SAS." },
+    { "term": "Kerberos", "definition": "Ticket-based authentication used by supported Azure Files SMB identity sources." },
+    { "term": "ACL", "definition": "An access control list describing permitted or denied operations for identities on a file or directory." },
+    { "term": "Hybrid identity", "definition": "An identity originating in AD DS and synchronized to Microsoft Entra ID, with source-specific requirements for tickets and permissions." },
+    { "term": "Propagation", "definition": "The interval before a changed setting or permission is observed throughout a service or its caches. A change request is not proof of immediate enforcement everywhere." }
+  ],
+  "sources": [
+    { "id": "access-authorize", "url": "https://learn.microsoft.com/en-us/azure/storage/common/authorize-data-access", "title": "Authorize access to data in Azure Storage", "supports": "Separates storage authorization mechanisms and recommends identities over account keys. Some user delegation service restrictions in this overview lag the detailed REST reference and version 2025-07-05 change log; newer service support is based on those specific sources." },
+    { "id": "access-network-rules", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security", "title": "Azure Storage firewall rules and network access control", "supports": "Public endpoint network rules, required subnet service endpoints, regional versus Global endpoint choice, IP and resource-instance rules, and authorization remaining necessary." },
+    { "id": "access-network-limits", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security-limitations", "title": "Guidelines and limitations for the Azure Storage firewall", "supports": "Data-plane versus management-plane enforcement, same-region IP-rule restrictions, public IPv4 rule limits, client network requirements, and retained trusted-service or resource-instance exceptions when public access is disabled." },
+    { "id": "access-private-endpoints", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-private-endpoints", "title": "Use private endpoints for Azure Storage", "supports": "Service-specific private endpoints, blob and dfs dependencies, approval, unchanged client service hostnames, private DNS zones, public access not automatically disabled, and on-premises connectivity." },
+    { "id": "access-trusted-services", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security-trusted-azure-services", "title": "Trusted Azure services", "supports": "Trusted exceptions are limited to documented services and operations; managed-identity-based trusted access still needs applicable data permissions." },
+    { "id": "access-keys", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage", "title": "Manage storage account access keys", "supports": "Equivalent secret account keys, key listing and rotation permissions, staged two-key rotation, impact on key-signed SAS, user delegation independence, and rotation reminders not automatic replacement." },
+    { "id": "access-sas-overview", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-sas-overview", "title": "Grant limited access using shared access signatures", "supports": "Three SAS families, signing authority, scopes, ordinary bearer-link risks, HTTPS, least privilege, service-only stored policies, and lack of a server inventory of generated tokens." },
+    { "id": "access-sas-rest", "url": "https://learn.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas", "title": "Create a user delegation SAS", "supports": "Delegation-key permissions and account-level scope, issuer-data-permission intersection, seven-day key bound, service-version-qualified Files/Queue/Table support, optional user-bound and dynamic constraints, and revocation with cache delay." },
+    { "id": "access-sas-version", "url": "https://learn.microsoft.com/en-us/rest/api/storageservices/version-2025-07-05", "title": "Azure Storage REST version 2025-07-05", "supports": "Explicit change-log support for user delegation SAS on Files, Queues, and Tables, plus Blob principal-bound SAS; resolves older Blob-only generalizations." },
+    { "id": "access-sas-cli", "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blob-user-delegation-sas-create-cli", "title": "Create a Blob user delegation SAS with the Azure CLI", "supports": "Login and as-user parameters, implicit delegation-key creation, resource-scoped token and full URI generation, expiry constraints, delimiter handling, and account-level revocation impact." },
+    { "id": "access-service-sas", "url": "https://learn.microsoft.com/en-us/rest/api/storageservices/create-service-sas", "title": "Create a service SAS", "supports": "Single-service resource scopes, Blob and Files REST permissions, stored policy identifiers, and inability to use a service SAS for broader container-management operations." },
+    { "id": "access-account-sas", "url": "https://learn.microsoft.com/en-us/rest/api/storageservices/create-account-sas", "title": "Create an account SAS", "supports": "Account-key signing, multi-service scope, service/container/object resource-type selection, matching permissions, and lack of stored access policy support." },
+    { "id": "access-stored-policy", "url": "https://learn.microsoft.com/en-us/rest/api/storageservices/define-stored-access-policy", "title": "Define a stored access policy", "supports": "Supported resource containers and service SAS only, maximum five policies, constraints not duplicated between policy and token, thirty-second propagation, and revocation by policy change or removal." },
+    { "id": "access-shared-key", "url": "https://learn.microsoft.com/en-us/azure/storage/common/shared-key-authorization-prevent", "title": "Prevent Shared Key authorization", "supports": "Account setting impact on key-authorized requests and key-signed SAS, continued Blob user delegation path, tool and Azure Files compatibility checks before disabling." },
+    { "id": "access-files-identity", "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-files-active-directory-overview", "title": "Azure Files identity-based authentication for SMB", "supports": "Kerberos authentication, three identity sources, one source per account, domain/client requirements, protocol scope, and newer cloud-only Entra Kerberos support." },
+    { "id": "access-files-kerberos", "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-files-identity-auth-hybrid-identities-enable", "title": "Enable Entra Kerberos for hybrid and cloud-only Azure Files identities", "supports": "Hybrid synchronization, supported device join and operating systems, client cloud-ticket retrieval, consent, cloud-only group configuration, scoped MFA incompatibility, and differing ACL administration requirements." },
+    { "id": "access-files-share-rbac", "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-files-identity-assign-share-level-permissions", "title": "Assign share-level permissions for Azure file shares", "supports": "Specific SMB roles and share scope, authenticated default permissions, higher default versus specific share grant, documented nonsynchronized AD DS alternatives, and propagation." },
+    { "id": "access-files-acls", "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-files-identity-configure-file-level-permissions", "title": "Configure directory and file permissions for Azure Files", "supports": "Share and ACL intersection, source-specific tool matrix, cloud-only portal/REST ACL support, domain-controller needs for hybrid Windows tools, SMB Admin versus account-key behavior, and portal inheritance limits for existing children." },
+    { "id": "access-kerberos-status", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/kerberos", "title": "Introduction to Microsoft Entra Kerberos", "supports": "Cloud-only identity sections retain Preview labeling at review time. Files-specific setup and ACL pages govern the concrete service behavior where this broader overview differs; the course explicitly flags that documentation discrepancy." }
+  ],
+  "lab": {
+    "title": "Optional manual access-boundary observation",
+    "purpose": "Use an instructor-approved disposable account to distinguish network denial, data-role denial, and ordinary SMB permission limits. All core reasoning is already taught; no provisioning or live credential generation is performed by this course.",
+    "prerequisites": [
+      "An instructor-approved isolated account with synthetic files, an identified owner, and permission to inspect or modify only the agreed test configuration.",
+      "Known baseline network settings and one permitted test client; an existing supported identity-based SMB environment is required for the Files portion.",
+      "A nonadministrative test identity and an instructor able to restore the exact original settings. Do not use student records, personal documents, production identities, or real secrets in notes."
+    ],
+    "costWarning": "Storage capacity, requests, retained snapshots, private endpoints, VPNs, domain services, and supporting VMs can incur charges. Prefer a paper walkthrough or an existing approved sandbox. Do not deploy networking or identity infrastructure merely to complete this optional exercise; confirm actual region and SKU pricing and the cleanup owner before any manual work.",
+    "steps": [
+      "Write a prediction table for one blob read: actual client, resolved endpoint, permitted network path, presented identity, and required data role.",
+      "From the approved client, inspect the normal endpoint's DNS answer and compare it with the planned public or private path. Record addresses without storing tokens or keys.",
+      "Using the test identity, attempt one intended read and one unauthorized write against synthetic data. Record the specific error information, not just success or failure.",
+      "If explicitly approved, change only one test boundary, repeat the same operation, and restore it. Do not broadly allow all networks to hide an unexplained problem.",
+      "On the existing SMB test share, compare an ordinary Reader and Contributor identity with the effective ACL on a disposable folder; include a pre-existing test file when assessing inheritance.",
+      "Describe, on paper, how an account-key-signed service SAS, a policy-bound service SAS, and a user delegation SAS would each be revoked. Do not create or distribute live credentials for this comparison."
+    ],
+    "expectedResults": [
+      "The observations distinguish a network-path problem from a valid-path authorization refusal.",
+      "The learner can explain why private endpoints, Entra sign-in, and management access each fail to grant data rights by themselves.",
+      "Ordinary SMB test users obey both share and file permissions, unlike a misleading test performed with an account key."
+    ],
+    "cleanup": [
+      "Restore only the specific network settings and test role assignments changed under the agreed plan; confirm intended clients still work.",
+      "Remove only the named synthetic test files and temporary folder grants after the owner confirms they are disposable. Do not delete the storage account or shared identity infrastructure.",
+      "Confirm that any separately approved temporary billable resources have an assigned cleanup owner and that no real key or SAS remains in notes, terminal history, screenshots, or shared logs."
+    ]
+  }
+}

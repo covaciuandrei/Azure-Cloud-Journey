@@ -1,0 +1,1038 @@
+{
+  "schemaVersion": 1,
+  "id": "blob-and-file-data",
+  "title": "Blob and file data: organize, price, and recover the school archive",
+  "summary": "Create private containers and usable file shares, choose storage tiers from access requirements, automate blob aging, and recover the right object without confusing versions, snapshots, and soft delete.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 study guide effective April 17, 2026 explicitly includes creating Blob containers and Azure Files shares, configuring tiers, soft delete, file snapshots, lifecycle management, and blob versioning. These lessons address those administration tasks directly. Documentation and account-model qualifications were reviewed on September 20, 2026; no claim about exam question frequency is implied.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Create and configure an Azure Files share.",
+    "Create and configure an Azure Blob Storage container.",
+    "Configure storage tiers.",
+    "Configure soft delete for blobs and containers.",
+    "Configure snapshots and soft delete for Azure Files.",
+    "Configure blob lifecycle management.",
+    "Configure blob versioning."
+  ],
+  "lessons": [
+    {
+      "id": "blob-containers-tiers-lifecycle",
+      "title": "Containers, access tiers, and rules that age data",
+      "summary": "Design the school's object archive from its naming and privacy boundary through online access, offline retention, and carefully filtered lifecycle rules.",
+      "objectives": [
+        "Create a correctly named private container and explain its relationship to blobs and the storage account.",
+        "Distinguish flat names from hierarchical directories and avoid importing unsupported feature assumptions.",
+        "Choose hot, cool, cold, or archive from access timing, account type, redundancy, and cost requirements.",
+        "Design and trace lifecycle rules for current blobs, previous versions, and snapshots."
+      ],
+      "sections": [
+        {
+          "id": "objects-and-containers",
+          "title": "An object archive is not a shared Windows drive",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school's website stores scanned permission forms and photographs. Its application uploads and downloads each item by name rather than opening a shared drive. Azure Blob Storage fits this object-storage pattern. A blob is one stored object containing bytes, such as a PDF, plus properties and optional descriptive metadata. A container groups blobs inside a storage account. The account supplies the service endpoint, shared configuration, and capacity limits. Creating a container does not create a virtual machine or reserve one disk for that container."
+            },
+            {
+              "type": "paragraph",
+              "text": "A block blob is the usual choice for documents, images, and large uploaded files. Its content can be assembled from blocks. Append blobs support append-oriented patterns such as logs, while page blobs support random page updates. This lesson's access-tier examples concern block blobs, not every object whose name ends in .pdf or .log. A filename extension does not select a blob type. Choosing a premium block blob account also does not make the ordinary hot, cool, cold, and archive tiers available there."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use school-records as the container and approved/2026/trip.pdf as one blob name. The account name is globally unique, the container name is unique inside that account, and the blob name is unique inside that container. Another account can also have a school-records container. An application request identifies all these levels. A missing object might therefore mean the wrong account, container, capitalization, or name, rather than lost data. Record the full intended location before changing permissions or attempting recovery."
+            }
+          ]
+        },
+        {
+          "id": "container-creation-and-access",
+          "title": "Create a deliberate naming and privacy boundary",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Ordinary container names contain 3 to 63 lowercase letters, numbers, or single hyphens. They start and end with a letter or number, contain no spaces, and cannot have consecutive hyphens. school-records is valid; SchoolRecords and school--records are not. Blob names have different rules: they are case-sensitive and can contain up to 1,024 characters. approved/Trip.pdf and approved/trip.pdf are different objects. Prefer simple meaningful names so that people can recognize the intended document without placing sensitive personal information in its path."
+            },
+            {
+              "type": "paragraph",
+              "text": "Private container access means anonymous requests are not allowed. It does not mean the endpoint automatically has a private network address. Network reachability and data authorization remain separate. At account level, disallowing anonymous Blob access overrides every container's public setting. If the account permits anonymous access, an individual container must still explicitly enable it. The Blob access level allows anonymous reading of known blob URLs without listing the container; the Container level also allows anonymous listing of its blobs. Neither grants anonymous writing. Neither setting belongs on confidential pupil records."
+            },
+            {
+              "type": "example",
+              "title": "Prepare the private document container",
+              "scenario": "On paper, an administrator has a standard general-purpose v2 account, abbreviated GPv2, with hierarchical namespace disabled. The school web application must read approved documents; the public internet must not receive anonymous copies.",
+              "steps": [
+                { "action": "Confirm the account, subscription, network policy, and authorization method before opening Data storage, Containers, and creating school-records.", "why": "A successful creation in the wrong account is still a failed design. Management permissions and permitted data access must be checked separately." },
+                { "action": "Choose Private access and keep anonymous Blob access disabled at account level.", "why": "The container setting expresses the local intent, while the account setting prevents another container from accidentally enabling anonymous reading." },
+                { "action": "Upload a harmless sample block blob named approved/2026/trip.pdf using an authorized identity, and inspect its name, size, and tier.", "why": "This checks the data operation and object properties, not merely that the empty container appears in a resource listing." },
+                { "action": "Give the application's identity the narrow Blob data permissions it needs and test an authorized read through the approved network path.", "why": "A management Contributor role does not itself grant Microsoft Entra Blob data permissions. An application login also does not automatically authorize its storage requests." },
+                { "action": "From a permitted test network, confirm that an unsigned request without credentials cannot read the sample.", "why": "This distinguishes the intended authorization boundary from a test that failed only because the network blocked every request." }
+              ],
+              "result": "The container groups consistently named objects, and the authorized application can read one without making the archive public. No resources are created by this paper walkthrough."
+            }
+          ]
+        },
+        {
+          "id": "flat-and-hierarchical-namespaces",
+          "title": "A slash can be a name character or a directory boundary",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "In a flat namespace, approved/2026/trip.pdf is one blob name. Tools can display the slashes as virtual folders, but those folders are not independent directory objects with filesystem permissions. A container cannot contain another container. If a lifecycle rule matches school-records/approved/, it is comparing the container and blob-name prefix, not entering a Windows folder. Omitting the final slash could unintentionally include approved-drafts, because both strings begin with approved."
+            },
+            {
+              "type": "paragraph",
+              "text": "Hierarchical namespace, abbreviated HNS, adds real directories and filesystem-style operations for Azure Data Lake Storage. This helps analytics applications that organize and rename directories and use directory access controls. It is an account capability, not a container public-access level. Do not enable it just to obtain a folder-looking display. It changes the feature compatibility you must check: blob versioning is not supported on HNS accounts. Current documentation also limits lifecycle blob-index-tag filters to flat namespace accounts, even though the broader feature table lists HNS blob index tags at preview support."
+            },
+            {
+              "type": "diagram",
+              "title": "Object boundaries and independent policy decisions",
+              "description": "Read downward for containment. Read sideways for decisions applied to those objects. A name prefix selects objects; a tier controls access and billing; recovery must be configured separately.",
+              "nodes": [
+                { "id": "archive-account", "label": "Storage account", "detail": "Standard GPv2, flat namespace", "column": 0, "row": 0 },
+                { "id": "archive-container", "label": "school-records", "detail": "Private Blob container", "column": 0, "row": 1 },
+                { "id": "archive-blob", "label": "approved/2026/trip.pdf", "detail": "One named block blob", "column": 0, "row": 2 },
+                { "id": "archive-filter", "label": "Lifecycle filter", "detail": "Container prefix and approved tag", "column": 1, "row": 1 },
+                { "id": "archive-tier", "label": "Tier decision", "detail": "Online today or offline archive", "column": 2, "row": 2 },
+                { "id": "archive-recovery", "label": "Recovery settings", "detail": "Versions and separate soft-delete scopes", "column": 2, "row": 0 }
+              ],
+              "edges": [
+                { "from": "archive-account", "to": "archive-container", "label": "Contains" },
+                { "from": "archive-container", "to": "archive-blob", "label": "Contains" },
+                { "from": "archive-filter", "to": "archive-blob", "label": "Selects by name and tag" },
+                { "from": "archive-blob", "to": "archive-tier", "label": "Data access behavior" },
+                { "from": "archive-account", "to": "archive-recovery", "label": "Configure protection" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "blob-tier-decisions",
+          "title": "Choose retrieval behavior before comparing capacity prices",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Hot, cool, and cold are online Blob tiers: an authorized request can read the data immediately, normally with millisecond time-to-first-byte characteristics. Cold does not mean frozen or offline. Archive is offline: you can list an archived blob and inspect its properties, but you cannot read its content until rehydration brings data into an online tier. Online does not mean public. A cold private document still requires the same approved network path and authorization as a hot private document."
+            },
+            {
+              "type": "table",
+              "caption": "A school-oriented choice among the four Blob access tiers",
+              "headers": ["Tier", "Access requirement", "Cost trade-off", "Typical school decision"],
+              "rows": [
+                ["Hot", "Frequent reads or changes; online.", "Higher capacity price, lower access charges relative to cooler tiers.", "This month's actively edited forms."],
+                ["Cool", "Infrequent use but immediate reading; online.", "Lower capacity price and higher access costs than hot.", "Completed term records occasionally checked by staff."],
+                ["Cold", "Rare use but immediate reading; online.", "Lower capacity price and higher retrieval costs than cool.", "Old reports that must open during a live meeting."],
+                ["Archive", "Rare use with a planned wait measured in hours; offline.", "Lowest capacity price, costly retrieval and rehydration.", "Long-term copies whose owner accepts a delayed retrieval process."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A standard general-purpose v2 account defaults new unqualified uploads to hot unless its default tier is changed. Its default can be hot, cool, or cold, not archive. A blob with an explicitly selected tier keeps that choice when the default changes; a blob with an inferred tier follows the account default. Changing the default can therefore affect many inferred-tier objects and cause transactions or retrieval charges. Explicitly tier the small intended set when the requirement concerns only those files, instead of treating the account default as a harmless label."
+            },
+            {
+              "type": "paragraph",
+              "text": "Compare stored bytes, read and write transactions, retrieved bytes, outbound transfer, and recovery requirements. Lower capacity pricing alone does not establish the cheapest total. The current tier feature table also gives hot a higher availability percentage than cool or cold, while describing similar durability and online retrieval characteristics. Availability means being able to serve a request; durability concerns keeping the data. Do not infer a cheaper tier has fewer replicas, or promise identical service availability because the contents remain durable."
+            }
+          ]
+        },
+        {
+          "id": "tier-duration-and-redundancy",
+          "title": "Minimum-duration charges are not locks",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For general-purpose v2 accounts, cool has a 30-day minimum storage duration for early-deletion charging and cold has 90 days. Archive has 180 days. These are billing consequences, not rules that block a delete or force legal retention. Deleting, fully rewriting, or moving an object out too soon can incur the remaining duration's prorated capacity charge. Read the account qualification: the current tier table explicitly says legacy Blob Storage accounts do not have minimum retention durations for cool or cold. Do not apply the GPv2 30/90 rule indiscriminately to every account."
+            },
+            {
+              "type": "example",
+              "title": "Calculate duration exposure without inventing a price",
+              "scenario": "Three separate block blobs are in a standard GPv2 account. Soft delete is disabled for this paper calculation, no special discounts apply, and the stated elapsed days are measured since entering each tier.",
+              "steps": [
+                { "action": "Delete a cool blob after 18 days and calculate 30 minus 18 equals 12 days.", "why": "Its early-deletion exposure is equivalent to 12 more days of that object's cool capacity charge, in addition to charges already incurred." },
+                { "action": "Move a cold blob to hot after 50 days and calculate 90 minus 50 equals 40 days.", "why": "Changing to an online warmer tier is allowed but can trigger 40 remaining days of cold capacity charge plus the applicable retrieval and operation charges." },
+                { "action": "Change an archived blob to hot after 120 days and calculate 180 minus 120 equals 60 days.", "why": "Rehydration does not waive minimum-duration charging. The remaining 60 days are separate from retrieval charges and the later hot storage charge." }
+              ],
+              "result": "The answers are 12, 40, and 60 equivalent storage days, not currency amounts. If soft delete were enabled, final deletion and its early-deletion assessment would also depend on when the soft-delete retention expired."
+            },
+            {
+              "type": "paragraph",
+              "text": "Redundancy is another gate. Locally redundant storage, LRS, keeps local replicas. Geo-redundant storage, GRS, also copies to another region; RA-GRS additionally allows supported reads from that secondary region. These three support archive. Zone-redundant storage, ZRS, and the geo-zone combinations GZRS and RA-GZRS do not support archive. Hot, cool, and cold support all redundancy configurations available to the account. Premium block blob accounts cannot use these standard access tiers. Check these constraints before designing an archive lifecycle rule, and plan rehydration before a redundancy change involving already archived data."
+            }
+          ]
+        },
+        {
+          "id": "archive-retrieval-plan",
+          "title": "Rehydrate deliberately, then verify completion",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Rehydration is the service operation that makes archived content readable again. You can change an archived current blob to hot, cool, or cold, or copy it to a different blob in an online tier. Copying preserves the archived source and can avoid its early-deletion charge if that source remains for the required duration. However, there are now two stored objects, and retrieval, copying, and online capacity still cost money. An archived previous version must be copied to a new online blob rather than directly rehydrated in place."
+            },
+            {
+              "type": "example",
+              "title": "Prepare a report requested for tomorrow",
+              "scenario": "The school's sealed report is archived in an eligible LRS account. It has been archived for only 80 days. Staff can wait until tomorrow, but must keep the archival original unchanged.",
+              "steps": [
+                { "action": "Request an online copy with a different name, such as retrieval/report-review.pdf, rather than moving or deleting the original.", "why": "This preserves the archive and avoids ending its 180-day stay at day 80. It also separates the working copy from the original lifecycle prefix." },
+                { "action": "Choose retrieval priority from the real deadline and monitor the copy or tier status until completion.", "why": "Standard retrieval can take hours; high priority costs more and is not an instant-download guarantee. A newly visible destination is not proof that its content is ready." },
+                { "action": "Open the completed copy, check its contents, and remove only that working copy after the meeting if it is no longer needed.", "why": "Verification proves useful recovery. Keeping the original is essential to the retention plan, while unnecessary duplicate capacity should not accumulate." }
+              ],
+              "result": "The school gets a readable working document while retaining its archived original. It budgets both retrieval and the temporary second copy rather than describing recovery as free."
+            },
+            {
+              "type": "prediction",
+              "id": "archive-immediate-read-prediction",
+              "prompt": "A teacher needs a rarely used report to open during a meeting in two minutes. Will choosing archive instead of cold meet that requirement just because the blob's name is still listed?",
+              "answer": "No. Cold is online; archive content first needs rehydration.",
+              "explanation": "Listing metadata is different from reading the document. Current documentation describes standard rehydration taking up to 15 hours for objects under 10 GB, with workload-dependent delays; even high priority is not a two-minute service guarantee. Select an online tier for this requirement."
+            }
+          ]
+        },
+        {
+          "id": "lifecycle-rule-design",
+          "title": "Describe which objects, which clock, and which action",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Lifecycle management is an account-level policy containing enabled rules. Each rule combines filters, time conditions, and actions. For example, select block blobs whose combined container and name begin with school-records/approved/, require the blob index tag Review to equal complete, and tier sufficiently old matching current blobs to cool. A blob index tag is a searchable name-value label on a blob, not a resource-group tag and not ordinary blob metadata. The rule must explicitly select the correct tag mechanism. With versioning, ensure the intended current version has its tags; tags on an earlier version do not automatically carry to a new version."
+            },
+            {
+              "type": "paragraph",
+              "text": "Prefixes are case-sensitive, must begin with the container name, and do not interpret an asterisk as a wildcard. Multiple filter types are combined with AND: a prefix-matching blob without the required tag is outside this rule. Filters include matching objects; there is no general exclude filter. Name the safe included subset instead of applying a broad destructive rule and hoping to exempt important documents later. The current limit is ten prefixes and ten blob index tag conditions per rule; tag filters are currently supported only on flat namespace accounts."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose the age clock explicitly. A current blob can use time since last modification, creation, or tracked access, depending on the condition. Previous-version age uses that version's creation time, not when another write made it historical. Snapshot age uses snapshot creation time. Last-access rules require access-time tracking and have tracking costs; reading properties is not the same as reading content for that clock. Time conditions use greater than, so exactly 30 elapsed days does not yet satisfy greater than 30. Never describe a rule merely as moving old files without naming its clock."
+            }
+          ]
+        },
+        {
+          "id": "lifecycle-worked-timeline",
+          "title": "Test the rule against a small set before trusting it",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Trace a filtered school lifecycle policy",
+              "scenario": "Assume a flat-namespace standard GPv2 LRS account and no legal hold or immutability policy. One proposed rule selects current block blobs with prefix school-records/approved/ AND tag Review=complete and cools them after more than 30 modification-days. A separate prefix-only rule, approved for all history under school-records/approved/, deletes previous versions after more than 120 creation-days. This historical rule does not depend on tag indexing.",
+              "steps": [
+                { "action": "Evaluate approved/a.pdf, tagged complete, whose current version was modified 31 days ago.", "why": "Both filters match and 31 is greater than 30. The current blob is eligible for the cool action when a policy run evaluates it." },
+                { "action": "Leave approved/b.pdf, tagged draft and last modified 200 days ago, outside this rule.", "why": "Age alone cannot override the failed tag filter. This prevents unfinished work from entering the approved-data process." },
+                { "action": "Leave approved-copy/c.pdf, tagged complete and 200 days old, outside this rule.", "why": "The required prefix includes approved/ with a slash. approved-copy/ is a different prefix, not a subdirectory match." },
+                { "action": "Under the separate prefix-only history rule, evaluate a previous version created 121 days ago but replaced only yesterday.", "why": "Its name matches that rule and its own creation age exceeds 120. A recent transition into previous-version status does not reset that clock." },
+                { "action": "Add explicit previous-version and snapshot delete actions before proposing a later current-blob deletion rule.", "why": "Lifecycle will not delete the current blob while previous versions or snapshots remain. Their conditions must be designed alongside the current object's condition." }
+              ],
+              "result": "Only the first current blob is eligible for cooling, and the old matching previous version is eligible for deletion. Eligibility is not proof of an already completed operation."
+            },
+            {
+              "type": "paragraph",
+              "text": "A separate staged policy might cool a blob, later move it to cold, and eventually archive it. The age thresholds are not automatically measured from entry into the previous tier. For a blob never modified after upload, thresholds greater than 30 and greater than 60 days leave about 30 days between eligibility dates, but asynchronous runs could make the actual cool stay shorter. Choose conservative gaps and monitor actual transition times if avoiding minimum-duration charges matters. A final-delete threshold must also allow the intended archive stay; counting 180 days from original upload is not equivalent to 180 days in archive."
+            }
+          ]
+        },
+        {
+          "id": "lifecycle-execution-and-exam",
+          "title": "A policy is periodic automation, not an immediate restore tool",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Policy changes can take up to 24 hours before the first execution starts, and processing duration depends on the objects and account workload. This is not a guarantee that every eligible blob changes tier within 24 hours. Avoid repeatedly editing a rule while waiting, because changes interrupt an active policy's processing. Inspect object properties and available execution monitoring. If multiple actions apply to the same object, Azure chooses the least expensive applicable action; delete takes precedence over archive, for example. The rule list is not a script that must execute line by line."
+            },
+            {
+              "type": "paragraph",
+              "text": "Lifecycle cannot rehydrate archived blobs into an online tier. A manual tier change also does not refresh a blob's last-modified time, so an old rehydrated blob can match the archive condition again. Protect the recovery window with an archive condition based on days since the last tier change, or retrieve to a separately filtered working location. Lifecycle deletion respects soft delete, which can retain charged data after logical deletion. It cannot delete immutable protected blobs or use deletion rules to purge already soft-deleted objects before their retention expires."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Separate access, automation, and protection",
+              "text": "A private container controls anonymous access, an access tier controls data-access and billing behavior, and lifecycle rules automate eligible transitions or deletion. None replaces recovery settings. A Blob archive tier is not an Azure Files tier, and a lifecycle delete condition is not a legal-retention lock. Read account type, redundancy, object type, clock, and retrieval deadline before selecting an action."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "container-boundary-check",
+          "kind": "single",
+          "prompt": "The school needs a private Blob container for approved PDFs in a flat-namespace account. Which plan correctly combines naming, namespace, and anonymous-access controls?",
+          "choices": [
+            { "id": "container-private", "text": "Create school-records as Private, disallow anonymous Blob access at account level, and use approved/2026/trip.pdf as one blob name.", "explanation": "Correct. The container name is valid, the slash-separated blob name is a flat object name, and both privacy settings express the intended boundary." },
+            { "id": "container-uppercase", "text": "Create School-Records and rely on the uppercase name to prevent anonymous access.", "explanation": "Incorrect. Ordinary container names must be lowercase, and capitalization is not an authorization mechanism." },
+            { "id": "container-public-override", "text": "Disallow anonymous access at account level but override it with Container public access for this container.", "explanation": "Incorrect. The account prohibition overrides container-level anonymous settings; the proposed override is not available." },
+            { "id": "container-nested", "text": "Create approved as a second container inside school-records so its files inherit Windows folder permissions.", "explanation": "Incorrect. Blob containers are not nested, and a virtual folder in a flat namespace does not provide Windows filesystem permissions." }
+          ],
+          "correctIds": ["container-private"],
+          "explanation": "Start with valid resource names and the right authorization boundary. Private container access does not itself configure a private endpoint or grant the application data permissions."
+        },
+        {
+          "id": "online-tier-check",
+          "kind": "single",
+          "prompt": "A rarely accessed block blob in standard GPv2 ZRS must be readable immediately. It will remain unchanged for at least a year. Which listed option meets both the latency and redundancy constraints while choosing the coolest available online tier?",
+          "choices": [
+            { "id": "tier-cold", "text": "Cold.", "explanation": "Correct. Cold remains online and supports ZRS in an eligible standard account. The expected stay also exceeds GPv2's 90-day duration." },
+            { "id": "tier-archive", "text": "Archive.", "explanation": "Incorrect. Archive requires rehydration and is not supported on ZRS accounts. Either limitation disqualifies it here." },
+            { "id": "tier-files-cool", "text": "Azure Files cool.", "explanation": "Incorrect. That is a share-level access tier in the Files pay-as-you-go model, not a tier for this block blob." },
+            { "id": "tier-premium-archive", "text": "Move to premium block blob storage and set archive there.", "explanation": "Incorrect. Premium block blob accounts do not support the standard hot, cool, cold, or archive tiering mechanism." }
+          ],
+          "correctIds": ["tier-cold"],
+          "explanation": "The question fixes the access deadline, account, redundancy, and desired online tier. It does not claim cold is always the cheapest total-cost option for every workload."
+        },
+        {
+          "id": "tier-duration-check",
+          "kind": "multiple",
+          "prompt": "Select TWO accurate billing statements. Each example concerns an eligible block blob, uses elapsed time since entering its tier, and assumes soft delete is disabled.",
+          "choices": [
+            { "id": "duration-gpv2", "text": "Deleting a GPv2 cool blob after 18 days can add a charge equivalent to 12 remaining cool-storage days.", "explanation": "Correct. The GPv2 cool duration is 30 days, and 30 minus 18 equals 12." },
+            { "id": "duration-legacy", "text": "The current tier table does not apply a cool or cold minimum retention duration to legacy Blob Storage accounts.", "explanation": "Correct. The account-type footnote explicitly qualifies the 30/90-day durations; it must not be ignored." },
+            { "id": "duration-lock", "text": "Azure rejects every attempt to delete a GPv2 cold blob before day 90.", "explanation": "Incorrect. The minimum duration is a billing rule, not a deletion lock. Protection or immutability settings are separate." },
+            { "id": "duration-archive", "text": "Rehydrating an archive blob at day 120 automatically waives the remaining 60 days.", "explanation": "Incorrect. Changing its tier before day 180 can incur the remaining archive-duration charge as well as retrieval charges." }
+          ],
+          "correctIds": ["duration-gpv2", "duration-legacy"],
+          "explanation": "Do the duration subtraction only after checking the account and operation. None of these statements supplies a currency price or guarantees a total bill."
+        },
+        {
+          "id": "lifecycle-filter-age-check",
+          "kind": "multiple",
+          "prompt": "Select TWO conclusions about a flat-namespace policy. Its current-blob rule requires prefix school-records/approved/ AND tag Review=complete and cools after more than 30 modification-days. A separate prefix-only history rule deletes previous versions under that prefix after more than 120 creation-days.",
+          "choices": [
+            { "id": "lifecycle-match", "text": "A matching current blob last modified 31 days ago is eligible to cool when evaluated.", "explanation": "Correct. The filters and strict age threshold match. A periodic run still has to perform the operation." },
+            { "id": "lifecycle-version-clock", "text": "A previous version matching the history rule's prefix and created 121 days ago can qualify for deletion even if it became previous yesterday.", "explanation": "Correct. The history rule uses the previous version's own creation time, not its replacement time, and does not require a tag match." },
+            { "id": "lifecycle-tag-ignored", "text": "A 200-day-old current approved/ blob tagged draft qualifies for cooling because age overrides tags.", "explanation": "Incorrect. The current-blob rule combines prefix and tag with AND; the failed tag condition keeps this current blob outside its cooling action." },
+            { "id": "lifecycle-rehydrate", "text": "The same policy can guarantee immediate rehydration of archived reports on demand.", "explanation": "Incorrect. Lifecycle cannot rehydrate archive blobs and does not provide immediate on-demand execution." }
+          ],
+          "correctIds": ["lifecycle-match", "lifecycle-version-clock"],
+          "explanation": "Evaluate filters, the correct object's clock, then the action. Matching a condition and completing the operation are different events."
+        }
+      ],
+      "takeaways": [
+        "A container groups blobs; slash-separated names in a flat namespace are not nested containers or Windows directories.",
+        "Account-level anonymous-access prohibition wins over container settings, while network reachability and authorized data access remain separate.",
+        "Hot, cool, and cold are online; archive needs rehydration and supports only LRS, GRS, and RA-GRS.",
+        "The GPv2 cool/cold 30/90-day durations have an account-type qualification; archive uses 180 days.",
+        "Lifecycle filters and age clocks must be tested against current objects, previous versions, and snapshots separately.",
+        "Lifecycle is asynchronous, cannot rehydrate archive data, and does not bypass soft delete or immutable protection."
+      ],
+      "sourceIds": ["guide-storage", "blob-naming", "blob-anonymous-access", "blob-access-tiers", "blob-rehydration", "blob-lifecycle-overview", "blob-lifecycle-structure", "blob-index-tags", "blob-feature-support"]
+    },
+    {
+      "id": "blob-versioning-and-recovery",
+      "title": "Recover a blob, a version, or a whole container",
+      "summary": "Build a recovery timeline and choose the correct protection scope before an accidental overwrite or deletion happens.",
+      "objectives": [
+        "Configure and distinguish blob soft delete and container soft delete.",
+        "Trace automatic version creation, current-blob deletion, and promotion of a historical version.",
+        "Choose a recovery operation based on the damaged object and namespace type.",
+        "Explain retention windows, storage costs, and the limits of in-account protection."
+      ],
+      "sections": [
+        {
+          "id": "recovery-scopes",
+          "title": "First ask what disappeared",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose the school archive suddenly has no readable trip form. Several events could produce that symptom: somebody overwrote one blob, deleted its current object, deleted the whole container, or deleted the storage account. A recovery feature that solves one event does not automatically solve the others. Before changing anything, record the account, container, blob name, approximate event time, and any available version identifiers. Stop the application from repeatedly replacing data if a bug is still running. Preserving evidence is more useful than recreating names immediately."
+            },
+            {
+              "type": "table",
+              "caption": "Match the lost object to the configured protection",
+              "headers": ["What happened?", "Useful preconfigured protection", "Important boundary"],
+              "rows": [
+                ["One blob was deleted while its container remains.", "Blob soft delete, or retained versions when supported.", "Container soft delete alone does not undelete individual blobs."],
+                ["A document was overwritten.", "Blob versioning, or supported soft-deleted overwrite snapshots.", "HNS soft delete does not provide the flat-namespace overwrite-snapshot behavior."],
+                ["The whole container was deleted.", "Container soft delete.", "Blob soft delete and versioning alone do not preserve a deleted container."],
+                ["The storage account was deleted.", "Preventive resource locks and a separately designed backup strategy.", "Neither blob nor container soft delete recovers a deleted account."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Redundancy preserves copies of the service's data; it is not an undo history. If an authorized user deletes a document, replication can faithfully replicate that deletion. Likewise, a management-plane delete lock on an account is useful against deleting the account resource but should not be mistaken for a block on all Blob data operations. Recovery design needs both preventive access controls and deliberately retained earlier data."
+            }
+          ]
+        },
+        {
+          "id": "soft-delete-settings",
+          "title": "Configure two separate retention windows",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Soft delete means retaining logically deleted data for a limited time rather than immediately discarding it. Configure blob soft delete and container soft delete separately in the storage account's Data protection settings. Both currently allow retention from 1 through 365 days. One checkbox does not enable the other. A sensible period must exceed the time it takes the school to notice a mistake and organize a recovery. Seven days might be insufficient during a long holiday, even though it is a common default or recommendation."
+            },
+            {
+              "type": "paragraph",
+              "text": "The retention clock starts when an applicable object is deleted, or when an overwrite creates a protected soft-deleted snapshot in the supported flat-namespace case. Changing the setting later applies to future deletions, not existing deleted objects. Turning off soft delete also does not immediately erase already soft-deleted objects; they retain their original expiry. A normal listing can hide deleted objects, so enable the tool's deleted-object view before concluding the protection failed."
+            },
+            {
+              "type": "example",
+              "title": "Plan protection around the school holiday",
+              "scenario": "Staff review the archive at least every 14 days and allow another seven days to investigate. They choose 30 days of blob soft delete and 45 days of container soft delete in a disposable planning example.",
+              "steps": [
+                { "action": "Enable blob soft delete for 30 days and container soft delete for 45 days, then save and reread both settings.", "why": "Fourteen plus seven equals 21 days. Thirty days exceeds that detection-and-response estimate for a blob; the separately chosen container window is longer because a whole-container incident may take more coordination." },
+                { "action": "Record a blob deletion at 10:00 UTC on September 1 with the 30-day setting active.", "why": "The expected retention boundary is 10:00 UTC on October 1, calculated as 30 elapsed days rather than the end of a named calendar month." },
+                { "action": "If the setting changes to 60 days on September 5, keep the original October 1 boundary for that deleted blob.", "why": "The new setting is not retroactive. Schedule recovery well before the original expiry instead of assuming the extension saved it." }
+              ],
+              "result": "The administrator can state which setting protects each deletion and when action must occur. The arithmetic describes a planning boundary, not a reason to wait until the final second."
+            }
+          ]
+        },
+        {
+          "id": "blob-overwrite-recovery",
+          "title": "Undelete and overwrite recovery are different steps",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "First consider a flat-namespace account with blob soft delete enabled but versioning disabled. Deleting a supported blob marks it soft-deleted. Undeleting it within retention makes the object readable again and restores its associated soft-deleted snapshots. Overwriting the blob with a supported operation instead creates a soft-deleted snapshot of the earlier content while leaving the newly written content live. Therefore, undoing an overwrite is not simply pressing undelete and assuming the live bytes changed."
+            },
+            {
+              "type": "example",
+              "title": "Recover yesterday's form without losing today's evidence",
+              "scenario": "In the soft-delete-only flat-namespace account, a full blob upload accidentally replaces the approved trip form with a blank file. The event is still within retention.",
+              "steps": [
+                { "action": "Inspect the current blob and show its deleted snapshots, recording the time of the overwrite.", "why": "The blank current file and the retained earlier snapshot are different objects. The timestamp helps select the pre-error content." },
+                { "action": "Undelete the blob's soft-deleted snapshots and copy the intended snapshot to a separate recovery name first.", "why": "Soft-deleted data must be restored before reading it. A separate destination allows verification without immediately overwriting the current evidence." },
+                { "action": "Read the recovered PDF, then copy the verified snapshot content over the live blob if the document owner approves.", "why": "Copying establishes the desired live contents; undeleting alone did not select and promote that earlier snapshot." }
+              ],
+              "result": "The school restores the intended form using retained data rather than guessing that every restore button reverses an overwrite. Blob soft delete does not protect every property change or every possible write operation."
+            }
+          ]
+        },
+        {
+          "id": "version-history",
+          "title": "Versioning automatically retains historical writes",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Blob versioning maintains identifiable historical states automatically. Enable it at storage-account level on a supported account, such as standard GPv2 without HNS, before the changes you need to retain. Creating a block blob produces a current version. A later supported write produces a new current version and makes the earlier one a previous version. Azure returns timestamp-based version identifiers. In the following examples, V1 and V2 are classroom labels for those identifiers, not strings you should expect Azure to generate."
+            },
+            {
+              "type": "paragraph",
+              "text": "A version's content and metadata are immutable: you read an old version rather than editing it in place. Full uploads, committed block-list changes, copying content over the blob, and metadata updates are examples of operations that create versions. Merely uploading an uncommitted block does not create the same committed history, and not every append-blob or page-blob write is versioned. Keep these examples scoped to block blobs and supported write operations rather than promising a universal filesystem undo mechanism."
+            },
+            {
+              "type": "paragraph",
+              "text": "Deleting a blob without naming a version makes its current version a previous version and leaves no current version. It does not create an extra empty version. Existing previous versions remain. A normal read by the base blob name can therefore fail while historical contents are still recoverable. Deleting a particular historical version is a separate operation requiring appropriate permissions. When blob soft delete is also enabled, that deleted version is retained as soft-deleted until its retention expires."
+            }
+          ]
+        },
+        {
+          "id": "version-recovery-walkthrough",
+          "title": "Promote the chosen contents as a new current version",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Trace four actions on one versioned report",
+              "scenario": "Versioning and blob soft delete are enabled in a supported flat-namespace account. No lifecycle rule deletes previous versions during this example. The report initially does not exist.",
+              "steps": [
+                { "action": "Upload the correct report as V1, then overwrite it with an incorrect report as V2.", "why": "V2 is current and V1 is previous. Versioning preserves the earlier contents without requiring the teacher to request a manual snapshot." },
+                { "action": "Delete the base blob without specifying a version identifier.", "why": "V2 becomes previous, V1 remains previous, and there is no current version. There are still two retained versions, not three." },
+                { "action": "Read V1 by its actual version identifier and confirm it is the report required by the document owner.", "why": "The oldest version is not automatically the right one. Verification must consider contents as well as timestamps." },
+                { "action": "Copy V1's contents to the base blob name, creating a new current version labelled V3.", "why": "Promotion is a new write, not an edit of V1. V1 and V2 remain historical unless explicitly deleted or expired by policy." }
+              ],
+              "result": "After these actions, V3 is current and V1/V2 are previous: three retained versions. V3 contains the desired V1 contents but has its own identity and creation time."
+            },
+            {
+              "type": "paragraph",
+              "text": "If the desired previous version was itself deleted and remains within blob soft-delete retention, first undelete the blob's soft-deleted versions. The undelete operation restores all its soft-deleted versions, not one selected version, and does not create a current version. Then copy the chosen restored version to establish the new current object. With versioning and soft delete together, ordinary overwrites produce retained previous versions rather than additional soft-deleted overwrite snapshots. Those ordinary previous versions do not automatically disappear when the soft-delete period ends."
+            },
+            {
+              "type": "prediction",
+              "id": "version-undelete-prediction",
+              "prompt": "The current blob was deleted with versioning enabled. An administrator undeletes its soft-deleted historical versions. Does an ordinary read of the base name necessarily work now?",
+              "answer": "No. Restoring historical versions does not promote one to current.",
+              "explanation": "The administrator must select the intended historical contents and copy them to create a current version. Keeping historical objects and choosing which contents clients should now receive are separate actions."
+            }
+          ]
+        },
+        {
+          "id": "container-restore-walkthrough",
+          "title": "Recover the container when the boundary itself was deleted",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Container soft delete restores the whole deleted container and its contents as they were when that container was deleted, including its blob versions and snapshots. It is not a way to rewind an active container to any chosen date. A blob deleted before the container deletion is not magically recreated just because an older archive once contained it. Its own protection state and retention still matter. Restore the container first when its absence is what prevents access to everything inside."
+            },
+            {
+              "type": "example",
+              "title": "Recover school-records after a mistaken container deletion",
+              "scenario": "Container soft delete was enabled for 45 days before an administrator deleted school-records yesterday. The storage account still exists, and no new container has reused the name.",
+              "steps": [
+                { "action": "Open the deleted-container view, identify the correct deleted container instance, and confirm its deletion time is within retention.", "why": "The recovery target is a container, not an individual blob version. Names alone are insufficient when there have been repeated mistakes." },
+                { "action": "Restore that container under its original school-records name.", "why": "Container recovery requires the original name. Creating a replacement container with that name first would block restoration until the conflict is resolved." },
+                { "action": "Inspect several expected blobs and their relevant versions, then test the application's authorized read path.", "why": "The container's presence is only the first result. The application must reach the right restored contents with the right authorization." }
+              ],
+              "result": "The container and its retained contents are available again. Blob soft delete alone would not have supplied this whole-container recovery."
+            }
+          ]
+        },
+        {
+          "id": "hns-recovery-boundaries",
+          "title": "Do not carry flat-namespace assumptions into a data lake",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Current documentation supports blob soft delete and container soft delete for HNS accounts, but not blob versioning. HNS blob soft delete can retain deleted blobs and directories. Restoring a deleted directory restores its contents, and access control lists are preserved on restoration. However, the flat-namespace behavior that creates a soft-deleted snapshot for a supported overwrite does not apply to HNS. An existing deleted path also cannot be restored onto an occupied path with the same name."
+            },
+            {
+              "type": "paragraph",
+              "text": "Consider a data-lake folder named class12. If a child blob is soft-deleted and the parent directory is later renamed, the deleted child becomes disconnected from that original path. Recovery may require reverting the directory name or recreating the original directory path. If a new file already occupies the deleted file's path, resolve that collision before restoring. This is a practical reason to record names and stop automatic rename jobs during an incident rather than repeatedly clicking restore without checking namespace history."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Feature tables describe combinations, not interchangeable protocols",
+              "text": "HNS, Blob Network File System (NFS) 3.0, and SSH File Transfer Protocol (SFTP) can change support and behavior. The current table lists some HNS snapshot and tag features as preview, but versioning remains unsupported. These Blob capabilities are also not Azure Files NFS 4.1. Recheck the exact account capability and operation before relying on an overwrite-recovery promise."
+            }
+          ]
+        },
+        {
+          "id": "retention-costs-and-exam",
+          "title": "Recovery history uses storage and needs a retirement policy",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Previous versions and soft-deleted data consume billed capacity. Versioning is not a free recycle bin. Without explicit tier changes, billing can account for unique blocks shared across versions, but rewritten blocks are treated as unique even if their bytes happen to match older content. Explicitly tiering versions can cause full-object capacity billing. Therefore, do not estimate every history as either exactly one copy or exactly the number of versions multiplied by file size. Inspect the write pattern and applicable tier-billing rules."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use lifecycle rules to retire previous versions after a justified period, understanding that their creation-time clock can be older than their time as a previous version. Soft delete may retain a version again after lifecycle deletes it. Disabling versioning stops future history but does not remove existing versions. Disabling soft delete also does not instantly clear previously retained data. Before cleanup, decide whether the school still needs an audit trail and whether a separate backup or immutable retention requirement applies."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Choose by scope and state",
+              "text": "For an overwritten supported block blob, select a retained version or overwrite snapshot. For a deleted blob in a live container, use Blob recovery. For a deleted container, use container soft delete. For a deleted account, none of these in-account features is sufficient. Restoring a version's availability is not the same as making its contents current, and a recovery retention period is not an immutability guarantee."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "soft-delete-scope-check",
+          "kind": "multiple",
+          "prompt": "Select TWO correct statements about Blob and container soft delete, assuming each feature was enabled before the applicable deletion.",
+          "choices": [
+            { "id": "scope-blob", "text": "Blob soft delete can recover an individual supported blob deleted from a container that still exists.", "explanation": "Correct. This is the individual-object scope of Blob soft delete, subject to its retention window." },
+            { "id": "scope-container", "text": "Container soft delete can restore a deleted container and its retained contents during retention.", "explanation": "Correct. It protects the whole container deletion, a separate scope from deleting one blob." },
+            { "id": "scope-container-file", "text": "Container soft delete alone undeletes any individual blob while the container stays active.", "explanation": "Incorrect. Whole-container protection does not supply individual-blob undelete in an active container." },
+            { "id": "scope-account", "text": "Either soft-delete setting recovers the data after deletion of the entire storage account.", "explanation": "Incorrect. Both retain data inside the existing account. Account deletion requires separate preventive and backup planning." }
+          ],
+          "correctIds": ["scope-blob", "scope-container"],
+          "explanation": "The recovery scope must match the deleted object. Both retention settings currently allow 1 to 365 days, but equal durations would still not make their scopes interchangeable."
+        },
+        {
+          "id": "version-delete-check",
+          "kind": "single",
+          "prompt": "A supported block blob has current V2 and previous V1. Versioning and blob soft delete are enabled. You delete the base blob without a version identifier, with no lifecycle action occurring. What follows?",
+          "choices": [
+            { "id": "version-two-previous", "text": "V1 and V2 remain previous versions and there is no current version.", "explanation": "Correct. Deleting the base blob demotes the current version without creating a new version." },
+            { "id": "version-empty-current", "text": "Azure creates an empty current V3 that ordinary reads can download.", "explanation": "Incorrect. The delete operation does not create an empty current blob or an extra version." },
+            { "id": "version-everything-gone", "text": "Both versions are permanently deleted immediately.", "explanation": "Incorrect. Existing previous versions persist, and V2 becomes previous. Explicit version deletion is a different operation." },
+            { "id": "version-auto-oldest", "text": "V1 automatically becomes current because it is oldest.", "explanation": "Incorrect. Azure does not choose the desired recovery contents for you. Promotion requires a new copy/write operation." }
+          ],
+          "correctIds": ["version-two-previous"],
+          "explanation": "A missing current blob does not prove its history is gone. Inspect versions before uploading a replacement."
+        },
+        {
+          "id": "version-promote-check",
+          "kind": "single",
+          "prompt": "A desired historical version was soft-deleted but remains within retention. There is no current blob. Which recovery sequence makes the verified historical contents available at the base blob name?",
+          "choices": [
+            { "id": "promote-restore-copy", "text": "Undelete the blob's soft-deleted versions, verify the desired version, then copy it to the base name as a new current version.", "explanation": "Correct. Undelete restores availability of historical objects, and the copy establishes current contents with a new version identity." },
+            { "id": "promote-undelete-only", "text": "Undelete and assume the oldest restored version becomes current.", "explanation": "Incorrect. Undeleting versions does not automatically promote any of them." },
+            { "id": "promote-edit-version", "text": "Edit the old version in place and mark its timestamp current.", "explanation": "Incorrect. A historical version's contents and metadata are immutable; promotion is a new write." },
+            { "id": "promote-disable-history", "text": "Disable versioning so the deleted historical version becomes the live blob.", "explanation": "Incorrect. Disabling versioning changes future history capture. It neither restores deleted versions nor chooses current contents." }
+          ],
+          "correctIds": ["promote-restore-copy"],
+          "explanation": "Verify the right data before restoring the public-facing base name. The operation restores all soft-deleted versions of the blob, then you choose which content to copy."
+        },
+        {
+          "id": "hns-retention-check",
+          "kind": "multiple",
+          "prompt": "Select TWO correct planning statements from the current documentation.",
+          "choices": [
+            { "id": "hns-no-versioning", "text": "An HNS account can use supported blob/directory soft delete, but cannot use blob versioning.", "explanation": "Correct. These are distinct capabilities with different support, and HNS does not gain versioning merely by enabling soft delete." },
+            { "id": "retention-original-window", "text": "A blob deleted under a 30-day soft-delete setting keeps that original window when the setting later changes to 60 days.", "explanation": "Correct. Retention changes apply to subsequent deletions, not already retained deleted objects." },
+            { "id": "hns-overwrite-guarantee", "text": "HNS soft delete automatically creates the same overwrite snapshots described for flat-namespace accounts.", "explanation": "Incorrect. The documented overwrite-snapshot behavior specifically excludes HNS accounts." },
+            { "id": "retention-disable-purge", "text": "Disabling soft delete immediately purges all already soft-deleted data and stops its charges.", "explanation": "Incorrect. Existing soft-deleted data retains its original expiry and can remain recoverable and billed until then." }
+          ],
+          "correctIds": ["hns-no-versioning", "retention-original-window"],
+          "explanation": "Account capabilities and the setting active at deletion time both matter. Neither a later toggle nor a similar feature name changes the earlier event's semantics."
+        }
+      ],
+      "takeaways": [
+        "Configure blob and container soft delete separately before a loss; both currently support 1 to 365 retention days.",
+        "Supported block-blob writes create versions automatically, and deleting the base blob can leave history without a current version.",
+        "Copy verified historical contents to create a new current version; undelete alone does not promote one.",
+        "Whole-container recovery requires container soft delete and an available original name.",
+        "HNS supports applicable deleted-blob and directory recovery but not blob versioning or flat-namespace overwrite-snapshot behavior.",
+        "Recovery history costs money and is not protection against deleting the whole account."
+      ],
+      "sourceIds": ["blob-soft-delete", "container-soft-delete", "blob-versioning", "blob-feature-support", "blob-lifecycle-structure", "blob-access-tiers"]
+    },
+    {
+      "id": "files-shares-snapshots-recovery",
+      "title": "File shares that office computers can use and recover",
+      "summary": "Choose an Azure Files protocol and account model, configure a usable share, distinguish Files billing tiers from Blob tiers, and recover either individual files or an entire deleted share.",
+      "objectives": [
+        "Create and configure a share using compatible protocol, media, billing, redundancy, authorization, and network choices.",
+        "Distinguish HDD pay-as-you-go transaction optimized, hot, and cool tiers from SSD and provisioned billing.",
+        "Use a read-only share snapshot to recover selected files or reconstruct a share's earlier contents.",
+        "Use classic file-share soft delete for whole-share recovery, with current SMB, NFS, and resource-model qualifications."
+      ],
+      "sections": [
+        {
+          "id": "file-service-and-protocols",
+          "title": "A managed share speaks a filesystem protocol",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school office has an older application that expects folders, shared files, and file locks. Rewriting it to upload objects by web requests is unnecessary if Azure Files provides the file share it already understands. Azure manages the file service; the school does not maintain a Windows file-server virtual machine merely to host these files. Clients still need a compatible protocol, a network path, and permission to use the share. Creating it in the portal establishes a resource, not a successful client connection."
+            },
+            {
+              "type": "paragraph",
+              "text": "Server Message Block, SMB, is familiar from Windows shared folders and is also usable from supported Linux and macOS clients. Network File System, NFS, serves Linux-oriented workloads needing UNIX-style ownership and case-sensitive filenames. Azure Files supports NFS 4.1, which is different from Blob Storage's NFS 3.0 capability. One Azure file share cannot expose the same data through both SMB and NFS. Select the required protocol at creation; do not assume every storage service protocol checkbox configures that share."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the Windows office, choose SMB. For a Linux document-processing service that depends on UNIX user and group identifiers, consider NFS after checking its support requirements. Current Azure Files NFS shares require solid-state drive, SSD, media and support LRS or ZRS, not HDD, GRS, or GZRS. They do not support Windows clients, SMB-style identity authentication, or NFS access control lists. Ordinary UNIX permissions still apply. These limits are selection criteria, not defects that a broader Azure management role can bypass."
+            }
+          ]
+        },
+        {
+          "id": "files-account-and-billing-models",
+          "title": "Separate the share model, physical media, and billing model",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Current documentation uses classic file share for a share inside a Microsoft.Storage storage account. Classic does not mean retired. Such accounts still provide supported SMB and NFS deployments. A newer generally available Microsoft.FileShares resource provider creates a file share directly in a resource group without a storage account. As reviewed in September 2026, this standalone model supports NFS on SSD with provisioned v2 billing and selected regional availability. It supports snapshots but not file-share soft delete. Choose classic shares when the requirement includes SMB or classic share soft delete."
+            },
+            {
+              "type": "table",
+              "caption": "Supported classic-share account and billing combinations, subject to regional availability",
+              "headers": ["Account kind and billing", "Media and protocol", "Capacity and performance decision"],
+              "rows": [
+                ["StorageV2, pay-as-you-go", "HDD, SMB.", "Set a quota; pay for actual used storage and transactions. Choose transaction optimized, hot, or cool."],
+                ["FileStorage, provisioned v1", "SSD, SMB or NFS.", "Provision storage; performance allowances are linked to the provisioned capacity."],
+                ["FileStorage, provisioned v2", "HDD SMB, or SSD SMB/NFS.", "Provision storage, input/output operations per second, and throughput independently."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Input/output operations per second, IOPS, measures how many storage operations a workload performs each second. Throughput measures how much data moves per second. A small-file workload can need many IOPS without high byte throughput. Provisioned v2 lets you size these separately instead of buying additional capacity only to obtain performance. FileStorage is no longer a synonym for SSD alone: its provisioned v2 combinations include HDD, meaning hard disk drive. The account's SKU is its product configuration code, identifying choices such as performance and redundancy. Microsoft recommends provisioned v2 for new classic deployments, while provisioned v1 and pay-as-you-go remain supported."
+            },
+            {
+              "type": "paragraph",
+              "text": "A pay-as-you-go quota is a maximum logical share size, not a purchase of all those bytes. Provisioned capacity is billed even when empty. For a paper share with 100 GiB provisioned and 20 GiB used, the capacity allocation is still 100 GiB, with 80 GiB unused headroom; performance and snapshot charges are separate. GiB means 1,073,741,824 bytes. In all classic models, shares share account limits and some account-wide settings. Do not place unrelated departments together merely because their current file sizes fit."
+            }
+          ]
+        },
+        {
+          "id": "files-network-and-authorization",
+          "title": "Check the client path and identity separately",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "SMB normally uses TCP port 445, which many office networks and internet providers block. A successful portal upload over HTTPS therefore does not prove a laptop can mount the share over SMB. Plan a permitted public-endpoint connection using compatible encrypted SMB where appropriate, or a private endpoint reached through the school's approved virtual-network connection. A private endpoint provides a private IP, but clients still need routing and correct name resolution. Do not respond to a blocked mount by giving every student account administrative storage credentials."
+            },
+            {
+              "type": "paragraph",
+              "text": "For SMB, prefer a supported identity-based configuration, such as the school's existing Active Directory Domain Services (AD DS) integration. Kerberos is the ticket-based authentication protocol used in such a configuration. The complete design includes a supported client/domain relationship, share-level data access, and file/directory access control lists, or ACLs. A user needs all relevant layers to allow the action. Microsoft Entra-based alternatives have their own identity and client prerequisites. Merely signing in to the Azure portal is not equivalent to configuring SMB authentication."
+            },
+            {
+              "type": "paragraph",
+              "text": "An account key can authorize an SMB mount, but it is a powerful shared secret, not a personal login. It must not be distributed to students to repair missing ACLs. NFS has a different model: network/host-based access plus UNIX permissions using numeric user and group identifiers, rather than Microsoft Entra user-based SMB authentication. For classic NFS shares, configure a private endpoint or restrict access through selected virtual-network service endpoints. Allowing an arbitrary internet IP is not a substitute for that NFS network design."
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep encryption in transit enabled using supported clients. Current Azure Files documentation includes NFS encryption in transit and per-protocol requirement settings; old guidance that simply disables secure transfer is not a universal current prerequisite. Use the documented supported encrypted NFS client approach if creating that design. Management-plane permission to create the share, filesystem authentication, filesystem authorization, and network access answer four different questions. Test each instead of treating one successful portal operation as proof of them all."
+            }
+          ]
+        },
+        {
+          "id": "create-office-share-worked",
+          "title": "Create the office share from explicit requirements",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Configure a small classic SMB office share",
+              "scenario": "This paper design uses an existing authorized standard StorageV2 pay-as-you-go account in a supported region. The office already has a working supported AD DS integration and approved private network access. The example deliberately uses the still-supported pay-as-you-go model to teach its quota and access-tier controls.",
+              "steps": [
+                { "action": "Verify the account is StorageV2 with the intended redundancy and does not host unrelated users whose account-wide settings must differ.", "why": "HDD pay-as-you-go SMB shares belong in this account kind. Choosing a premium account would lead to different provisioning and billing controls." },
+                { "action": "Open Classic file shares, add office-docs, and select the compatible SMB share configuration.", "why": "The name uses lowercase letters and a single hyphen. The Windows office application requires SMB, not NFS or a Blob container." },
+                { "action": "Set a 100 GiB quota and begin migration in transaction optimized, reviewing rather than blindly accepting optional Backup defaults.", "why": "The quota bounds growth but is not 100 GiB of purchased storage. Migration can be transaction-heavy, and an added backup service has its own configuration and costs." },
+                { "action": "Confirm the file-service soft-delete period, the approved file endpoint and DNS path, and the office group's share permission and directory ACLs.", "why": "Creating the share alone does not provide recoverability or usable least-privilege access. Blob soft-delete settings do not protect this share." },
+                { "action": "Mount using the supported office identity, create a harmless test file, close it, reopen it, and test a deliberately read-only user's access.", "why": "This validates the real SMB client and authorization behavior rather than only the portal's separate access method." }
+              ],
+              "result": "The share is correctly selected, capacity-bounded, and tested through the intended filesystem protocol. A failed mount is investigated as network, authentication, or authorization evidence, not solved by random tier changes."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the Linux processing alternative, choose a classic FileStorage SSD provisioned account if whole-share soft delete is required, select NFS 4.1 on a new share, and provision capacity and performance using the chosen billing model. Configure the restricted network, supported encrypted client, UNIX identifiers and permissions, and an appropriate root-squash policy before testing a mount and file creation. Root squash limits the special treatment of a client's root user. If using standalone Microsoft.FileShares instead, design its per-share networking and recognize that classic account soft delete cannot be added to it."
+            }
+          ]
+        },
+        {
+          "id": "files-tier-selection-worked",
+          "title": "Files hot and cool are not the Blob tier ladder",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An HDD pay-as-you-go classic share offers transaction optimized, hot, and cool access tiers. All three use the same HDD media and stay online. Transaction optimized trades a higher capacity price for lower transaction prices; hot is the middle trade-off; cool favors low activity with lower capacity pricing but higher transactions and a data-retrieval charge. This is a share-level decision, not a per-file archive action. There is no Azure Files cold or archive option in this model, and no Blob lifecycle policy that moves individual share files between those Blob tiers."
+            },
+            {
+              "type": "example",
+              "title": "Choose a tier after observing ordinary office use",
+              "scenario": "The office has finished its one-time migration into a 100 GiB quota share. It uses 20 GiB of live data. The administrator compares a busy working-document share with a separate rarely opened archive share.",
+              "steps": [
+                { "action": "Measure representative File transactions after migration instead of using the upload week's totals.", "why": "Migration creates unusually heavy writes and listings. Using those totals forever would misrepresent ordinary behavior." },
+                { "action": "Compare transaction optimized and hot for the busy share, including lists and other operations rather than counting only saved files.", "why": "Opening or saving one document can create many protocol transactions. Capacity price alone does not capture the workload's cost." },
+                { "action": "Evaluate cool for the rarely accessed share, including occasional full reads, metadata, retrieval, and tier-change costs.", "why": "Cool can save capacity cost but a monthly large retrieval or scan can change the total. No fixed currency saving is assumed." },
+                { "action": "If measured latency or performance instead requires SSD, plan a new SSD share and copy the data rather than choosing a nonexistent Files archive or SSD access-tier toggle.", "why": "Changing HDD pay-as-you-go access tier is different from migrating between HDD and SSD media and their billing models." }
+              ],
+              "result": "The school chooses from real measurements and service-specific controls. Twenty GiB used under a 100 GiB quota is not billed like a provisioned 100 GiB share, and neither becomes offline by choosing Files cool."
+            },
+            {
+              "type": "paragraph",
+              "text": "Current pay-as-you-go documentation allows up to five share access-tier changes in a 30-day window and requires at least 24 hours between changes. A tier change can produce a transaction per file and, when leaving cool, retrieval charges. These are not Blob's GPv2 30/90/180-day rules. SSD shares use provisioned v1 or v2; HDD also has a provisioned v2 option, which does not use the pay-as-you-go transaction optimized/hot/cool choice. Always name the billing model before describing a tier."
+            }
+          ]
+        },
+        {
+          "id": "share-snapshots",
+          "title": "Capture a share now so individual files can be recovered later",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An Azure Files share snapshot is a read-only view of the whole share at a particular time. Taking it is a share-level operation, but retrieval can be file-level. You can copy one lost file, recover a directory, or reconstruct all needed contents by copying files from that point. The snapshot is not promoted into a writable live share. Restoring a file copies old bytes into a writable destination, while the original snapshot remains read-only and unchanged."
+            },
+            {
+              "type": "paragraph",
+              "text": "Snapshots store changes incrementally, but each retained snapshot provides a usable logical view without requiring you to keep every earlier snapshot in a chain. Changed data still consumes billed storage. Snapshots share the original share's redundancy and are not an independent offsite backup. Deleting the share deletes its snapshots too, subject to applicable whole-share soft delete. They cannot be kept independently after permanent deletion of the share or account."
+            },
+            {
+              "type": "paragraph",
+              "text": "Current documentation supports snapshots for both SMB and NFS, including classic shares and standalone Microsoft.FileShares. Do not repeat the old blanket claim that NFS lacks snapshots. For NFS, mount the share before taking the first snapshots; snapshots taken before the initial mount can fail to appear in a listing. Use the appropriate management-plane operations for classic NFS snapshot management and the NFS snapshot view for copying files. Azure Backup support must be checked separately: the current NFS guidance does not support Azure Backup for NFS shares."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Files currently supports up to 200 snapshots per share. Plan a schedule and expiration policy before reaching that limit. A snapshot only contains data present at its capture time; it cannot rescue a file created and deleted between captures. For example, a snapshot at 08:00 does not contain a worksheet first saved at 08:10 and lost at 08:20. Frequency therefore determines possible lost changes, while retention determines how far back you can look."
+            }
+          ]
+        },
+        {
+          "id": "file-restore-worked",
+          "title": "Restore one file without rolling back everyone else's work",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Recover the office timetable from a share snapshot",
+              "scenario": "A classic SMB share contains timetable.csv with correct contents at 08:00 when an administrator creates snapshot S1. At 10:00 a staff member overwrites it. Other users have made legitimate changes to different files since 08:00.",
+              "steps": [
+                { "action": "Browse S1 through the share's Snapshots view or a supported SMB client's Previous Versions view.", "why": "The snapshot time precedes the mistake. Browsing the live share would show the incorrect current file, not the retained contents." },
+                { "action": "Copy timetable.csv from S1 to a separate recovery location and inspect its contents with the office owner.", "why": "Verification avoids restoring the wrong timetable and preserves the live file as evidence until the intended recovery is agreed." },
+                { "action": "Copy or restore only the verified timetable over the live timetable after coordinating with anyone who has it open.", "why": "A narrow file restore avoids replacing unrelated documents that contain valid changes made after 08:00." },
+                { "action": "Reopen the restored file through the office's normal SMB path and keep S1 according to its retention plan.", "why": "A working current file proves recovery. The read-only snapshot still exists; copying from it did not consume or modify it." }
+              ],
+              "result": "Only the damaged file returns to its 08:00 contents. The rest of the share retains its later valid changes."
+            },
+            {
+              "type": "paragraph",
+              "text": "For NFS recovery, a permitted Linux client can browse the share's hidden .snapshots directory and copy selected files into a separate restore directory before replacing live data. Allow the documented brief delay after creating a snapshot before expecting that view to appear. Use the correct snapshot identity and preserve necessary ownership and permissions during copying. Restoring all files is still a file-copy recovery, not an atomic promotion of the snapshot into the original writable share."
+            },
+            {
+              "type": "prediction",
+              "id": "files-single-delete-prediction",
+              "prompt": "A staff member deletes one CSV file from an otherwise active classic share. Share soft delete is enabled for 30 days, but there is no snapshot or backup containing the CSV. Can share soft delete undelete just that CSV?",
+              "answer": "No. Share soft delete protects deletion of the whole share, not individual file deletion.",
+              "explanation": "The share itself never entered the soft-deleted state. You needed an earlier snapshot or another backup containing the file. Deleting the whole share now would not recreate contents already missing from it."
+            }
+          ]
+        },
+        {
+          "id": "share-soft-delete-worked",
+          "title": "Recover a deleted classic share as one object",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "File-share soft delete is a file-service setting at storage-account level, applying to classic shares in that account. It is separate from both Blob soft-delete settings. Current documentation supports classic SMB and classic NFS shares and permits 1 to 365 retention days, with seven days the default. Inspect the actual setting rather than trusting a creation default. The newer standalone Microsoft.FileShares model does not support this feature, despite supporting snapshots."
+            },
+            {
+              "type": "paragraph",
+              "text": "Deleting a protected classic share retains the whole share in a soft-deleted state. Undeleting restores that share, its files, directories, and snapshots as they stood at share deletion. It is not a menu of independently undeletable files. The clock begins when the share is deleted. A retention change affects later deletions, and disabling the feature does not instantly remove shares already retained under their original windows. Retained data can continue to cost money, with the exact billing treatment depending on the billing model."
+            },
+            {
+              "type": "example",
+              "title": "Recover the whole office share",
+              "scenario": "A classic office-docs share had 30-day file-share soft delete enabled before someone deleted the share this morning. The storage account remains intact. Snapshot S1 and the live files existed immediately before that deletion.",
+              "steps": [
+                { "action": "Open Classic file shares, show deleted shares, and identify office-docs with the correct deleted share version and deletion time.", "why": "Whole-share recovery must target the deleted share instance. A blob version identifier or file snapshot timestamp is a different identifier." },
+                { "action": "Undelete the retained share while it is within its original 30-day window.", "why": "This restores the whole share including retained contents and snapshots. It is not a restore operation on one file." },
+                { "action": "Confirm Active status, inspect S1, and read expected live files through the approved client path.", "why": "These observations establish that the resource, its historical snapshot, and useful current data are all available." },
+                { "action": "If a live file had already been wrong before the share deletion, separately recover that file from S1 when S1 contains a correct copy.", "why": "Share undelete restores the deletion-time state, including any mistakes already present. A prior snapshot solves that earlier file-level error." }
+              ],
+              "result": "The complete share is restored, and any separate earlier file corruption has its own recovery step. The two protections complement each other rather than duplicating the same function."
+            }
+          ]
+        },
+        {
+          "id": "files-recovery-boundaries-and-exam",
+          "title": "State the protocol and recovery granularity in every answer",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Consider three failures in the same office: a single deleted worksheet, a deleted share, and a deleted storage account. A snapshot containing the worksheet can supply the first recovery. Classic share soft delete can supply the second within retention, bringing its snapshots back too. Neither is sufficient for the third. Prevent accidental account deletion with carefully managed resource locks and use a separately designed backup strategy for broader loss. Do not delete production resources simply to test these boundaries."
+            },
+            {
+              "type": "paragraph",
+              "text": "An NFS requirement also changes the valid choices before recovery begins. NFS needs SSD and LRS or ZRS, uses network/host access with UNIX permissions, and currently has snapshot support. Classic NFS shares also have soft delete, while standalone NFS shares do not. SMB supports HDD choices and identity-based access patterns, but those do not make an SMB share simultaneously NFS-compatible. A correct plan names both the protocol and the resource model instead of saying Azure Files supports everything in one share."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Similar words, different operations",
+              "text": "Blob versioning automatically captures supported object writes. A Files snapshot captures a point-in-time share view. Files soft delete recovers a whole deleted classic share. Files HDD cool stays online and is not Blob archive. The account's Blob HNS or NFS 3.0 checkbox does not turn a file share into NFS 4.1. Match the service, resource model, protocol, billing model, and lost object before choosing a setting."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "files-protocol-check",
+          "kind": "single",
+          "prompt": "A Linux school service requires an Azure Files NFS 4.1 share and whole-share soft delete. Assume its region supports the selected classic SKU. Which design is compatible?",
+          "choices": [
+            { "id": "files-classic-nfs", "text": "A classic FileStorage SSD NFS share with LRS or ZRS, configured restricted networking, UNIX permissions, and file-share soft delete.", "explanation": "Correct. Classic NFS supports this combination. It requires the NFS network and permission model rather than SMB identity assumptions." },
+            { "id": "files-hdd-nfs", "text": "A StorageV2 HDD cool NFS share with GRS.", "explanation": "Incorrect. Azure Files NFS requires SSD and supports LRS/ZRS, not HDD or GRS. HDD pay-as-you-go cool is an SMB share option." },
+            { "id": "files-standalone-soft-delete", "text": "A standalone Microsoft.FileShares NFS share protected by a nearby storage account's file soft-delete setting.", "explanation": "Incorrect. The standalone model currently lacks soft delete and does not inherit a separate account's file-service settings." },
+            { "id": "files-dual-protocol", "text": "One SMB share with NFS also enabled on the same data by checking the account's Blob NFS 3.0 option.", "explanation": "Incorrect. Azure Files shares are not dual-protocol, and the Blob NFS option does not configure Files NFS 4.1." }
+          ],
+          "correctIds": ["files-classic-nfs"],
+          "explanation": "Protocol compatibility, media, redundancy, network access, and resource model all constrain creation. A management role cannot make an unsupported combination valid."
+        },
+        {
+          "id": "files-tier-check",
+          "kind": "multiple",
+          "prompt": "Select TWO accurate statements when comparing Azure Files share configuration and pricing models.",
+          "choices": [
+            { "id": "files-online-cool", "text": "An HDD pay-as-you-go cool share remains online, with a different capacity/transaction/retrieval trade-off from hot.", "explanation": "Correct. These share access tiers use the same HDD media and do not require Blob-style archive rehydration." },
+            { "id": "files-v2-independent", "text": "Provisioned v2 lets the administrator set capacity, IOPS, and throughput separately and bills provisioned quantities.", "explanation": "Correct. This differs from both a pay-as-you-go quota and provisioned v1's capacity-linked performance." },
+            { "id": "files-quota-payment", "text": "A 100 GiB pay-as-you-go quota with 20 GiB live usage necessarily purchases 100 GiB of storage.", "explanation": "Incorrect. The quota limits growth; pay-as-you-go capacity charges follow used storage, including applicable retained data, rather than the quota alone." },
+            { "id": "files-blob-lifecycle", "text": "Blob lifecycle rules can move individual files in a share into Azure Files archive.", "explanation": "Incorrect. Blob lifecycle acts on supported blobs, not share files, and this Files model has no archive access tier." }
+          ],
+          "correctIds": ["files-online-cool", "files-v2-independent"],
+          "explanation": "Specify the service, media, and billing model before discussing a tier or capacity charge. Similar hot/cool names do not make Blob and Files pricing rules interchangeable."
+        },
+        {
+          "id": "snapshot-file-check",
+          "kind": "single",
+          "prompt": "An 08:00 snapshot of an SMB share contains the correct timetable. At 10:00 only that file is corrupted, while other files have valid later edits. What is the narrowest suitable recovery?",
+          "choices": [
+            { "id": "snapshot-copy-one", "text": "Verify the timetable in the 08:00 snapshot and copy or restore only that file into the live share.", "explanation": "Correct. Snapshot retrieval supports individual files even though snapshot capture was at share scope." },
+            { "id": "snapshot-edit-source", "text": "Edit the timetable inside the snapshot, which changes the live share automatically.", "explanation": "Incorrect. The snapshot is read-only, and restoring requires copying data into a writable destination." },
+            { "id": "snapshot-share-undelete", "text": "Use share soft delete to undelete just the timetable while the share is active.", "explanation": "Incorrect. Share soft delete protects whole-share deletion, not individual files in an active share." },
+            { "id": "snapshot-rollback-all", "text": "Replace all current files with 08:00 contents because a snapshot can restore only the entire share.", "explanation": "Incorrect. Individual-file restore is supported, and replacing everything risks undoing valid later work." }
+          ],
+          "correctIds": ["snapshot-copy-one"],
+          "explanation": "Choose the smallest recovery scope that solves the actual loss. The snapshot remains intact after its data is copied."
+        },
+        {
+          "id": "share-delete-check",
+          "kind": "multiple",
+          "prompt": "Select TWO correct recovery statements, based on current Azure Files documentation.",
+          "choices": [
+            { "id": "share-classic-recovery", "text": "Classic SMB and NFS shares can use whole-share soft delete with a 1-to-365-day retention period.", "explanation": "Correct. The file-service setting applies to classic shares in its storage account and restores the deleted share with its retained contents and snapshots." },
+            { "id": "share-nfs-snapshot", "text": "NFS supports share snapshots, including the standalone Microsoft.FileShares model, but that standalone model lacks soft delete.", "explanation": "Correct. Snapshot support and share soft-delete support must be checked separately by resource model." },
+            { "id": "share-account-undelete", "text": "A share snapshot and share soft delete guarantee recovery after storage-account deletion.", "explanation": "Incorrect. These are in-account protections. Account-level loss requires separate prevention and backup planning." },
+            { "id": "share-prior-file", "text": "Undeleting a share always restores any file deleted before the share itself was deleted, even without a containing snapshot.", "explanation": "Incorrect. Share recovery returns the share's deletion-time state. Earlier missing contents need an appropriate earlier snapshot or backup." }
+          ],
+          "correctIds": ["share-classic-recovery", "share-nfs-snapshot"],
+          "explanation": "Recovery granularity and deployment model matter more than the generic word recovery. A whole-share restore and a file restore solve different incidents."
+        }
+      ],
+      "takeaways": [
+        "Create a compatible share by selecting protocol, account/resource model, media, redundancy, billing, network, and permissions together.",
+        "Classic FileStorage supports provisioned models; StorageV2 supports HDD pay-as-you-go shares. FileStorage provisioned v2 can use HDD as well as SSD.",
+        "Files transaction optimized, hot, and cool are online HDD pay-as-you-go share tiers, not the Blob tier ladder.",
+        "Share snapshots are read-only point-in-time views, but recovery can copy individual files.",
+        "Classic SMB and NFS share soft delete recovers the entire share, including snapshots, not a single file deleted from a live share.",
+        "Standalone Microsoft.FileShares is a generally available NFS SSD provisioned v2 model with snapshots but currently without soft delete."
+      ],
+      "sourceIds": ["files-planning", "files-management-models", "files-create-classic", "files-billing", "files-nfs", "files-snapshots", "files-soft-delete"]
+    }
+  ],
+  "glossary": [
+    { "term": "Blob", "definition": "One named object containing bytes, properties, and optional metadata in Azure Blob Storage." },
+    { "term": "Container", "definition": "A grouping of blobs within a storage account, with its own name and anonymous-access setting." },
+    { "term": "Hierarchical namespace (HNS)", "definition": "An account capability that gives Blob Storage real directories and filesystem-style operations for Data Lake workloads." },
+    { "term": "Access tier", "definition": "A service-specific storage and access pricing choice. Blob archive is offline; Files HDD pay-as-you-go hot and cool remain online." },
+    { "term": "Rehydration", "definition": "Making archived blob contents available in an online tier by a supported tier change or copy operation." },
+    { "term": "Lifecycle rule", "definition": "A rule combining object filters, time conditions, and actions to periodically tier or delete supported blobs." },
+    { "term": "Blob index tag", "definition": "A searchable name-value label on a blob, distinct from ordinary metadata or an Azure resource tag." },
+    { "term": "Blob version", "definition": "An automatically retained historical or current state with its own identifier, created by supported operations when versioning is enabled." },
+    { "term": "Soft delete", "definition": "Retention of logically deleted data for a configured recovery window. Blob, container, and file-share settings have different scopes." },
+    { "term": "Retention period", "definition": "The time a protection mechanism keeps data recoverable; this is not the same as a tier's minimum-duration billing rule." },
+    { "term": "Server Message Block (SMB)", "definition": "A network file-sharing protocol used by Windows and supported other clients to access Azure Files shares." },
+    { "term": "Network File System (NFS)", "definition": "A network filesystem protocol. Azure Files uses NFS 4.1 with its own support and access model, distinct from Blob NFS 3.0." },
+    { "term": "Share snapshot", "definition": "A read-only view of a file share at a point in time from which selected files or the share's contents can be copied." },
+    { "term": "Classic file share", "definition": "An Azure Files share created inside a Microsoft.Storage storage account, not a retired service." },
+    { "term": "IOPS", "definition": "Input/output operations per second, a count of storage operations rather than a quantity of stored bytes." },
+    { "term": "Throughput", "definition": "The amount of data transferred per unit of time, such as mebibytes per second." },
+    { "term": "Quota versus provisioned capacity", "definition": "A pay-as-you-go quota limits share growth; provisioned capacity is an allocation charged even when not fully used." },
+    { "term": "Access control list (ACL)", "definition": "A list of permissions attached to a file, directory, or other supported resource; it is distinct from network reachability." }
+  ],
+  "sources": [
+    {
+      "id": "guide-storage",
+      "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104",
+      "title": "AZ-104 study guide",
+      "supports": "The official storage objectives effective April 17, 2026: Files shares, Blob containers, tiers, Blob/container soft delete, Files snapshots and soft delete, lifecycle management, and versioning. Checked September 20, 2026."
+    },
+    {
+      "id": "blob-naming",
+      "url": "https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata",
+      "title": "Naming and referencing containers, blobs, and metadata",
+      "supports": "Container length, lowercase and hyphen rules; blob case sensitivity and length; account/container/name identity; flat names and HNS directories."
+    },
+    {
+      "id": "blob-anonymous-access",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-configure",
+      "title": "Configure anonymous read access for containers and blobs",
+      "supports": "Private, Blob, and Container anonymous levels; account-level prohibition overriding container settings; separate management permissions and Microsoft Entra data access."
+    },
+    {
+      "id": "blob-access-tiers",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/access-tiers-overview",
+      "title": "Access tiers for blob data",
+      "supports": "The complete current four-tier feature table and footnotes: online/offline behavior, relative cost and availability, GPv2 cool/cold 30/90 days versus no such legacy Blob Storage minimum, archive 180 days, LRS/GRS/RA-GRS archive restriction, inferred tiers, premium limitations, and soft-delete billing timing."
+    },
+    {
+      "id": "blob-rehydration",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/archive-rehydrate-overview",
+      "title": "Blob rehydration from the archive tier",
+      "supports": "Copy versus in-place tier change, archived previous-version copying, priority and non-instant retrieval, copy completion monitoring, charges, and protection against immediate lifecycle rearchiving."
+    },
+    {
+      "id": "blob-lifecycle-overview",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/lifecycle-management-overview",
+      "title": "Azure Blob Storage lifecycle management overview",
+      "supports": "Rule purpose, periodic asynchronous execution, up-to-24-hour policy activation, workload-dependent completion, premium tiering limitations, no archive rehydration, and soft-delete/immutability interactions."
+    },
+    {
+      "id": "blob-lifecycle-structure",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/lifecycle-management-policy-structure",
+      "title": "Lifecycle management policy structure",
+      "supports": "Prefix and index-tag filters, case sensitivity and literal wildcard characters, AND filtering, flat-namespace tag limitation, version/snapshot age clocks, strict age comparison, deletion ordering, overlapping actions, and last-tier-change conditions."
+    },
+    {
+      "id": "blob-index-tags",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/storage-manage-find-blobs",
+      "title": "Manage and find Azure Blob data with blob index tags",
+      "supports": "Index tags versus metadata and resource tags, current-version tagging, tags retained but not indexed on previous versions, and HNS preview tags not integrated with lifecycle management."
+    },
+    {
+      "id": "blob-soft-delete",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-blob-overview",
+      "title": "Soft delete for blobs",
+      "supports": "Blob retention 1-365 days, nonretroactive settings, supported overwrite snapshots, undelete behavior with versions, account/container boundaries, HNS deletion and rename/path restrictions, and retained-data billing."
+    },
+    {
+      "id": "container-soft-delete",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-container-overview",
+      "title": "Soft delete for containers",
+      "supports": "Whole-container restoration including versions and snapshots, separate 1-365-day retention, original-name requirement, name-reuse conflict, HNS support, and absence of account-deletion protection."
+    },
+    {
+      "id": "blob-versioning",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-overview",
+      "title": "Blob versioning",
+      "supports": "Supported accounts and write operations, no HNS versioning, immutable version contents, current-blob delete semantics, promotion through copy, interaction with soft delete, disabling behavior, unique-block and explicit-tier billing."
+    },
+    {
+      "id": "blob-feature-support",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/storage-feature-support-in-storage-accounts",
+      "title": "Blob Storage feature support in Azure Storage accounts",
+      "supports": "Current GPv2 and premium block blob compatibility across HNS, Blob NFS 3.0, and SFTP; unsupported versioning and preview snapshot/tag distinctions."
+    },
+    {
+      "id": "files-planning",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-files-planning",
+      "title": "Plan an Azure Files deployment",
+      "supports": "SMB/NFS protocol selection, identity methods, client and network prerequisites, SSD/HDD media, redundancy qualifications, and migration rather than direct HDD-to-SSD conversion."
+    },
+    {
+      "id": "files-management-models",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/files-management-concepts",
+      "title": "Azure Files management concepts",
+      "supports": "Generally available classic and standalone resource models; FileStorage versus StorageV2; standalone NFS SSD provisioned v2 model, regional scope, snapshots supported but soft delete unsupported."
+    },
+    {
+      "id": "files-create-classic",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/create-classic-file-share",
+      "title": "Create an Azure classic file share",
+      "supports": "Supported account-kind and SKU combinations, portal creation sequence, protocol and provisioning fields, share naming, backup defaults, and Blob-only account settings that do not configure Azure Files."
+    },
+    {
+      "id": "files-billing",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/understanding-billing",
+      "title": "Understand Azure Files billing",
+      "supports": "Provisioned v1/v2 versus pay-as-you-go, independent v2 sizing, GiB units, quota versus charged provisioning, HDD transaction optimized/hot/cool trade-offs, tier-change costs and timing limits, retained snapshot/share billing qualifications."
+    },
+    {
+      "id": "files-nfs",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/files-nfs-protocol",
+      "title": "NFS Azure file shares",
+      "supports": "NFS 4.1 SSD and LRS/ZRS restrictions, UNIX permissions and no NFS ACLs or Kerberos authentication, restricted networking, current encryption-in-transit support, and lack of Azure Backup support for NFS."
+    },
+    {
+      "id": "files-snapshots",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-snapshots-files",
+      "title": "Use share snapshots with Azure Files",
+      "supports": "Current SMB/NFS and resource-model support, point-in-time read-only share capture and individual-file copying, incremental storage, 200-snapshot limit, deletion dependency, NFS initial-mount requirement and snapshot browsing."
+    },
+    {
+      "id": "files-soft-delete",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/files/storage-files-prevent-file-share-deletion",
+      "title": "Azure file share soft delete",
+      "supports": "Classic SMB/NFS only, whole-share rather than individual-file recovery, snapshots restored with the share, storage-account-level file setting, retention 1-365 days and original-expiry behavior, and model-dependent billing."
+    }
+  ],
+  "lab": {
+    "title": "Optional manual lab: recover harmless school documents",
+    "purpose": "Practice object-scope recovery in a trainer-approved disposable account. This is optional and is not executed by the course. The core lessons already explain every required decision; no production data or real pupil records are needed.",
+    "prerequisites": [
+      "A trainer-approved disposable standard GPv2 StorageV2 account with flat namespace, hot Blob default, LRS, and HDD pay-as-you-go classic SMB shares available. Use an existing lab account dedicated to this exercise, not an account containing other users' data.",
+      "An authorized identity with the management permissions needed for account data-protection settings, containers, and classic shares, plus separately sufficient Blob/File data permissions for the chosen portal access method. Do not grant or reveal account keys merely to bypass missing permissions.",
+      "An approved network path and browser. An actual SMB mount additionally requires a supported client, permitted TCP 445 or approved private connectivity, correct DNS, and preconfigured SMB authentication and permissions.",
+      "Two harmless local text files containing clearly different text, such as timetable version one and timetable version two. Record the exact lab resource names before changing anything.",
+      "Approval for retention-related charges and a cleanup owner. Skip Azure execution and trace the lesson examples on paper if no subscription, budget, or permitted access is available."
+    ],
+    "costWarning": "Azure can charge for stored data, versions, snapshots, soft-deleted contents, and operations even in a small lab. Do not archive data, deploy VMs, add private endpoints, enable a backup vault, or purchase provisioned capacity merely for this exercise. The portal can offer Backup by default when creating a share; deliberately opt out for this dedicated short-lived lab if approved. Retention may keep charging after logical deletion. No fixed price or free entitlement is assumed.",
+    "steps": [
+      "Record the lab account and all current settings. In Data protection, verify or enable seven-day blob soft delete, seven-day container soft delete, and blob versioning. Separately verify or enable seven-day file-share soft delete. These settings are account-wide within their service, which is why the account must be dedicated.",
+      "Create the private container school-recovery-lab with account-level anonymous Blob access still disabled. Upload the first harmless text file as timetable.txt and record its actual version identifier, length, and hot tier.",
+      "Overwrite timetable.txt with the second content. Show versions and confirm the first is previous and the second current. Read the previous contents, then use the portal's supported promote/copy operation to make those verified contents current again. Confirm a new current version exists rather than assuming the old identifier changed.",
+      "Delete only the current base blob, leaving previous versions. Observe the missing current object and retained history. Copy the verified first contents back to the base name and confirm an ordinary authorized read succeeds.",
+      "Delete only school-recovery-lab, show deleted containers, and restore that exact container before reusing its name. Verify the expected blob and versions are present.",
+      "Create the classic SMB share office-recovery-lab in the approved pay-as-you-go account. Use a 1 GiB quota if accepted for that lab account, otherwise the smallest approved quota; this is not provisioned purchasing. Keep transaction optimized for the short exercise and review the optional Backup setting without provisioning a vault.",
+      "Upload the first harmless timetable file to the share through the permitted portal data path. Create a share snapshot, record its timestamp, then overwrite the live file with the second content.",
+      "Browse the snapshot, verify the earlier contents, and restore only the timetable file. Reopen the live file. If an approved SMB mount is already available, repeat the read through that client to distinguish portal access from mounted-share access.",
+      "Delete only office-recovery-lab with its snapshots as required by the portal workflow. Show deleted shares, select the recorded share instance, and undelete it. Confirm Active status, the live timetable, and the retained snapshot.",
+      "Write a paper lifecycle rule selecting only school-recovery-lab/ with an appropriate test tag and a current-blob modification age greater than 30 days. Predict which newly created lab objects match now. Do not enable automatic deletion or wait weeks for an age transition merely to finish this lab.",
+      "Record the differences between version promotion, container restore, snapshot file restore, and share undelete. Follow the narrow cleanup checklist and confirm who will track any retained-data charges until expiry."
+    ],
+    "expectedResults": [
+      "The private container supports authorized reads without anonymous access. Overwriting the block blob creates history, and copying old contents produces a new current version.",
+      "Deleting the current version leaves previous versions; deleting and restoring the whole container demonstrates its separate recovery scope.",
+      "The share snapshot contains the earlier text and can restore only that file without changing unrelated live files.",
+      "Classic share undelete restores the whole share and its snapshot. It does not demonstrate individual-file undelete, which share soft delete does not provide.",
+      "The newly created sample does not meet the paper lifecycle age threshold, and no archive rehydration or automatic destructive policy has been executed."
+    ],
+    "cleanup": [
+      "Remove only the recorded test blob versions, test container, test share, and its test snapshots when they are no longer needed. Deletion may leave recoverable retained objects and charges until their configured expiry.",
+      "Do not disable protection globally, shorten another user's retention, remove production locks, or delete an unrelated resource group to force immediate cleanup. If the account is genuinely lab-only, let its authorized owner decide its final disposal after verifying nothing else depends on it.",
+      "Remove only lab-created mounts, cached lab connections, and the harmless local sample files. Do not remove pre-existing network, identity, or backup configuration.",
+      "Recheck the lab account's active and deleted-object views and record the expected retention expiry. Confirm the cleanup owner will review remaining storage costs rather than claiming that an empty normal listing proves zero retained data."
+    ]
+  }
+}
