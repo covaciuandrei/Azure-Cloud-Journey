@@ -204,6 +204,18 @@
             {
               "type": "paragraph",
               "text": "Choose the age clock explicitly. A current blob can use time since last modification, creation, or tracked access, depending on the condition. Previous-version age uses that version's creation time, not when another write made it historical. Snapshot age uses snapshot creation time. Last-access rules require access-time tracking and have tracking costs; reading properties is not the same as reading content for that clock. Time conditions use greater than, so exactly 30 elapsed days does not yet satisfy greater than 30. Never describe a rule merely as moving old files without naming its clock."
+            },
+            {
+              "type": "example",
+              "title": "Turn the cooling rule into explicit configuration",
+              "scenario": "Use the flat-namespace GPv2 archive from this lesson. An authorized administrator is planning a rule for approved current block blobs only. No policy is submitted in this paper exercise.",
+              "steps": [
+                { "action": "Open the account's Data management, Lifecycle management, List View, and Add a rule. Name it approved-cooling and choose to limit blobs with filters, Block blobs, and the current/base-blob subtype.", "why": "A rule needs a unique name and an explicit object scope. Selecting previous versions would apply a different age clock and would not configure the intended current-document action." },
+                { "action": "In Base blobs, select last modification as the clock, enter 30 days, and choose the action that moves matching blobs to cool.", "why": "The resulting condition means more than 30 modification-days, not 30 days since the rule was created or since the previous tier change." },
+                { "action": "In Filter set, enter school-records/approved/ and the blob index tag condition Review equals complete.", "why": "The prefix includes the container name and final slash. Both filters must match, so drafts and approved-copy names stay outside this rule." },
+                { "action": "Review the complete policy, preserving unrelated rules. After authorization, Add would save the rule; reopen the policy to confirm its enabled state, filters, clock, and action, then observe eligible blobs after processing.", "why": "A policy update is a whole-policy operation, not a partial patch. A saved enabled rule starts asynchronous automation; it does not prove that all matching blobs have already changed tier. The next example predicts individual matches before any real application." }
+              ],
+              "result": "The plan specifies an actual configuration path and a way to verify the saved rule. History deletion would need a separately reviewed previous-version rule rather than silently extending this current-blob cooling rule."
             }
           ]
         },
@@ -313,7 +325,7 @@
         "Lifecycle filters and age clocks must be tested against current objects, previous versions, and snapshots separately.",
         "Lifecycle is asynchronous, cannot rehydrate archive data, and does not bypass soft delete or immutable protection."
       ],
-      "sourceIds": ["guide-storage", "blob-naming", "blob-anonymous-access", "blob-access-tiers", "blob-rehydration", "blob-lifecycle-overview", "blob-lifecycle-structure", "blob-index-tags", "blob-feature-support"]
+      "sourceIds": ["blob-naming", "blob-anonymous-access", "blob-access-tiers", "blob-rehydration", "blob-lifecycle-overview", "blob-lifecycle-structure", "blob-lifecycle-configure", "blob-index-tags", "blob-feature-support"]
     },
     {
       "id": "blob-versioning-and-recovery",
@@ -403,7 +415,11 @@
           "blocks": [
             {
               "type": "paragraph",
-              "text": "Blob versioning maintains identifiable historical states automatically. Enable it at storage-account level on a supported account, such as standard GPv2 without HNS, before the changes you need to retain. Creating a block blob produces a current version. A later supported write produces a new current version and makes the earlier one a previous version. Azure returns timestamp-based version identifiers. In the following examples, V1 and V2 are classroom labels for those identifiers, not strings you should expect Azure to generate."
+              "text": "Blob versioning maintains identifiable historical states automatically. On a supported account, such as standard GPv2 without HNS, open Data management, Data protection, and the Tracking section. Select Enable versioning for blobs before the changes you need to retain. Choose deliberately between keeping versions and deleting them after a period, then save and verify the setting. The portal's Delete versions after choice creates a lifecycle rule; inspect that rule in Lifecycle management rather than confusing it with blob soft-delete retention. Once such a rule exists, the shortcut may disappear from Data protection even though the lifecycle rule remains active."
+            },
+            {
+              "type": "paragraph",
+              "text": "Creating a block blob produces a current version. A later supported write produces a new current version and makes the earlier one a previous version. Azure returns timestamp-based version identifiers. In the following examples, V1 and V2 are classroom labels for those identifiers, not strings you should expect Azure to generate. To check an approved synthetic test, upload then overwrite a small block blob and open that blob's Versions tab. Confirm both identifiers and which one is current instead of treating the configuration checkbox as proof that the expected history exists."
             },
             {
               "type": "paragraph",
@@ -568,7 +584,7 @@
         "HNS supports applicable deleted-blob and directory recovery but not blob versioning or flat-namespace overwrite-snapshot behavior.",
         "Recovery history costs money and is not protection against deleting the whole account."
       ],
-      "sourceIds": ["blob-soft-delete", "container-soft-delete", "blob-versioning", "blob-feature-support", "blob-lifecycle-structure", "blob-access-tiers"]
+      "sourceIds": ["blob-soft-delete", "container-soft-delete", "blob-versioning", "blob-versioning-configure", "blob-feature-support", "blob-lifecycle-structure", "blob-access-tiers"]
     },
     {
       "id": "files-shares-snapshots-recovery",
@@ -704,7 +720,7 @@
           "blocks": [
             {
               "type": "paragraph",
-              "text": "An Azure Files share snapshot is a read-only view of the whole share at a particular time. Taking it is a share-level operation, but retrieval can be file-level. You can copy one lost file, recover a directory, or reconstruct all needed contents by copying files from that point. The snapshot is not promoted into a writable live share. Restoring a file copies old bytes into a writable destination, while the original snapshot remains read-only and unchanged."
+              "text": "An Azure Files share snapshot is a read-only view of the whole share at a particular time. Taking it is a share-level operation, but retrieval can be file-level. For an authorized manual SMB capture, open the intended share in the portal, select Snapshots, Add snapshot, then OK. Record the new timestamp and browse the captured synthetic file to confirm the recovery point exists before changing live data. You can copy one lost file, recover a directory, or reconstruct all needed contents by copying files from that point. The snapshot is not promoted into a writable live share. Restoring a file copies old bytes into a writable destination, while the original snapshot remains read-only and unchanged."
             },
             {
               "type": "paragraph",
@@ -755,7 +771,7 @@
           "blocks": [
             {
               "type": "paragraph",
-              "text": "File-share soft delete is a file-service setting at storage-account level, applying to classic shares in that account. It is separate from both Blob soft-delete settings. Current documentation supports classic SMB and classic NFS shares and permits 1 to 365 retention days, with seven days the default. Inspect the actual setting rather than trusting a creation default. The newer standalone Microsoft.FileShares model does not support this feature, despite supporting snapshots."
+              "text": "File-share soft delete is a file-service setting at storage-account level, applying to classic shares in that account. It is separate from both Blob soft-delete settings. Current documentation supports classic SMB and classic NFS shares and permits 1 to 365 retention days, with seven days the default. For an authorized setup, open the account's Data storage, Classic file shares, select the Soft delete status, enable Soft delete for all file shares, choose the retention days, and Save. Reopen the setting to verify it before relying on recovery. The newer standalone Microsoft.FileShares model does not support this feature, despite supporting snapshots."
             },
             {
               "type": "paragraph",
@@ -883,10 +899,10 @@
   ],
   "sources": [
     {
-      "id": "guide-storage",
-      "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104",
-      "title": "AZ-104 study guide",
-      "supports": "The official storage objectives effective April 17, 2026: Files shares, Blob containers, tiers, Blob/container soft delete, Files snapshots and soft delete, lifecycle management, and versioning. Checked September 20, 2026."
+      "id": "blob-lifecycle-configure",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/lifecycle-management-policy-configure",
+      "title": "Configure a lifecycle management policy",
+      "supports": "Checked 2026-09-20. Portal rule creation, current/base blob subtype, last-modified age, tier action, filters, saving with Add, and whole-policy updates that must preserve unrelated rules. The central objectives map retains the official exam-guide reference."
     },
     {
       "id": "blob-naming",
@@ -947,6 +963,12 @@
       "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-overview",
       "title": "Blob versioning",
       "supports": "Supported accounts and write operations, no HNS versioning, immutable version contents, current-blob delete semantics, promotion through copy, interaction with soft delete, disabling behavior, unique-block and explicit-tier billing."
+    },
+    {
+      "id": "blob-versioning-configure",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/versioning-enable",
+      "title": "Enable and manage blob versioning",
+      "supports": "Checked 2026-09-20. Data protection and Tracking setup, the Delete versions after shortcut creating a lifecycle rule, disappearance of that shortcut while deletion rules exist, and the Versions and Show deleted versions views used to verify history."
     },
     {
       "id": "blob-feature-support",

@@ -59,7 +59,7 @@
           "checkpointIds": [
             "storage-sas-stored-policy"
           ],
-          "evidence": "The printing-partner worked application creates a container policy, binds blob-scoped service SAS links to its identifier, and revokes those links through policy expiry or deletion. Teaching explains supported resource containers, the five-policy limit, unduplicated policy and token constraints, propagation, and the risk of reusing a revoked identifier. It explicitly rejects stored policies for account and user delegation SAS."
+          "evidence": "The printing-partner worked application configures and saves a container policy through Access policy, distinguishing OK from the required Save, binds blob-scoped service SAS links to its identifier, and revokes those links through policy expiry or deletion. Teaching explains supported resource containers, the five-policy limit, unduplicated policy and token constraints, propagation, and the risk of reusing a revoked identifier. It explicitly rejects stored policies for account and user delegation SAS."
         }
       ]
     },
@@ -102,7 +102,7 @@
             "files-default-rbac-interaction",
             "files-protocol-and-identity-boundary"
           ],
-          "evidence": "The lesson selects among AD DS, Entra Domain Services, and Entra Kerberos for SMB, with one source per account and explicit device, synchronization, ticket, and protocol prerequisites. The timetable worked application assigns ordinary share roles and directory ACLs and evaluates teacher, student, and archivist operations. Default-share grants, privileged administrative exceptions, and current cloud-only documentation and Preview qualifications are taught without replacing the hybrid core."
+          "evidence": "The lesson selects among AD DS, Entra Domain Services, and Entra Kerberos for SMB, with one source per account and explicit device, synchronization, ticket, and protocol prerequisites. A hybrid setup walkthrough configures the account identity source, application consent, scoped MFA handling, client ticket policy, and permission verification. The timetable application configures ordinary share roles and directory ACLs and evaluates teacher, student, and archivist operations. Default-share grants, privileged exceptions, and current cloud-only documentation and Preview qualifications are taught without replacing the hybrid core."
         }
       ]
     },
@@ -167,7 +167,7 @@
             "storage-object-prerequisites",
             "storage-object-selection-and-writes"
           ],
-          "evidence": "The worked school publication replica enables eligible account prerequisites, source change feed, and both accounts' versioning, then associates matching source and destination policies and selects approved old and new block blobs. The learner explains why unsupported object types, omitted selection criteria, HNS, destination writes, deleted source content, and unverified endpoint or account access assumptions prevent an automatic whole-account mirror."
+          "evidence": "The worked school publication replica enables eligible account prerequisites, source change feed, and both accounts' versioning, then configures container pairs, prefix, and all-object copy scope through the source account's Object replication controls. It explains Save and apply, matching source and destination policies, and selection of approved old and new block blobs. The learner explains why unsupported object types, omitted selection criteria, HNS, destination writes, deleted source content, and unverified endpoint or account access assumptions prevent an automatic whole-account mirror."
         }
       ]
     },
@@ -317,7 +317,7 @@
             "snapshot-file-check",
             "share-delete-check"
           ],
-          "evidence": "The snapshot application recovers one damaged file from a read-only point-in-time share snapshot without overwriting unrelated live files. A separate application undeletes a whole storage-account-based share within its retention window. Teaching applies current SMB and NFS qualifications and explicitly distinguishes classic share soft delete from standalone share support and individual-file recovery."
+          "evidence": "The lesson shows SMB snapshot creation and verification before the file-level recovery application, which restores one damaged file without overwriting unrelated live files. It separately configures and saves file-service soft-delete retention, then undeletes a whole storage-account-based share within that window. Teaching applies current SMB and NFS qualifications and explicitly distinguishes classic share soft delete from standalone share support and individual-file recovery."
         }
       ]
     },
@@ -335,7 +335,7 @@
           "checkpointIds": [
             "lifecycle-filter-age-check"
           ],
-          "evidence": "The lifecycle timeline applies prefix and tag conditions to selected school archive blobs and evaluates separate age clocks for current blobs and historical versions or snapshots. The learner coordinates tier and deletion actions, accounts for dependencies before deleting current data, and explains asynchronous processing, HNS tag-filter limits, and why lifecycle rules cannot rehydrate archived blobs."
+          "evidence": "The lifecycle configuration application uses the portal's rule scope, base-blob subtype, modification-age clock, cooling action, filter set, and Add control, preserving unrelated rules in whole-policy updates. The timeline then applies prefix and tag conditions and evaluates separate age clocks for current blobs and historical versions or snapshots. The learner coordinates tier and deletion actions, accounts for dependencies before deleting current data, and explains asynchronous processing, HNS tag-filter limits, and why lifecycle cannot rehydrate archived blobs."
         }
       ]
     },
@@ -354,7 +354,7 @@
             "version-delete-check",
             "version-promote-check"
           ],
-          "evidence": "The worked V1, V2, and V3 history traces automatic version creation, deletion leaving no current blob under the stated versioning configuration, and promotion of verified older content into a new current version. It distinguishes immutable historical versions from direct editing and considers HNS incompatibility, protection limits, and retained-data storage costs."
+          "evidence": "The learner enables versioning through Data protection and Tracking, understands that Delete versions after creates a lifecycle rule, and verifies actual history in the Versions tab. The worked V1, V2, and V3 history traces automatic creation, deletion leaving no current blob, and promotion of verified older content into a new current version. It distinguishes immutable historical versions from direct editing and considers HNS incompatibility, protection limits, and retained-data storage costs."
         }
       ]
     }

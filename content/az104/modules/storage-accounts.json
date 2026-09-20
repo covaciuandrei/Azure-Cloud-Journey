@@ -521,12 +521,12 @@
                   "why": "Replication uses source change information and versioned blob states. A destination change feed is not one of these required prerequisites."
                 },
                 {
-                  "action": "Define a rule from documents to published-copy with prefix approved/ and an explicit all-objects copy scope.",
+                  "action": "In the source account, open Data management, Object replication, then Create replication rules. Select the destination subscription and account, pair documents with published-copy, enter prefix approved/, and use the copy-scope Change control to select all objects.",
                   "why": "The prefix excludes drafts, while all-objects scope includes older eligible approved documents that the new-objects default would omit."
                 },
                 {
-                  "action": "Associate the matching policy with both accounts, using the portal workflow or the destination-first policy exchange.",
-                  "why": "Two unrelated policy IDs do not form one replication relationship. Full resource IDs identify the intended accounts and support same-tenant checks."
+                  "action": "After an approved configuration review, Save and apply would start the portal workflow and create the destination policy automatically. Alternatively, use the destination-first policy exchange and associate its returned IDs with the source.",
+                  "why": "Two unrelated policy IDs do not form one replication relationship. Full resource IDs identify the intended accounts and support same-tenant checks. Saving starts billable data movement; this paper exercise stops before applying anything."
                 },
                 {
                   "action": "Evaluate approved/june.pdf, approved/september.pdf, and drafts/september.pdf, assuming the first existed before the rule and the other two were added afterward.",
@@ -774,7 +774,7 @@
             },
             {
               "type": "paragraph",
-              "text": "Storage Explorer may use account keys if the signed-in user's management permissions allow retrieving them. For an identity-only Blob exercise, disable its use of account keys and verify the actual access method. Do not paste an account key or a signed access URL into lesson notes, screenshots, logs, or a support message. Keys can confer broad account data access; a successful key-based test would not prove that the intended data role works. These Blob role instructions are not a blanket claim that every Azure Files operation uses the same authorization model."
+              "text": "Storage Explorer may use account keys if the signed-in user's management permissions allow retrieving them. For an identity-only Blob exercise, open Settings, Services, Storage Accounts, and enable Disable Usage of Keys, then verify the actual access method. This setting does not convert features that still require keys into identity-based features. Do not paste an account key or a signed access URL into lesson notes, screenshots, logs, or a support message. Keys can confer broad account data access; a successful key-based test would not prove that the intended data role works. These Blob role instructions are not a blanket claim that every Azure Files operation uses the same authorization model."
             }
           ]
         },
