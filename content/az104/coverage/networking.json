@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "domainId": "networking",
+  "reviewedAt": "2026-09-20",
+  "objectives": [
+    {
+      "objectiveId": "nw-01",
+      "lessons": [
+        {
+          "moduleId": "virtual-networks",
+          "lessonId": "cidr-and-subnets",
+          "sectionIds": ["read-the-school-block", "azure-reservations", "alignment-and-overlap", "size-for-purpose", "subnet-worked-plan"],
+          "checkpointIds": ["cidr-capacity", "upper-half-reservations", "nonoverlap-choice", "split-consequences"],
+          "evidence": "Calculates CIDR capacity and Azure reservations, checks alignment, containment and nonoverlap, and works through two aligned /26 allocations for 40 and 50 addresses with remaining headroom. The learner can reject a subnet that is large enough but overlaps another allocation or falls outside the VNet."
+        },
+        {
+          "moduleId": "virtual-networks",
+          "lessonId": "build-an-azure-network",
+          "sectionIds": ["from-plan-to-resources", "private-allocation", "explicit-outbound", "portal-and-template", "verify-school-plan"],
+          "checkpointIds": ["nic-versus-guest", "outbound-missing-piece"],
+          "evidence": "Builds the configuration plan in subscription, resource group and region order, sets app-vnet 10.20.0.0/16 and two explicit /24 subnets, and demonstrates a complete ARM resource with defaultOutboundAccess false. It selects static private NIC addresses with guest DHCP and verifies observed addresses, DNS and application behavior, distinguishing private connectivity from missing explicit outbound access."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-02",
+      "lessons": [
+        {
+          "moduleId": "vnet-peering",
+          "lessonId": "connect-vnets-with-peering",
+          "sectionIds": ["start-with-the-existing-network", "preflight-addresses-and-permissions", "two-resources-one-relationship", "worked-direct-service-path", "separate-routes-security-and-dns", "resize-and-sync-current-behavior"],
+          "checkpointIds": ["peering-versus-local-subnets", "reciprocal-peering-evidence", "cross-tenant-preflight", "supported-resize-procedure"],
+          "evidence": "Checks complete address ranges and authorization, creates both named peering resources with VNet access, verifies Connected at both ends, examines outbound and return effective routes, checks security and the listener, then compares before-and-after TCP tests. The additional-range example adds 10.41.0.0/16, synchronizes every affected peer and verifies remote prefixes without changing the school's local address space."
+        },
+        {
+          "moduleId": "vnet-peering",
+          "lessonId": "hub-spoke-and-gateway-transit",
+          "sectionIds": ["a-hub-is-not-automatic-transit", "understand-a-shared-gateway", "worked-office-transit", "gateway-routes-and-boundaries", "service-chaining-with-an-appliance", "specific-routes-beat-broad-intentions", "transit-troubleshooting-and-exam"],
+          "checkpointIds": ["hub-no-implicit-transit", "gateway-settings-placement", "gateway-return-prefix", "route-prefix-before-source", "nva-forwarding-requirements"],
+          "evidence": "Works through hub gateway-transit and spoke remote-gateway settings, an existing office VPN, propagated office prefixes and the office return route to 10.20.0.0/16. A separate worked application configures reciprocal spoke routes through appliance 10.40.2.4, Azure NIC and guest forwarding, receiving-spoke forwarded-traffic permission and bidirectional validation. Neither peering nor a forwarding flag is treated as automatic transit."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-03",
+      "lessons": [
+        {
+          "moduleId": "virtual-networks",
+          "lessonId": "build-an-azure-network",
+          "sectionIds": ["public-address-choice"],
+          "checkpointIds": ["public-address-properties"],
+          "evidence": "Explains Standard static public IP allocation, retirement of Basic, compatible SKU, tier, region and zone choices, and whether the public IP belongs on a NIC or a service frontend. It distinguishes address assignment from inbound permission and keeps the database private; the load-balancer target supplies the ordered creation and validation application."
+        },
+        {
+          "moduleId": "load-balancer",
+          "lessonId": "layer-four-load-balancing",
+          "sectionIds": ["lb-four-components", "lb-public-or-internal", "lb-configure-frontends"],
+          "checkpointIds": ["lb-check-private-backends", "lb-check-frontend-configuration"],
+          "evidence": "The worked configuration explicitly creates pip-school-web as a Standard Regional static IPv4 resource, selects zone placement, records Azure's allocated address and associates it with fe-web. It validates the saved association and fresh client HTTPS connections using the certificate hostname, rather than treating an illustrative frontend address as an already configured public IP."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-04",
+      "lessons": [
+        {
+          "moduleId": "routing",
+          "lessonId": "system-routes-and-longest-prefix",
+          "sectionIds": ["routing-longest-match", "routing-ties-and-exceptions", "routing-effective-evidence"],
+          "checkpointIds": ["routing-check-peering-prefix", "routing-check-equal-prefix", "routing-check-endpoint", "routing-check-association"],
+          "evidence": "Teaches longest-prefix selection, ordinary equal-prefix route-source preference and the preferred system-route exceptions, including service endpoints. Effective-route inspection validates the selected route instead of assuming any custom route wins, preparing the learner to choose a meaningful destination prefix in the appliance configuration."
+        },
+        {
+          "moduleId": "routing",
+          "lessonId": "route-through-an-appliance",
+          "sectionIds": ["nva-source-subnets", "nva-two-forwarding-settings", "nva-request-example", "nva-asymmetry", "nva-diagnosis"],
+          "checkpointIds": ["nva-check-source", "nva-check-forwarding", "nva-check-return", "nva-check-health"],
+          "evidence": "Creates rt-school-web with destination 10.20.2.0/24, Virtual appliance next hop 10.20.3.4 and association to the web source subnet. The worked request configures the database return route, requires both NIC and guest forwarding, avoids a self-pointing appliance route, and validates effective routes, next hop, the listener and fresh TCP traffic in both directions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-05",
+      "lessons": [
+        {
+          "moduleId": "network-watcher",
+          "lessonId": "troubleshoot-in-layers",
+          "sectionIds": ["define-the-failure", "draw-the-actual-path", "first-dns", "then-route", "then-security", "guest-and-application", "worked-wrong-address"],
+          "checkpointIds": ["watcher-dns-check", "watcher-permission-check", "watcher-topology-check"],
+          "evidence": "Scopes a precise source, destination, port and time failure, diagnoses DNS, routes, security, guest listeners and authorization separately, and works through a stale database A record. Successful access to the intended IP supplies contrasting evidence before the shared DNS configuration is corrected and the real application operation is retested."
+        },
+        {
+          "moduleId": "network-watcher",
+          "lessonId": "choose-a-diagnostic-tool",
+          "sectionIds": ["tool-questions", "prepare-diagnostics", "tuple-direction", "one-test-or-history", "capture-with-a-question", "worked-intermittent-ticket"],
+          "checkpointIds": ["tool-history-check", "tool-tuple-check", "tool-capture-check", "tool-agent-check"],
+          "evidence": "Chooses route and rule analysis, point-in-time Connection troubleshoot, repeated Connection monitor tests and bounded captures for different questions. It constructs the actual local and remote tuple and documents feature-specific agent prerequisites. The intermittent case correlates monitor failures, capture evidence and guest logs to a listener restart and verifies recovery."
+        },
+        {
+          "moduleId": "network-watcher",
+          "lessonId": "flow-logs-and-a-final-case",
+          "sectionIds": ["flows-not-payloads", "current-flow-log-choice", "storage-and-analytics", "read-flow-evidence", "final-school-case", "close-with-evidence"],
+          "checkpointIds": ["flow-current-check", "flow-capstone-check", "flow-close-check"],
+          "evidence": "Uses current VNet flow logs and a timed incident to connect a NIC deny at priority 200 with failures of new database sessions. It distinguishes surviving stateful flows from newly initiated connections, repairs the expired maintenance policy without opening unrelated access, and checks both fresh network traffic and the actual homework submission before closing."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-06",
+      "lessons": [
+        {
+          "moduleId": "network-security-groups",
+          "lessonId": "nsgs-and-asgs",
+          "sectionIds": ["describe-a-flow", "read-the-defaults", "group-the-workload", "work-the-rules", "check-the-effective-result"],
+          "checkpointIds": ["nsg-priority-understanding", "nsg-default-gap", "nsg-state-membership"],
+          "evidence": "Creates asg-web and asg-database, assigns NIC membership, creates and associates an NSG, and configures a TCP 1433 Allow at priority 200 followed by Deny at 300. Worked web-member and nonmember flows show why a narrow allow alone leaves the default VNet allow in effect. Validation inspects membership, associations and effective rules, then tests fresh permitted and denied connections."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-07",
+      "lessons": [
+        {
+          "moduleId": "network-security-groups",
+          "lessonId": "nsgs-and-asgs",
+          "sectionIds": ["combine-associations", "state-and-testing", "work-the-rules", "check-the-effective-result"],
+          "checkpointIds": ["nsg-two-layers", "nsg-priority-understanding", "nsg-default-gap", "nsg-state-membership"],
+          "evidence": "Evaluates subnet and NIC NSGs separately, with direction-specific processing and lower-number-first priority within each group. Worked flows show why a subnet allow cannot cancel a NIC deny; adding a NIC allow still cannot override a new higher-priority subnet deny. Effective-rule and IP flow verify evidence is distinguished from listener health and surviving established sessions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-08",
+      "lessons": [
+        {
+          "moduleId": "network-security-groups",
+          "lessonId": "bastion-firewall-and-safe-access",
+          "sectionIds": ["two-bastion-legs", "bastion-deployment-settings", "bastion-required-flows", "safe-administration"],
+          "checkpointIds": ["bastion-port-pair", "bastion-basic-requirement", "bastion-sku-boundaries"],
+          "evidence": "Works through a manually selected Basic deployment: choose matching region and VNet, create AzureBastionSubnet 10.20.10.0/26 and a compatible Regional Standard static IPv4 public IP, check required Bastion and target flows, inspect the deployed properties, and establish and repeat browser SSH to a VM without a public IP. Developer's shared, non-peered model and Premium's optional private-only deployment remain separate SKU choices."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-09",
+      "lessons": [
+        {
+          "moduleId": "network-security-groups",
+          "lessonId": "private-access-and-service-boundaries",
+          "sectionIds": ["service-endpoint-path", "compare-the-controls", "endpoint-troubleshooting"],
+          "checkpointIds": ["service-endpoint-addresses"],
+          "evidence": "The ordered worked scenario enables Microsoft.Storage on web subnet 10.20.1.0/24, adds that subnet to the account's allowed virtual networks and selects Enabled from selected networks. It checks VirtualNetworkServiceEndpoint routing and public DNS, then tests fresh Blob reads from permitted 10.20.1.4 and unpermitted 10.20.2.5 using equivalent valid data permissions. It also explains Microsoft.Storage.Global selection rather than assuming the endpoint changes the service to a private destination."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-10",
+      "lessons": [
+        {
+          "moduleId": "network-security-groups",
+          "lessonId": "private-access-and-service-boundaries",
+          "sectionIds": ["private-endpoint-path", "dns-and-identity", "compare-the-controls", "private-archive-worked", "endpoint-troubleshooting"],
+          "checkpointIds": ["private-endpoint-public-access", "office-dns-path", "endpoint-boundary-check"],
+          "evidence": "Creates pe-school-blob with the VNet-matching subscription and region, selected storage account, blob subresource and endpoints subnet, then checks approval and the allocated private IP. The worked archive scenario configures private DNS and office resolution, verifies HTTPS and independent data permission, restricts public access and repeats positive and negative tests. It distinguishes private-endpoint subnet policies from ordinary VM NSGs and private connectivity from data authorization."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-11",
+      "lessons": [
+        {
+          "moduleId": "azure-dns",
+          "lessonId": "names-records-and-delegation",
+          "sectionIds": ["records-with-a-purpose", "ttl-and-stale-answers", "host-and-delegate", "apex-and-alias-lifecycle", "safe-administration-and-exam-boundary"],
+          "checkpointIds": ["public-authority-versus-delegation", "dns-ttl-calculation", "apex-record-decisions", "records-and-current-security"],
+          "evidence": "Creates a public zone, records all four assigned authorities, adds www as a non-alias A record with TTL 300, tests the assigned authority directly, delegates an actually owned replacement domain, and checks ordinary recursive resolution before testing HTTPS. It applies apex A aliases to a supported Standard public IP resource and explains target deletion, cached answers and public DNSSEC signing."
+        },
+        {
+          "moduleId": "azure-dns",
+          "lessonId": "private-dns-and-hybrid-resolution",
+          "sectionIds": ["private-records-need-explicit-links", "registration-is-an-extra-feature", "choose-the-resolver-deliberately", "inbound-hybrid-example", "outbound-forwarding-is-different", "split-answers-and-troubleshooting"],
+          "checkpointIds": ["private-link-versus-peering", "custom-dns-bypasses-assumption", "hybrid-endpoint-selection", "private-answer-not-authorization"],
+          "evidence": "Explicitly creates classroom.internal, manual db A record 10.20.2.5 and resolution-only VNet links with Completed status. The worked office scenario forwards to inbound endpoint 10.40.0.4 in its linked-zone context. A separate outbound design selects an endpoint, enabled office.example. rule targeting 172.20.0.10:53 and school ruleset link. Validation separates actual resolver selection, DNS transport and answers from application connectivity."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-12",
+      "lessons": [
+        {
+          "moduleId": "load-balancer",
+          "lessonId": "layer-four-load-balancing",
+          "sectionIds": ["lb-four-components", "lb-public-or-internal", "lb-configure-frontends"],
+          "checkpointIds": ["lb-check-private-backends", "lb-check-frontend-configuration"],
+          "evidence": "Works through Standard Regional public and internal load balancer alternatives in order: public IP or unused static private frontend 10.20.1.10, actual web NIC membership, HTTP 8081 /health probe, frontend TCP 443 to backend 8443 rule, client and probe filtering, and explicit egress. Validation checks associations, backend health and real new client requests from the appropriate public or private network."
+        },
+        {
+          "moduleId": "load-balancer",
+          "lessonId": "rules-probes-and-nat",
+          "sectionIds": ["lb-rule-listener", "lb-probe-meaning", "lb-inbound-nat", "lb-outbound-explicit", "lb-snat-numbers"],
+          "checkpointIds": ["lb-check-probe-port", "lb-check-nat-range", "lb-check-outbound", "lb-check-snat-budget"],
+          "evidence": "Explains listener, rule and probe port alignment, works out inbound NAT port mappings and explicit SNAT budgets, and distinguishes replies to inbound connections from separately initiated outbound flows. These settings extend the complete frontend and backend configuration rather than replacing it with definitions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "nw-13",
+      "lessons": [
+        {
+          "moduleId": "load-balancer",
+          "lessonId": "rules-probes-and-nat",
+          "sectionIds": ["lb-rule-listener", "lb-probe-meaning", "lb-probe-worked-example", "lb-snat-numbers"],
+          "checkpointIds": ["lb-check-probe-port", "lb-check-snat-budget"],
+          "evidence": "Diagnoses a failed health probe by separating client 443-to-8443 traffic from Azure's 168.63.129.16 probe to port 8081, locates the guest-firewall fault, applies a narrow repair and verifies probe recovery. It also reasons about connection pressure against a finite per-backend SNAT allocation instead of treating all connection failures as inbound rule problems."
+        },
+        {
+          "moduleId": "load-balancer",
+          "lessonId": "availability-and-troubleshooting",
+          "sectionIds": ["lb-failure-semantics", "lb-capacity-worked-example", "lb-ha-ports", "lb-layered-troubleshooting", "lb-monitoring-evidence"],
+          "checkpointIds": ["lb-check-capacity", "lb-check-green-probe", "lb-check-ha-assumptions", "lb-check-metrics"],
+          "evidence": "Traces frontend and rule, membership, probe, listener and filter, return-path and dependency evidence. The worked capacity case calculates the surviving backend shortfall; diagnostics distinguish health-probe status, data-path availability and SNAT exhaustion. A green probe or redundant frontend is not treated as proof that the user's operation succeeds."
+        },
+        {
+          "moduleId": "application-gateway",
+          "lessonId": "http-routing-and-tls",
+          "sectionIds": ["two-tls-legs", "probes-not-promises", "worked-gateway-ticket"],
+          "checkpointIds": ["gateway-tls-check", "gateway-probe-check"],
+          "evidence": "Provides supporting application-delivery troubleshooting: a concrete 502 case identifies a backend TLS certificate-name mismatch, aligns backend and probe host and HTTPS settings without disabling validation, and checks both probe recovery and an authorized page request. Its default 200-399 probe success range is kept distinct from Load Balancer's HTTP 200 requirement."
+        }
+      ]
+    }
+  ]
+}

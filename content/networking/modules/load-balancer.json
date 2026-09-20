@@ -135,6 +135,32 @@
           ]
         },
         {
+          "id": "lb-configure-frontends",
+          "title": "Worked configuration: public or internal, then prove the path",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Turn the school design into connected settings",
+              "scenario": "Work through two alternative designs on paper, not two deployments to create while reading. Both use the existing web VMs 10.20.1.4 and 10.20.1.5, with TLS on 8443 and HTTP /health on 8081 already working. Assume the VNet and VMs are in West Europe, suitable capacity is available, and an approved NAT Gateway already provides installation and update egress. The public design serves approved internet clients; the internal design serves office clients over an already working VPN.",
+              "steps": [
+                {"action": "In the planned Load balancer creation settings, name the resource lb-school-web, select West Europe, Standard SKU, Regional tier, and the required Public or Internal type.", "why": "The frontend type determines the entry boundary. Keep this regional VM design in the backend resources' region rather than selecting a cross-region topology."},
+                {"action": "For Public, add IPv4 frontend fe-web and associate a new public IP resource pip-school-web: Standard SKU, Regional tier, Static allocation, and zone-redundant placement where supported.", "why": "Standard public IP allocation is static, but Azure chooses the actual address. Record that allocated value rather than entering 203.0.113.20. Basic public IPs retired on September 30, 2025. Do not select Standard v2 public IPs here: those currently support Standard v2 NAT Gateway, not Load Balancer."},
+                {"action": "For the alternative Internal design, add fe-web in App VNet 10.20.0.0/16, web subnet 10.20.1.0/24, with Static private assignment 10.20.1.10 after verifying it is unused. Select zone-redundant placement where supported.", "why": "This frontend reserves a private subnet address instead of associating a public IP resource. An internet client cannot directly reach it; office access still depends on VPN routing and security."},
+                {"action": "Create pool-web with NIC-based membership and add the primary IPv4 configurations for 10.20.1.4 and 10.20.1.5.", "why": "Membership identifies the web servers actually running the same service. It neither installs the application nor makes database 10.20.2.5 a web server."},
+                {"action": "Create probe-web using HTTP, port 8081, path /health, and a deliberate five-second interval. Create an IPv4 TCP rule linking fe-web:443 to pool-web:8443 and select probe-web; use session persistence None and Floating IP disabled.", "why": "The saved rule must link the frontend, pool, and readiness check. HTTP 200 is required. The interval is a setting, not an exact failover-time guarantee."},
+                {"action": "Keep implicit outbound SNAT disabled for the public rule because the assumed NAT Gateway owns egress. Allow intended client sources to backend TCP 8443 and the Azure probe source to TCP 8081 in applicable NSGs and guest firewalls.", "why": "User traffic and probes take different paths. For the office design the permitted client source is the office range, not the AzureLoadBalancer service tag. Neither frontend design alone replaces explicit outbound connectivity."},
+                {"action": "After saving in an authorized deployment, inspect the frontend association, both pool members, the rule's selected probe, and per-backend Health Probe Status. Test a fresh TCP connection to frontend port 443 from an approved client outside the backend pool.", "why": "Use the allocated public IP from the internet client or 10.20.1.10 from the connected office client. This checks the intended client entry path rather than only the service's local listener."},
+                {"action": "For the HTTPS page test, configure the test client's resolution of classroom.example to the chosen frontend and request the named site. Then simulate one service failure in a disposable environment and retest new connections before restoring it.", "why": "The name matches the assumed server certificate; browsing an IP alone can introduce an unrelated certificate warning. Check that new flows avoid the unhealthy VM and that restoring its service restores probe health, without expecting browser refreshes to alternate exactly."}
+              ],
+              "result": "The public design associates one allocated Standard public IP with the frontend, not with each VM. The internal design instead uses reserved private address 10.20.1.10. Both designs require the same complete rule, backend, probe, security, and client-validation chain. You can rehearse every choice without buying resources."
+            },
+            {
+              "type": "paragraph",
+              "text": "The public and internal field choices are documented in Azure Load Balancer portal settings; allocation, SKU compatibility, and retirement details are documented in Public IP addresses. Both are included in this lesson's references. The optional lab later uses plain HTTP on port 80 to avoid requiring certificate setup, but follows the same configuration and validation order."
+            }
+          ]
+        },
+        {
           "id": "lb-service-choice",
           "title": "Choose the service for the decision you need",
           "blocks": [
@@ -200,6 +226,19 @@
           ],
           "correctIds": ["lb-shared-egress", "lb-pool-change"],
           "explanation": "Affinity changes distribution inputs, not application state or security capabilities."
+        },
+        {
+          "id": "lb-check-frontend-configuration",
+          "kind": "multiple",
+          "prompt": "Select the two valid frontend choices for the lesson's alternative regional Standard Load Balancer designs.",
+          "choices": [
+            {"id": "lb-standard-public", "text": "For Public, associate a Regional Standard static public IPv4 resource and record its Azure-allocated address.", "explanation": "The public IP resource matches the regional Standard load balancer. Static allocation keeps the assigned address for the resource's lifetime; it does not let you invent a public address."},
+            {"id": "lb-static-internal", "text": "For Internal, select the App VNet web subnet and reserve unused private address 10.20.1.10 for the frontend.", "explanation": "This design selects Static private assignment, needs no frontend public IP resource, and must be tested from a client with private connectivity."},
+            {"id": "lb-basic-public", "text": "For Public, choose a Basic public IP because only the load balancer itself needs Standard SKU.", "explanation": "Basic public IPs retired, and a Standard Load Balancer public frontend requires a compatible Standard public IP."},
+            {"id": "lb-documentation-public", "text": "For Public, enter 203.0.113.20 as a custom static public address.", "explanation": "That address is a documentation stand-in. Azure allocates an address to the public IP resource; Static does not mean an arbitrary address can be entered."}
+          ],
+          "correctIds": ["lb-standard-public", "lb-static-internal"],
+          "explanation": "Choose the frontend resource and address scope deliberately, then associate it with a complete rule and validate from the appropriate client network."
         }
       ],
       "takeaways": [
@@ -209,7 +248,7 @@
         "Private backends do not need individual public IPs for public load-balanced traffic.",
         "HTTP routing, TLS termination, and WAF requirements belong to an appropriate Layer 7 design."
       ],
-      "sourceIds": ["lb-what-unit", "lb-how-unit", "lb-when-unit", "lb-overview", "lb-distribution", "lb-exam"]
+      "sourceIds": ["lb-what-unit", "lb-how-unit", "lb-when-unit", "lb-overview", "lb-distribution", "lb-exam", "lb-portal-settings", "lb-public-ip", "lb-portal", "lb-probes", "lb-nsg"]
     },
     {
       "id": "rules-probes-and-nat",
@@ -619,6 +658,8 @@
     {"id": "lb-diagnostics", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-standard-diagnostics", "title": "Standard Load Balancer diagnostics", "supports": "Health Probe Status versus Data Path Availability, metric interpretation, and used, allocated, and failed SNAT connection evidence."},
     {"id": "lb-nsg", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Network security groups overview", "supports": "Post-translation inbound destination filtering, original client source identity, default probe allowances, and stateful connection behaviour."},
     {"id": "lb-portal", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/quickstart-load-balancer-standard-public-portal", "title": "Create a public Standard Load Balancer in the portal", "supports": "Manual frontend, pool, rule, probe, VM, IIS, and cleanup workflow; the authored lab uses deliberate NIC-based membership and explicit egress."},
+    {"id": "lb-portal-settings", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/manage", "title": "Azure Load Balancer portal settings", "supports": "Public and internal creation settings, Regional tier, matching Standard static public IPs, internal subnet selection and Static private assignment, NIC-based pool membership, linked rules and probes, and disabling implicit outbound SNAT."},
+    {"id": "lb-public-ip", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/public-ip-addresses", "title": "Public IP addresses", "supports": "Standard static allocation with an Azure-selected address, frontend association, zone choices, Basic public IP retirement on September 30, 2025, and Standard v2 public IP compatibility limited to Standard v2 NAT Gateway."},
     {"id": "lb-exam", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "AZ-104 study guide", "supports": "Current objectives to configure internal or public load balancers, troubleshoot load balancing, and interpret monitoring evidence."}
   ],
   "lab": {
