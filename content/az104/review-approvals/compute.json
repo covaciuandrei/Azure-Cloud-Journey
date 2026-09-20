@@ -1,0 +1,22 @@
+[
+  {
+    "id": "infrastructure-as-code",
+    "digest": "033d044e1f41a5c604c1b64f7fae00775a2fec2c0448d9576a948ded4f28bdc4",
+    "note": "Independent reviewer checked all three lessons and twelve keys against current ARM/Bicep guidance. Original and modified templates compiled, ARM decompiled and rebuilt, with equivalent parameters, resources, dependencies and outputs across sixteen cases. Resource/property semantics, current child-subnet guidance versus older generic wording, scoped what-if/deployment and export limitations are qualified; no Azure deployment was executed."
+  },
+  {
+    "id": "virtual-machines",
+    "digest": "38b154f8bbc10c17afe0c2d021dd63bac62e8bbf6a68e2e90b3527af6eff9196",
+    "note": "Independent full review verified VM creation, dual quotas, resize and disk operations, persistent versus temporary storage, host encryption versus SSE/ADE, future ADE retirement, regional moves versus resource moves, identity/access consequences, availability sets/zones and VMSS health requirements. All sixteen keys and worked numerical cases were traced to explicit assumptions and current product guidance."
+  },
+  {
+    "id": "azure-containers",
+    "digest": "4281d9c5bacb6fb214d28c5a9ee8e2af7f0747fd0ac168a7e3fe64b21bbb5f34",
+    "note": "Independent review checked all twelve keys, registry authorization modes, ACI identity/restart behavior, current and legacy Container Apps profile/resource/subnet limits, revisions, ingress and scaling. Parent reviewed the added Linux x64 image prerequisite and worked private-image compatibility check. Flexible preview and no-scale-zero qualifications are not generalized to ordinary environments."
+  },
+  {
+    "id": "azure-app-service",
+    "digest": "f846bfff00cb438f9bd14a76720d84d275c388fa1f9ce8672fa0447ad563080a",
+    "note": "Independent review traced all fourteen keys and current plan/scaling, hostname/TLS, inbound/outbound networking, backup and slot workflows. Basic backup support, SAS storage authorization and linked-database removal dates are explicit. Parent reviewed the corrected managed-certificate distractor so normal access restrictions are not confused with continuing public DNS requirements after the November 2025 validation change."
+  }
+]
