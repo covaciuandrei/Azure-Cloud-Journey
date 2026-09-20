@@ -1,0 +1,17 @@
+[
+  {
+    "id": "azure-monitor",
+    "digest": "ac522854784cf7aad3e485de6addd240a626afecb5bf9bd5873bd7471d3a3056",
+    "note": "Independent reviewer read all lessons, sources, examples and twelve keys. Current OpenTelemetry/Azure Monitor workspace/PromQL versus classic Log Analytics/KQL paths, VMSS and Private Link limits, narrowly scoped costs, agent retirements, diagnostic collection and alert processing were verified. Synthetic KQL rows, bins, averages and row-count versus numeric alert results were recalculated without Azure execution."
+  },
+  {
+    "id": "azure-backup",
+    "digest": "9f4527d1a5b0283bc898ae69a438c7de9f59c955cb65543ab61afe0b1cbb15b6",
+    "note": "Independent full review verified vault/workload/tier matrices, policy timing, restore choices, reports, alerts, immutability and Resource Guard. Parent reviewed the correction that separates ADE guest-encryption restrictions from default platform-managed server-side encryption. Soft-delete rollout contradictions remain explicitly vault/region/API-scoped; twelve unchanged scored keys remain defensible under stated assumptions."
+  },
+  {
+    "id": "site-recovery",
+    "digest": "43382954ba9047325c06bb890bfa0d94671e0b3223c3f7fae57af20e30e85265",
+    "note": "Independent reviewer verified Azure-to-Azure support, placement, replication, isolated test cleanup, failover, fallible shutdown, commit, reprotection and failback. Parent reviewed the dedicated source-region cache correction and unsupported cache soft-delete prerequisite without weakening production storage. RPO/RTO arithmetic and all eight keys were independently checked; no live recovery or zero-data-loss guarantee is claimed."
+  }
+]
