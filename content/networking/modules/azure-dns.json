@@ -1,0 +1,588 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-dns",
+  "title": "Azure DNS: from a name to the right address",
+  "summary": "Follow a DNS lookup, host a public zone, choose records and aliases, and design explicit private and hybrid resolution for a school application.",
+  "priority": "core",
+  "priorityReason": "The current AZ-104 guide explicitly includes configuring Azure DNS. Administrators also need to separate name-resolution failures from routing and application failures. Public records, delegation, and private-zone links are foundational; hybrid resolver design extends that foundation rather than representing an exam probability.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Configure Azure DNS to host a domain, including creating a public zone and delegating the domain to its assigned name servers.",
+    "Select DNS records, create an A record, and distinguish authoritative record verification from end-to-end domain resolution.",
+    "Configure a private DNS zone and explicitly link the virtual networks that need to resolve its records.",
+    "Explain the zone apex and use Azure alias record sets to reference supported Azure resources, including a load balancer's public IP resource."
+  ],
+  "lessons": [
+    {
+      "id": "names-records-and-delegation",
+      "title": "Names, records, delegation, and the complete lookup",
+      "summary": "Understand what happens before a browser connects, then plan a public DNS zone without confusing names, addresses, and reachable services.",
+      "objectives": [
+        "Trace a cache-miss lookup through a recursive resolver and authoritative servers.",
+        "Choose records and calculate the effect of a cached TTL.",
+        "Explain why zone creation, registration, and delegation are separate actions.",
+        "Choose an apex alias and verify DNS independently of a website."
+      ],
+      "sections": [
+        {
+          "id": "dns-before-the-connection",
+          "title": "What a name does, and what it cannot do",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An IP address identifies a network destination. DNS, the Domain Name System, lets software ask for information about a readable name instead of requiring you to remember the address. When you open a website, the browser usually needs an address before it can start its connection. A successful lookup means that DNS supplied an answer. It does not mean the server is running, the network permits the connection, or your school account is allowed to sign in."
+            },
+            {
+              "type": "paragraph",
+              "text": "IPv4 and IPv6 are two address formats. IPv4 has 32 bits and is normally written as four decimal numbers from 0 to 255, such as 10.20.1.4. IPv6 has 128 bits and uses hexadecimal groups separated by colons; 2001:db8::20 is a documentation-only example with consecutive zero groups shortened. DNS uses A records for IPv4 and AAAA records for IPv6. Receiving one address type does not guarantee that the other type exists or that the client has a usable path for it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Our fictional school has an application virtual network, called school VNet, with address space 10.20.0.0/16. A VNet is a private network defined in Azure. Its web VM is 10.20.1.4 in subnet 10.20.1.0/24; its database VM is 10.20.2.5 in subnet 10.20.2.0/24. These are private addresses, not internet destinations. A public DNS record containing 10.20.1.4 would publish that value, but would not make the VM publicly reachable. Public access would require a separately configured public frontend and allowed traffic."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Fictional names are not purchased domains",
+              "text": "classroom.example is our fictional public-domain name. The .example namespace is reserved for examples, so no live public delegation or domain ownership is implied. Addresses 203.0.113.20 and 203.0.113.21 below are documentation addresses, not working websites. Replace both the domain and destination with resources you actually own before any real deployment."
+            }
+          ]
+        },
+        {
+          "id": "follow-a-cache-miss",
+          "title": "Follow the resolver, not a chain of web servers",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The computer's DNS client asks its configured recursive resolver to find an answer. That server does the searching on the client's behalf. First consider caches: the application, operating system, or resolver may already hold an unexpired answer. If so, the lookup can finish without asking the authoritative server again. An authoritative server holds the records for a zone and answers from that data. Azure Public DNS is authoritative hosting; its assigned name servers are not general-purpose public recursive resolvers for your laptop."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a real delegated domain and an empty relevant cache, the recursive resolver asks a root server where to find the top-level domain's servers. For a name ending in .com, those are the .com servers. It then asks that top-level domain for the domain's authoritative servers, follows the referral, and asks one of those servers for the requested record. The root and top-level servers normally return directions, not the web server's final address. The resolver performs these separate queries; the original browser request does not pass from root to top-level server to website."
+            },
+            {
+              "type": "diagram",
+              "title": "A real delegated public domain, with no useful cache",
+              "description": "This is a logical DNS message diagram for a real owned replacement domain, not a claim that .example is publicly delegated. The client queries the recursive resolver. The resolver separately queries root, top-level, and Azure authoritative servers, receiving referrals and then an answer. Only afterward does the client attempt HTTPS to a separately configured public frontend.",
+              "nodes": [
+                { "id": "dns-client", "label": "Client", "detail": "Browser and operating-system DNS client", "column": 0, "row": 1 },
+                { "id": "recursive-resolver", "label": "Recursive resolver", "detail": "Configured DNS server; relevant cache is empty", "column": 1, "row": 1 },
+                { "id": "root-server", "label": "Root DNS", "detail": "Returns the real top-level domain's delegation", "column": 2, "row": 0 },
+                { "id": "tld-server", "label": "Top-level DNS", "detail": "Returns the owned domain's Azure name servers", "column": 2, "row": 1 },
+                { "id": "authoritative-server", "label": "Azure Public DNS", "detail": "Hosts the delegated zone and configured address record", "column": 2, "row": 2 },
+                { "id": "public-frontend", "label": "Public frontend", "detail": "Separate reachable endpoint, not private VM 10.20.1.4", "column": 0, "row": 2 }
+              ],
+              "edges": [
+                { "from": "dns-client", "to": "recursive-resolver", "label": "1. Ask for address" },
+                { "from": "recursive-resolver", "to": "root-server", "label": "2. Query root" },
+                { "from": "root-server", "to": "recursive-resolver", "label": "3. TLD referral" },
+                { "from": "recursive-resolver", "to": "tld-server", "label": "4. Query TLD" },
+                { "from": "tld-server", "to": "recursive-resolver", "label": "5. Zone referral" },
+                { "from": "recursive-resolver", "to": "authoritative-server", "label": "6. Query zone" },
+                { "from": "authoritative-server", "to": "recursive-resolver", "label": "7. Address answer" },
+                { "from": "recursive-resolver", "to": "dns-client", "label": "8. Return answer" },
+                { "from": "dns-client", "to": "public-frontend", "label": "9. Attempt HTTPS" }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A fully qualified domain name, or FQDN, identifies the complete name, such as www.classroom.example. The relative name www is meaningful inside the classroom.example zone. A DNS query also specifies a record type: asking for an A record is not the same as asking for an MX record. If the answer is a CNAME, the resolver follows the target name and obtains the needed address record there. A DNS CNAME is not an HTTP redirect: it does not tell the browser to change the URL or add a path."
+            }
+          ]
+        },
+        {
+          "id": "records-with-a-purpose",
+          "title": "Choose what information the answer must contain",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Record types describe different data, not different levels of network access",
+              "headers": ["Record", "Meaning", "School example or caution"],
+              "rows": [
+                ["A", "A name maps to an IPv4 address.", "www could return documentation address 203.0.113.20 in a paper public-zone exercise."],
+                ["AAAA", "A name maps to an IPv6 address.", "Use only when the application has a separately configured reachable IPv6 destination."],
+                ["CNAME", "A name points to another DNS name.", "portal.classroom.example could point to www.classroom.example; the target still needs resolution."],
+                ["NS", "Names the authoritative servers for a zone or delegated child.", "Parent delegation tells resolvers which Azure servers host classroom.example's real replacement domain."],
+                ["SOA", "Contains zone administration information and timing fields.", "Azure creates one at the apex; it is not the web server's address."],
+                ["MX", "Names mail exchangers with preference values.", "Lower preference values are preferred; the mail host must itself resolve."],
+                ["TXT", "Stores text used by other protocols or verification processes.", "An ownership-check token is not a password. SPF email policy is published as TXT, not the obsolete SPF type."],
+                ["SRV", "Describes a service target, port, priority, and weight.", "A service-aware client can discover where a service listens; an ordinary A record has no port field."],
+                ["PTR", "Maps an address back to a name in a reverse-lookup zone.", "Creating db's forward A record does not automatically create a private reverse record."],
+                ["CAA", "States which certificate authorities may issue certificates for a domain.", "It does not install a certificate or encrypt the website."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure manages records in record sets: records with the same name and type share one set and one TTL. Two A values for www belong in the same A record set, not two separate sets named www. This can return multiple destinations, but does not provide health probes or guarantee balanced traffic. CNAME and SOA sets each contain only one record. A CNAME cannot coexist with ordinary records of other types at the same name. A and AAAA, however, can coexist for a dual-stack service."
+            },
+            {
+              "type": "paragraph",
+              "text": "A wildcard is a naming pattern, not another record type. For example, a wildcard A record can answer eligible otherwise unmatched names below the zone. Existing closer names affect wildcard matching, so it is not a promise to override every record. Avoid using a wildcard to hide spelling errors during troubleshooting. Likewise, a record name does not contain https:// or /login. Those are parts of a web URL, interpreted after DNS has done its separate job."
+            }
+          ]
+        },
+        {
+          "id": "ttl-and-stale-answers",
+          "title": "TTL controls cached reuse, not global instant updates",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "TTL means time to live. For DNS, it is the time an answer may be reused from cache before another lookup is needed, not the lifespan of the server or record in Azure. A record with TTL 300 seconds can be cached for five minutes after retrieval. Azure sets the TTL for the entire record set. A higher TTL reduces repeat queries; a lower TTL can shorten planned changeover delays but increases query volume. Changing a TTL does not reach backward into caches that already received the previous value."
+            },
+            {
+              "type": "prediction",
+              "id": "dns-old-ttl-prediction",
+              "prompt": "At 09:00 a resolver caches www with TTL 3600 seconds and address 203.0.113.20. At 09:10 you change the authoritative value to 203.0.113.21 and TTL to 60 seconds. Assuming ordinary TTL-respecting caching and no manual cache flush, must that resolver use the new value at 09:11?",
+              "answer": "No. Its earlier answer can remain cached until 10:00, leaving 49 minutes at 09:11.",
+              "explanation": "The original one-hour lifetime began at 09:00. The later 60-second TTL applies to answers fetched after that change, not to the existing cache entry. For a planned migration, lower the TTL early, allow the previous TTL to expire, then change the address and observe responses."
+            },
+            {
+              "type": "paragraph",
+              "text": "A nonexistent name can also produce a cached negative answer, with timing derived from the zone's SOA data. Creating the missing record therefore need not repair every client immediately. Separate NXDOMAIN, meaning the name does not exist in the consulted namespace, from a timeout, meaning no answer arrived, and SERVFAIL, meaning the resolver failed to complete resolution. A query for a missing record type at an existing name can return no data without saying the whole name is nonexistent. Record the exact question, server, response, and time."
+            }
+          ]
+        },
+        {
+          "id": "host-and-delegate",
+          "title": "Hosting a zone is not registering or delegating it",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A domain is part of the DNS naming hierarchy. A zone is the collection of records administered together for part of that hierarchy. A child can remain records in the parent's zone or be delegated to a separate zone. Azure lets you create a public zone in a subscription and resource group, but that does not purchase the name. A registrar handles registration of a real domain and provides the management interface used to set its authoritative name servers."
+            },
+            {
+              "type": "paragraph",
+              "text": "When Azure creates a public zone, it creates apex NS and SOA sets and assigns four name servers. For a real owned domain, copy all four assigned server names to the registrar's delegation settings. Do not copy sample server names from a tutorial. The parent zone's delegation makes the Azure zone discoverable. Merely editing records inside the new child zone cannot redirect resolvers that still follow the old parent delegation. Delegating a child such as clubs.classroom.example instead requires an NS set for clubs in its parent zone."
+            },
+            {
+              "type": "example",
+              "title": "Design and verify the school's public name",
+              "scenario": "On paper, classroom.example will represent the school's public website, and 203.0.113.20 represents a separately configured public frontend that forwards allowed web traffic to 10.20.1.4. Neither is live. For an optional real test, substitute an owned domain and actual frontend; a direct-authority DNS-only test does not require a website.",
+              "steps": [
+                { "action": "Create the public zone in the intended subscription and a dedicated resource group, then record its four assigned name servers.", "why": "The zone stores authoritative data. The assigned servers identify this zone instance, even if another subscription contains a zone with the same name." },
+                { "action": "Add a non-alias A record set named www with TTL 300 seconds and the frontend's actual address; use 203.0.113.20 only for the paper or DNS-only example.", "why": "A relative name becomes www.classroom.example in this zone. A public website must resolve to its public entry point, not to the web VM's private address." },
+                { "action": "Query www directly against one assigned Azure name server and compare the returned address with the configured record.", "why": "This isolates authoritative record creation. It bypasses discovery through the registrar and therefore cannot prove delegation." },
+                { "action": "For a real owned replacement domain only, update the registrar with all four assigned name servers and inspect the parent delegation.", "why": "Public recursive resolvers need a route through the DNS hierarchy to the correct authority. Reserved classroom.example cannot be registered for this purpose." },
+                { "action": "Query the real name and its SOA through an ordinary recursive resolver, accounting for cached referrals and records.", "why": "This checks the resolution path used by clients rather than only the zone contents. Compare answers from the old and new authority when diagnosing a migration." },
+                { "action": "Only after DNS succeeds, test the intended website by its hostname and separately inspect frontend rules, backend health, and certificate configuration.", "why": "DNS cannot open a network security group rule, configure a load balancer, or issue a website certificate. Testing an IP alone does not validate hostname-based HTTPS." }
+              ],
+              "result": "You have two separate pieces of evidence: the authority serves the intended record, and ordinary clients can discover that authority. Website access is a third test, not a conclusion drawn from either DNS answer."
+            },
+            {
+              "type": "code",
+              "language": "text",
+              "code": "nslookup www.classroom.example ASSIGNED_NAME_SERVER",
+              "explanation": "Optional read-only DNS query, not a deployment command. Replace ASSIGNED_NAME_SERVER with one of your lab zone's actual Azure name-server names before running it. This can query a deliberately created classroom.example zone directly without public delegation. It should return the value you configured, not a guaranteed live website. Microsoft code-sample search and the Learn record exercise were consulted for this command pattern."
+            }
+          ]
+        },
+        {
+          "id": "apex-and-alias-lifecycle",
+          "title": "Why an Azure alias is different from a CNAME",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The zone apex is the zone's own name, classroom.example, commonly displayed as @. The apex already has NS and SOA records, so an ordinary CNAME cannot go there. An ordinary A record could hold a load balancer frontend's numeric public IP, but it would not track the Azure resource's lifecycle. For a supported target, an Azure alias qualifies an A, AAAA, or CNAME record set by referencing an Azure resource or a compatible record set in the same zone. Alias is not a new DNS wire record type."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the school's load-balanced design, choose an apex A alias targeting the Standard public IP resource attached to the load balancer, not the private IP of a backend VM. DNS returns the frontend address; the load balancer separately chooses a healthy backend according to its rules. If the public IP resource is deleted, the alias becomes an empty record set instead of retaining a dangling resource reference. It does not magically find a replacement resource. A Standard static public IP should not be described as changing on every VM restart."
+            },
+            {
+              "type": "paragraph",
+              "text": "Supported alias scenarios also include appropriate Traffic Manager profiles, Azure CDN endpoints, Azure Front Door endpoints, and same-type record sets in the same zone. Support depends on the target and record type; not every Azure resource is a valid alias destination. Traffic Manager's newer linked-record feature is documented as preview and is not a prerequisite for this lesson's established alias scenario. Regardless of target, cached answers can persist for their TTL. Alias lifecycle tracking is not instant cache invalidation or a network traffic relay."
+            }
+          ]
+        },
+        {
+          "id": "safe-administration-and-exam-boundary",
+          "title": "Protect the configuration and diagnose the right layer",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure role-based access control, or RBAC, determines who can edit the zone and its records. Give only the necessary scope, inspect Activity Log for management changes, and consider resource locks against accidental changes. These controls protect Azure configuration, not visitors' application permissions. Public DNS is deliberately queryable, so do not place passwords or other secrets in TXT records. DNS zones use globally distributed hosting; the resource group's location is not a promise that only one region can answer public queries."
+            },
+            {
+              "type": "callout",
+              "tone": "remember",
+              "title": "Use current DNSSEC guidance",
+              "text": "Older Learn material says Azure DNS does not support DNSSEC. Current product documentation supports signing Azure Public DNS zones. DNSSEC lets validating resolvers authenticate DNS data through signatures and a chain of trust, including correct parent DS configuration. It does not encrypt application traffic, and the default Azure-provided recursive resolver does not perform DNSSEC response validation. Signing and validation are different capabilities."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the failing requirement to the right action",
+              "text": "Create records to supply DNS data, update parent NS delegation to make a public zone discoverable, and use an apex A or AAAA alias for an appropriate Azure resource rather than an apex CNAME. A correct DNS answer proves none of routing, firewall permission, backend health, or application authorization. These distinctions support the current Configure Azure DNS objective without turning every product detail into an equal-priority exam rule."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "public-authority-versus-delegation",
+          "kind": "single",
+          "prompt": "An administrator's direct query to the new zone's assigned Azure server returns the new web address. Ordinary clients still receive the old provider's address. Which investigation best distinguishes the causes?",
+          "choices": [
+            { "id": "inspect-parent-and-cache", "text": "Inspect parent NS delegation and the clients' resolver caches.", "explanation": "Direct authority queries bypass delegation. Clients may still follow old parent records or reuse unexpired answers, so both must be checked." },
+            { "id": "add-private-web-ip", "text": "Replace the public A value with 10.20.1.4.", "explanation": "Publishing a private backend address does not fix authority discovery and would not make the backend reachable from the internet." },
+            { "id": "buy-second-zone", "text": "Create another Azure zone with the same name and leave the registrar unchanged.", "explanation": "Another zone has its own assigned servers. Without the correct parent delegation it is just another undiscovered authority." }
+          ],
+          "correctIds": ["inspect-parent-and-cache"],
+          "explanation": "Identify which server supplied the stale answer and how the resolver found or cached it before changing application records."
+        },
+        {
+          "id": "dns-ttl-calculation",
+          "kind": "single",
+          "prompt": "A resolver fetches an A record at 12:00 with TTL 600 seconds. Its authority changes at 12:02. At 12:07, how much of the original cache lifetime remains, assuming normal TTL handling?",
+          "choices": [
+            { "id": "three-minutes-remain", "text": "Three minutes.", "explanation": "The original expiry is 12:10. Seven of the ten minutes have elapsed, so the old answer can remain for three minutes." },
+            { "id": "five-minutes-remain", "text": "Five minutes.", "explanation": "This incorrectly restarts the cache timer when the authority changes at 12:02. The resolver fetched the record at 12:00." },
+            { "id": "zero-minutes-remain", "text": "No time remains because editing Azure DNS flushes recursive caches.", "explanation": "Editing an authoritative record does not send a cache-flush instruction to all recursive resolvers." }
+          ],
+          "correctIds": ["three-minutes-remain"],
+          "explanation": "Calculate expiry from the time the resolver received the cached answer and the TTL supplied with that answer."
+        },
+        {
+          "id": "apex-record-decisions",
+          "kind": "multiple",
+          "prompt": "The school wants its real apex domain to reference a supported Standard public IP resource used by its load balancer. Select the two accurate statements.",
+          "choices": [
+            { "id": "apex-a-alias", "text": "An apex A alias can reference the public IP resource.", "explanation": "The alias adds an Azure resource reference while retaining a valid address-record type at the apex." },
+            { "id": "dns-returns-frontend", "text": "DNS returns the frontend address; backend selection remains the load balancer's job.", "explanation": "DNS answers the naming question. The load balancer later handles network connections according to its separate configuration." },
+            { "id": "apex-cname-instead", "text": "An ordinary apex CNAME can coexist with the apex NS and SOA sets.", "explanation": "CNAME's coexistence restriction prevents this. That restriction is why an appropriate apex address alias is useful." },
+            { "id": "alias-opens-firewall", "text": "The alias also permits web traffic through the backend firewall.", "explanation": "Alias configuration does not modify network security rules or the guest operating system's firewall." }
+          ],
+          "correctIds": ["apex-a-alias", "dns-returns-frontend"],
+          "explanation": "Separate the valid apex record shape from the network service that receives connections after resolution."
+        },
+        {
+          "id": "records-and-current-security",
+          "kind": "single",
+          "prompt": "Which statement should replace an old note claiming Azure DNS has no DNSSEC support?",
+          "choices": [
+            { "id": "public-signing-supported", "text": "Public zones can be signed; validation and a correct trust chain are still separate requirements.", "explanation": "Current Azure documentation supports public-zone signing. Whether a query is validated depends on the resolver and trust configuration." },
+            { "id": "dnssec-encrypts-http", "text": "Enabling DNSSEC encrypts every HTTP connection to the domain.", "explanation": "DNSSEC authenticates DNS data. Application encryption requires a separate protocol such as HTTPS with correctly configured TLS." },
+            { "id": "rbac-validates-every-query", "text": "Assigning DNS Zone Contributor makes all public resolvers validate answers.", "explanation": "An Azure management role controls edits to resources. It does not control the behavior of external DNS resolvers." }
+          ],
+          "correctIds": ["public-signing-supported"],
+          "explanation": "Do not confuse authoritative signing, recursive validation, management permissions, and application encryption."
+        }
+      ],
+      "takeaways": [
+        "A resolver follows referrals and record targets; web traffic starts separately after an address is found.",
+        "A record set groups one name and type under one TTL, while CNAME and SOA sets are single-record exceptions.",
+        "Public zone creation does not register a domain or update its parent delegation.",
+        "An existing cache entry keeps the lifetime supplied when it was fetched.",
+        "A supported apex alias follows an Azure resource reference but does not configure the application or bypass caching.",
+        "Use current DNSSEC product documentation rather than the outdated support statement in the introductory Learn unit."
+      ],
+      "sourceIds": ["dns-module", "dns-unit-concepts", "dns-unit-configure", "dns-unit-record-exercise", "dns-unit-alias", "dns-unit-alias-exercise", "dns-records", "dns-delegation", "dns-alias", "dns-security", "dns-negative-cache", "dns-exam-guide"]
+    },
+    {
+      "id": "private-dns-and-hybrid-resolution",
+      "title": "Private zones, custom resolvers, and the school office",
+      "summary": "Make the exact private record and resolution path explicit, then connect the office's DNS service to Azure without mistaking DNS for network connectivity.",
+      "objectives": [
+        "Explain resolution-only and autoregistration links.",
+        "Predict the effect of selecting a custom DNS server.",
+        "Trace office-to-Azure and Azure-to-office queries using the correct resolver endpoints.",
+        "Diagnose name resolution separately from application reachability."
+      ],
+      "sections": [
+        {
+          "id": "private-records-need-explicit-links",
+          "title": "Define the private name before using it",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school application should refer to its database as db.classroom.internal rather than storing 10.20.2.5 everywhere. To make that name real in this example, explicitly create an Azure Private DNS zone named classroom.internal and a manual A record named db containing 10.20.2.5. Link the zone to school VNet 10.20.0.0/16 and wait for the link status to become Completed. Assume the web VM uses Azure-provided DNS. Only with these conditions established do we expect its query for that FQDN to return the database address."
+            },
+            {
+              "type": "paragraph",
+              "text": "A private zone is not publicly delegated through a registrar and is not published as a public DNS authority. Its VNet links establish where Azure's resolution service can consult it. The zone is not a DNS-server VM living inside your web subnet. Creating it does not attach a network interface, route packets to the database, or authenticate the web application. Use the full name in exercises: a short query for db also depends on the client's configured DNS search suffix, which we have not assumed."
+            },
+            {
+              "type": "paragraph",
+              "text": "Now add services VNet 10.40.0.0/16. To let a VM using Azure-provided DNS there resolve the same records directly, add a second zone link to services VNet. Peering alone does not create this link. Conversely, linking both VNets to the same zone can enable name resolution even without peering between them. In that case, the services VM may receive 10.20.2.5 but have no usable application path to it. DNS visibility and IP reachability are separate configuration decisions."
+            }
+          ]
+        },
+        {
+          "id": "registration-is-an-extra-feature",
+          "title": "Resolution links and automatic registration have different jobs",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A link with autoregistration disabled is a resolution-only link. Clients can resolve manually created records and eligible records registered from other linked networks, but the link does not automatically create records for its VMs. Enabling autoregistration adds record lifecycle management for VM names and primary network interfaces. It does not invent the application alias db just because a database happens to be installed. Keep the explicit manual db record in our design unless you have deliberately chosen and verified a matching registered VM hostname."
+            },
+            {
+              "type": "table",
+              "caption": "Choose a link according to the responsibility you want Azure to take",
+              "headers": ["Setting", "What it enables", "What it does not imply"],
+              "rows": [
+                ["Resolution-only link", "Use the zone's existing records from the linked VNet through the appropriate resolver.", "No automatic records for that VNet's new VMs."],
+                ["Autoregistration link", "Resolve the zone and automatically manage supported VM A records.", "No automatic records for every load balancer, secondary NIC, or arbitrary application name."],
+                ["Multiple linked VNets", "Share the private namespace across the linked resolution scopes.", "No peering, VPN, firewall permission, or application access is created."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A VNet can have multiple resolution-zone links but only one private zone with autoregistration enabled. One zone can accept registration from multiple VNets, so hostname planning still matters. Private-zone autoregistration does not create reverse PTR records in a reverse-lookup zone. Treat manual records as your responsibility when a VM address changes or a VM is removed. A successful forward lookup and a successful reverse lookup are different observations and should not be used as interchangeable tests."
+            },
+            {
+              "type": "prediction",
+              "id": "dns-link-without-registration",
+              "prompt": "services VNet has a Completed resolution-only link to classroom.internal. Its client uses Azure-provided DNS. The manual db record already exists, but no network peering or VPN has been configured. What can the client do?",
+              "answer": "It can resolve db.classroom.internal to 10.20.2.5, but that does not establish a route to the database or create a record for the client itself.",
+              "explanation": "The link exposes the zone to the client's resolver context. Autoregistration controls record creation, while network connectivity requires a separate design. Neither feature should be inferred from the other."
+            }
+          ]
+        },
+        {
+          "id": "choose-the-resolver-deliberately",
+          "title": "Custom DNS changes which server receives the question",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure-provided DNS includes basic internal VM-name resolution scoped to a VNet. That built-in namespace does not automatically become shared when VNets are peered. Private zones provide a namespace you control. Alternatively, a VNet or an individual network interface can specify custom DNS server addresses. A network interface, or NIC, is a VM's network attachment; its explicit DNS settings can override inherited VNet settings. After changing DNS configuration, follow the documented renewal or VM restart procedure and inspect the actual guest settings rather than assuming every running client has already updated."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose school VNet now uses a customer-managed DNS server at 10.40.1.10. Merely linking classroom.internal to school VNet no longer guarantees that queries reach Azure's resolver. The custom server must be reachable and configured to answer or forward the private namespace correctly. A conditional forwarder says, for example, send questions ending in classroom.internal to a particular DNS service. It handles DNS messages, not database traffic. Permit DNS over both UDP and TCP port 53 where required; permitting only small UDP queries can conceal failures with larger responses."
+            },
+            {
+              "type": "paragraph",
+              "text": "One design uses a DNS forwarder VM in a VNet linked to the private zone, forwarding appropriate queries to Azure's platform DNS address, 168.63.129.16. That address is available in the Azure network context, not a public resolver that an office computer can reach across the internet. Another design uses Azure DNS Private Resolver, avoiding DNS-server VM maintenance. Do not mix these designs accidentally: each custom DNS hop needs a reachable target, a defined forwarding policy, and protection against loops."
+            }
+          ]
+        },
+        {
+          "id": "inbound-hybrid-example",
+          "title": "Work through an office query entering Azure",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Hybrid means that part of the system runs in Azure and part runs elsewhere, here the school office network 172.20.0.0/16. Azure DNS Private Resolver has an inbound endpoint that accepts queries at a private IP address. For this example only, assume an endpoint explicitly assigned 10.40.0.4 in dedicated subnet 10.40.0.0/28 inside services VNet. The subnet is delegated to Microsoft.Network/dnsResolvers and contains no other service. The private zone must be linked to services VNet, because that is the inbound endpoint's resolution context."
+            },
+            {
+              "type": "example",
+              "title": "Resolve db.classroom.internal from the school office",
+              "scenario": "The office client is 172.20.10.25 and its DNS server is 172.20.0.10. The manual private A record is db = 10.20.2.5. No connectivity is assumed until the following checks succeed. A site-to-site VPN means a configured tunnel between the office network and an Azure gateway; its existence is independent of DNS.",
+              "steps": [
+                { "action": "Verify the zone's Completed link to services VNet and confirm the db A record's exact address.", "why": "The inbound endpoint consults private zones linked to its own VNet. Linking only school VNet would not give this endpoint the required private-zone context." },
+                { "action": "Verify a configured office-to-services VPN or ExpressRoute path, return routes, and rules permitting DNS traffic to 10.40.0.4.", "why": "The office DNS server must be able to exchange UDP and TCP DNS messages with the private endpoint. Creating an endpoint does not connect the office." },
+                { "action": "Configure the office DNS server to conditionally forward classroom.internal queries to 10.40.0.4, then query from 172.20.10.25.", "why": "The client can keep using its existing office DNS server. That server sends only the matching namespace to the Azure inbound endpoint." },
+                { "action": "Observe the answer 10.20.2.5 and compare it with a query made directly to the inbound endpoint from an authorized reachable test location.", "why": "A correct direct answer but failed office-client lookup narrows the fault to office forwarding, client configuration, or intervening DNS transport." },
+                { "action": "Before attempting the database connection, separately verify office routes to school VNet, its return route, peering gateway-transit settings if applicable, and TCP 1433 permission for this assumed SQL service.", "why": "The inbound resolver returns an address; it does not proxy SQL connections. The database must listen on the stated port and still authenticate the user." }
+              ],
+              "result": "DNS success is the observed private answer. Database success requires a second, independently permitted client-to-database path. If the answer is correct but the connection times out, changing the DNS record is not the first repair."
+            },
+            {
+              "type": "diagram",
+              "title": "DNS messages and a separate database connection",
+              "description": "The office client asks its office DNS server, which forwards through an already configured private connection to the inbound resolver at 10.40.0.4. The endpoint resolves against classroom.internal because services VNet is explicitly linked. Replies return through the DNS servers. The final client-to-database arrow is a separate attempted SQL connection requiring its own routes and permissions, not traffic through the resolver.",
+              "nodes": [
+                { "id": "office-client", "label": "Office client", "detail": "172.20.10.25; uses office DNS", "column": 0, "row": 0 },
+                { "id": "office-dns", "label": "Office DNS", "detail": "172.20.0.10; classroom.internal conditional forwarder", "column": 1, "row": 0 },
+                { "id": "inbound-resolver", "label": "Inbound endpoint", "detail": "10.40.0.4 in services VNet; reachable over the configured VPN", "column": 2, "row": 0 },
+                { "id": "linked-private-zone", "label": "Private zone", "detail": "classroom.internal linked to services VNet; db A = 10.20.2.5", "column": 2, "row": 1 },
+                { "id": "school-database", "label": "Database VM", "detail": "10.20.2.5; SQL TCP 1433 only if configured and permitted", "column": 0, "row": 2 }
+              ],
+              "edges": [
+                { "from": "office-client", "to": "office-dns", "label": "1. DNS question" },
+                { "from": "office-dns", "to": "inbound-resolver", "label": "2. Forward over VPN" },
+                { "from": "inbound-resolver", "to": "linked-private-zone", "label": "3. Linked-zone lookup" },
+                { "from": "linked-private-zone", "to": "inbound-resolver", "label": "4. Record answer" },
+                { "from": "inbound-resolver", "to": "office-dns", "label": "5. DNS response" },
+                { "from": "office-dns", "to": "office-client", "label": "6. Return 10.20.2.5" },
+                { "from": "office-client", "to": "school-database", "label": "7. Separate SQL attempt" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "outbound-forwarding-is-different",
+          "title": "Send Azure questions to office DNS",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the opposite direction, suppose the office DNS server owns a separate fictional zone office.example and has print.office.example = 172.20.3.50. The web VM needs that name. Configure a Private Resolver outbound endpoint in its own delegated subnet, for example 10.40.0.16/28, and associate a DNS forwarding ruleset. An outbound endpoint does not expose a client-facing IP like an inbound endpoint. Its ruleset contains an enabled rule for the dot-terminated suffix office.example. targeting office DNS 172.20.0.10 on port 53."
+            },
+            {
+              "type": "paragraph",
+              "text": "Link that ruleset to school VNet and keep the web VM on Azure-provided DNS for this design. The resolver checks applicable linked private zones first; for a name outside them, it evaluates forwarding rules and uses the longest matching domain suffix. That is why we used the separate office.example namespace, not a missing child inside classroom.internal. The outbound endpoint still needs a real private route to the office DNS server and a working return path. A ruleset link alone cannot establish a VPN."
+            },
+            {
+              "type": "paragraph",
+              "text": "Distinguish two resources both called links: a private-zone VNet link gives access to zone data, while a forwarding-ruleset VNet link selects forwarding policy. Current ruleset links are regional and are not supported across tenants. A ruleset-linked VNet need not be peered to the resolver VNet merely to use that forwarding service, but reachable forwarding destinations remain necessary. Never create a rule that sends a question back to the same resolver context repeatedly. In particular, follow Microsoft's warning against linking an inbound-targeting ruleset back to the inbound endpoint's own VNet."
+            }
+          ]
+        },
+        {
+          "id": "split-answers-and-troubleshooting",
+          "title": "Same name, different views, and evidence-led diagnosis",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Split-horizon DNS means deliberately presenting different answers for the same name in public and private contexts. For an actually owned replacement domain, a public web record might return a public frontend while a linked private zone returns an internal frontend. These are independently maintained zones, not one record that senses whether you are a student or teacher. A matching private zone normally remains authoritative even if a particular record is missing. Do not assume an absent private record will fall back to its public counterpart."
+            },
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                "Write the exact FQDN and requested record type. Check the record exists in the intended zone, rather than merely in another same-named zone.",
+                "Inspect the client's actual DNS server and any NIC override. If custom DNS is selected, trace that server's forwarding rules instead of assuming Azure zone links handle the query automatically.",
+                "Check the private-zone link's target VNet and Completed status, or the ruleset link, enabled suffix rule, and resolver endpoint appropriate to the direction.",
+                "For timeouts, verify DNS transport and return routes. For NXDOMAIN, inspect zone selection and record presence; also account for negative caching.",
+                "After obtaining the expected address, test the destination application's actual protocol and port separately. Then inspect routes, security rules, guest firewall, service health, and authorization."
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "A zone link, peering, and a forwarder are not substitutes",
+              "text": "Choose a zone link to expose private-zone data through the appropriate Azure resolver context. Choose network peering or a hybrid connection to establish a private network path. Choose a conditional forwarder or resolver ruleset to send the DNS question to the right authority. An inbound endpoint accepts queries entering Azure; an outbound endpoint and ruleset forward matching queries onward. Autoregistration is optional record management, not a requirement for reading manually created records."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "private-link-versus-peering",
+          "kind": "single",
+          "prompt": "A services VM using Azure-provided DNS can reach 10.20.2.5 over configured peering, but cannot resolve db.classroom.internal. The manual record exists and the zone is linked only to school VNet. What is the simplest fix for direct Azure-provided resolution?",
+          "choices": [
+            { "id": "link-services-zone", "text": "Add a resolution-only link from classroom.internal to services VNet.", "explanation": "This exposes the existing private-zone records to the services VM's Azure DNS resolution context without unnecessary automatic registration." },
+            { "id": "repeat-network-peering", "text": "Delete and recreate the network peering.", "explanation": "The existing IP connection already demonstrates the network path. Recreating peering does not create the missing private-zone link." },
+            { "id": "publish-db-publicly", "text": "Publish 10.20.2.5 in public DNS and call it private resolution.", "explanation": "Publishing a private value publicly does not provide the intended private-zone scope and needlessly exposes internal naming information." }
+          ],
+          "correctIds": ["link-services-zone"],
+          "explanation": "Fix the missing DNS scope, not the network path that already works."
+        },
+        {
+          "id": "custom-dns-bypasses-assumption",
+          "kind": "single",
+          "prompt": "The private-zone link is Completed, but a VM's NIC specifies an office DNS server with no classroom.internal forwarder. What should you investigate first?",
+          "choices": [
+            { "id": "actual-dns-forwarding", "text": "The actual custom DNS server's reachability and private-namespace forwarding.", "explanation": "The NIC override directs queries to that server. A zone link alone does not force a custom server to consult Azure Private DNS." },
+            { "id": "lower-all-record-ttls", "text": "Lower every record TTL to one second.", "explanation": "TTL changes cannot teach an unrelated DNS server where to resolve an unknown private namespace." },
+            { "id": "enable-registration-everywhere", "text": "Enable autoregistration on every private zone linked to the VNet.", "explanation": "A VNet supports only one autoregistration zone, and registration would not fix the custom query path anyway." }
+          ],
+          "correctIds": ["actual-dns-forwarding"],
+          "explanation": "Always determine which DNS service the client actually asks before reasoning about zone visibility."
+        },
+        {
+          "id": "hybrid-endpoint-selection",
+          "kind": "multiple",
+          "prompt": "Select the two correct parts of the office-to-Azure DNS design.",
+          "choices": [
+            { "id": "office-forward-inbound", "text": "Office DNS forwards classroom.internal to reachable inbound endpoint 10.40.0.4.", "explanation": "An inbound endpoint accepts DNS queries entering Azure and supplies an address that the office forwarder can target." },
+            { "id": "zone-linked-inbound-vnet", "text": "classroom.internal is linked to services VNet, where the inbound endpoint is deployed.", "explanation": "The inbound endpoint resolves the private zones linked to its VNet, so that link provides the necessary resolution context." },
+            { "id": "office-target-outbound", "text": "Office clients use the outbound endpoint as their ordinary DNS server IP.", "explanation": "An outbound endpoint operates through forwarding rulesets and is not provisioned with a client-facing resolver IP like an inbound endpoint." },
+            { "id": "dns-creates-tunnel", "text": "Adding the conditional forwarder creates the office VPN.", "explanation": "A forwarding rule only chooses where DNS messages go. The private connection and return routes must already be configured separately." }
+          ],
+          "correctIds": ["office-forward-inbound", "zone-linked-inbound-vnet"],
+          "explanation": "A valid hybrid answer needs both the correct resolver context and a network path to the endpoint."
+        },
+        {
+          "id": "private-answer-not-authorization",
+          "kind": "single",
+          "prompt": "An office query returns db.classroom.internal = 10.20.2.5, but the assumed SQL connection on TCP 1433 times out. Which conclusion is justified?",
+          "choices": [
+            { "id": "inspect-separate-data-path", "text": "DNS supplied the expected answer; inspect the separate database path and service.", "explanation": "Routes, return traffic, security rules, the guest firewall, and the SQL listener can still prevent a connection after successful resolution." },
+            { "id": "dns-proxies-database", "text": "The inbound resolver must have a broken SQL proxy.", "explanation": "Private Resolver answers DNS questions. It is not in the SQL data path and does not proxy the application's database traffic." },
+            { "id": "dns-grants-database-login", "text": "The DNS answer proves that the client has database login permission.", "explanation": "Name resolution contains no evidence about application credentials or database authorization." }
+          ],
+          "correctIds": ["inspect-separate-data-path"],
+          "explanation": "Move to the next failing layer rather than treating every connection failure as DNS."
+        }
+      ],
+      "takeaways": [
+        "db.classroom.internal works only after the record and a suitable resolution path are explicitly configured.",
+        "Resolution-only links can expose existing records without registering the querying VM.",
+        "A VNet has only one autoregistration zone, and registration does not manage every resource or every application name.",
+        "Custom DNS requires deliberate forwarding and actual client-setting verification.",
+        "Inbound endpoints accept queries into Azure; outbound endpoints and linked rulesets forward queries toward other DNS servers.",
+        "A correct private address answer is not evidence of a route, firewall permission, a healthy application, or authorization."
+      ],
+      "sourceIds": ["dns-module", "dns-unit-configure", "dns-private-links", "dns-autoregistration", "dns-vnet-resolution", "dns-resolver-overview", "dns-resolver-rulesets", "dns-records", "dns-negative-cache", "dns-exam-guide"]
+    }
+  ],
+  "glossary": [
+    { "term": "DNS", "definition": "The Domain Name System, which answers typed questions about names, commonly to find addresses." },
+    { "term": "Recursive resolver", "definition": "A DNS service that obtains an answer for a client, using caches, referrals, and authoritative servers as needed." },
+    { "term": "Authoritative server", "definition": "A DNS server responsible for answering from the records of a particular zone." },
+    { "term": "FQDN", "definition": "Fully qualified domain name: a complete name such as db.classroom.internal, not just db." },
+    { "term": "Zone", "definition": "A collection of DNS records managed together for a defined part of the naming hierarchy." },
+    { "term": "Delegation", "definition": "Parent-zone NS information directing resolvers to the authoritative servers for a child zone." },
+    { "term": "Registrar", "definition": "The organization through which a real domain is registered and its parent delegation is managed." },
+    { "term": "Record set", "definition": "Records sharing the same DNS name and type; Azure assigns their TTL at this set level." },
+    { "term": "TTL", "definition": "Time to live: the period for which a received DNS answer can normally be reused from cache." },
+    { "term": "Zone apex", "definition": "The zone's own name, often represented by @, where Azure creates NS and SOA records." },
+    { "term": "Azure alias", "definition": "An Azure qualification on a supported DNS record set that references an eligible Azure resource or compatible same-zone record set." },
+    { "term": "Private-zone VNet link", "definition": "A resource associating a private DNS zone with a VNet's resolution context, optionally enabling VM autoregistration." },
+    { "term": "Autoregistration", "definition": "Automatic private DNS A-record lifecycle management for supported VM names and primary NICs in a linked VNet." },
+    { "term": "Conditional forwarding", "definition": "Sending queries for a selected DNS namespace to specified DNS servers rather than resolving them through the default path." },
+    { "term": "Inbound endpoint", "definition": "A Private Resolver endpoint with a private IP that accepts DNS queries and resolves in its VNet's context." },
+    { "term": "Outbound endpoint", "definition": "A Private Resolver component used with forwarding rulesets to send matching DNS questions to other DNS servers." },
+    { "term": "Split-horizon DNS", "definition": "Deliberately serving different DNS answers for the same name in different resolution contexts." },
+    { "term": "DNSSEC", "definition": "DNS extensions for authenticating DNS data with signatures and a chain of trust, not for encrypting web traffic." }
+  ],
+  "sources": [
+    { "id": "dns-module", "url": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/", "title": "Host your domain on Azure DNS", "supports": "Official module objective and complete unit sequence; all seven units were consulted, including introduction and summary." },
+    { "id": "dns-unit-concepts", "url": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/2-what-is-azure-dns", "title": "What is Azure DNS?", "supports": "Instructional coverage of resolution, record types, record sets, Azure management controls, private domains, and aliases. Its old DNSSEC support statement is superseded by the current DNSSEC source." },
+    { "id": "dns-unit-configure", "url": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/3-configure-azure-dns-host-domain", "title": "Configure Azure DNS to host your domain", "supports": "Public zone creation, assigned name servers, registrar delegation, A and CNAME configuration, and explicit private-zone VNet links." },
+    { "id": "dns-unit-record-exercise", "url": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/4-exercise-create-dns-zone-a-record", "title": "Exercise: Create a DNS zone and an A record", "supports": "Record-set creation and directly querying an assigned Azure name server without claiming public delegation or website reachability." },
+    { "id": "dns-unit-alias", "url": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/5-resolve-name-alias-record", "title": "Dynamically resolve resource name by using alias record", "supports": "Apex constraints and the learning objective of replacing a numeric destination reference with a supported resource alias." },
+    { "id": "dns-unit-alias-exercise", "url": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/6-exercise-create-alias-records", "title": "Exercise: Create alias records for Azure DNS", "supports": "The load-balanced website scenario and apex A alias targeting its public IP resource; the authored lesson separates IP browsing from DNS verification." },
+    { "id": "dns-records", "url": "https://learn.microsoft.com/en-us/azure/dns/dns-zones-records", "title": "Overview of DNS zones and records", "supports": "Current record types, relative names, apex records, set-level TTL, singleton CNAME and SOA sets, wildcard behavior, and SPF through TXT." },
+    { "id": "dns-delegation", "url": "https://learn.microsoft.com/en-us/azure/dns/dns-domain-delegation", "title": "Delegation of DNS zones with Azure DNS", "supports": "Recursive versus authoritative services, root-to-TLD-to-authority referrals, registrar responsibility, and the parent and child NS copies." },
+    { "id": "dns-alias", "url": "https://learn.microsoft.com/en-us/azure/dns/dns-alias", "title": "Azure DNS alias records overview", "supports": "Supported alias types and targets, Standard public IP references, empty record sets after target deletion, apex support, and the preview status of newer Traffic Manager linked records." },
+    { "id": "dns-private-links", "url": "https://learn.microsoft.com/en-us/azure/dns/private-dns-virtual-network-links", "title": "What is a virtual network link?", "supports": "Resolution-only versus registration links, Completed status, many resolution zones per VNet, and one registration zone per VNet." },
+    { "id": "dns-autoregistration", "url": "https://learn.microsoft.com/en-us/azure/dns/private-dns-autoregistration", "title": "What is the autoregistration feature in Azure DNS private zones?", "supports": "VM-only automatic registration, primary NIC scope, manual records for other resources, and lack of automatic private-zone PTR registration." },
+    { "id": "dns-vnet-resolution", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-name-resolution-for-vms-and-role-instances", "title": "Configure DNS name resolution for Azure virtual networks", "supports": "VNet-scoped built-in names, custom DNS forwarding, client configuration refresh, NIC settings, and Azure platform resolver address 168.63.129.16." },
+    { "id": "dns-resolver-overview", "url": "https://learn.microsoft.com/en-us/azure/dns/dns-private-resolver-overview", "title": "What is Azure DNS Private Resolver?", "supports": "Private-zone and ruleset query order, inbound and outbound roles, dedicated delegated endpoint subnets, hybrid connection prerequisites, and tenant restrictions." },
+    { "id": "dns-resolver-rulesets", "url": "https://learn.microsoft.com/en-us/azure/dns/private-resolver-endpoints-rulesets", "title": "Azure DNS Private Resolver endpoints and rulesets", "supports": "Inbound VNet zone context, lack of an outbound client-facing endpoint IP, regional ruleset links, peering-independent ruleset use, suffix matching, and forwarding-loop warnings." },
+    { "id": "dns-security", "url": "https://learn.microsoft.com/en-us/azure/dns/dnssec", "title": "DNSSEC overview", "supports": "Current Azure Public DNS signing support, DNS data authentication, parent trust-chain requirements, and the lack of default Azure-provided resolver DNSSEC response validation." },
+    { "id": "dns-negative-cache", "url": "https://learn.microsoft.com/en-us/troubleshoot/azure/dns/troubleshoot-private-dns-zone-override-nxdomain", "title": "Troubleshoot NXDOMAIN from an Azure Private DNS zone", "supports": "Private-zone authority over a matching namespace, lack of assumed public fallback, SOA-related negative caching, and distinguishing stale caches from a broken custom forwarding path." },
+    { "id": "dns-exam-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "Study guide for Exam AZ-104", "supports": "The April 17, 2026 skills include Configure Azure DNS and troubleshooting network connectivity; priority is instructional, not a predicted exam weighting." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: observe DNS without assuming a website",
+    "purpose": "Practice the public-record and alias exercises and inspect explicit private-zone links. All lesson predictions and checkpoints can be completed in the browser without this lab. Nothing is provisioned automatically.",
+    "prerequisites": [
+      "An approved Azure subscription, permission to manage the disposable DNS and network resources, and permission to spend within an agreed budget.",
+      "A new, dedicated resource group named rg-school-dns-lab with a verified empty resource list; do not use existing production resources.",
+      "A local DNS lookup tool such as nslookup and a network that permits DNS queries to the assigned public authoritative servers.",
+      "No owned domain is required for direct-authority testing of classroom.example. Public recursive delegation testing requires a different, real domain that you own and are explicitly authorized to change.",
+      "For optional private runtime testing, a separately approved disposable VM inside school VNet, using Azure-provided DNS and an approved management path. Without that VM, inspect configuration only and do not claim a successful private lookup."
+    ],
+    "costWarning": "Azure DNS charges for hosted zones and queries. Optional Standard public IP addresses can incur charges even when unattached. VMs, disks, management services, VPN gateways, and Private Resolver endpoints can add continuing charges. Check current regional prices and the resource list before each optional creation; no subscription credit or free allowance is assumed. This lab does not require deploying a load balancer, VPN gateway, or Private Resolver.",
+    "steps": [
+      "In the portal, confirm the approved subscription and dedicated empty resource group. Create a public DNS zone named classroom.example. This is a DNS-only demonstration, not domain registration.",
+      "Open the zone's record sets and note its automatically created NS and SOA sets and all four assigned Azure name servers.",
+      "Add a non-alias A record named www, TTL 300 seconds, value 203.0.113.20. The value is documentation-only and will not host a working website.",
+      "Use the lesson's read-only nslookup pattern, substituting one actually assigned name server. Record the returned www address. Do not treat this direct query as evidence that public recursive resolvers can discover the zone.",
+      "Change the A value to 203.0.113.21 and repeat the direct-authority query after the change is applied. Compare this with the paper TTL prediction; do not promise that every client cache has changed.",
+      "Optional alias extension, only after approving its separate cost: create one disposable Standard IPv4 public IP in this group. Create an apex A alias targeting that public IP resource. Query the apex directly against the assigned DNS server and compare with the public IP's actual numeric address. Do not browse it expecting a website: no service is attached.",
+      "If you performed the alias extension, delete only that disposable unattached public IP, then inspect the alias record set after the change is applied. It should no longer retain the deleted resource's address as an authoritative resource-backed value; existing client caches can still contain an earlier answer.",
+      "Create empty disposable school and services VNets with 10.20.0.0/16 and 10.40.0.0/16 respectively. For school VNet, define web 10.20.1.0/24 and database 10.20.2.0/24 subnets. Do not peer the VNets for this DNS-only configuration exercise.",
+      "Create private zone classroom.internal. Add manual A record db = 10.20.2.5 and resolution-only links to both VNets. Wait for both links to show Completed and verify autoregistration remains disabled.",
+      "If you separately approved and created the disposable test VM, confirm its actual DNS setting, query db.classroom.internal inside school VNet, and record the answer. There is no database VM in this lab, so receiving 10.20.2.5 cannot establish database connectivity. Without a VM, record only the zone and link configuration evidence.",
+      "For a real-domain extension only, obtain authorization and use a real owned replacement domain, not classroom.example. Preserve the original registrar settings, publish the intended real records, delegate using all four assigned servers, and compare direct-authority and ordinary recursive queries while accounting for caching. Skip this step if ownership or authorization is absent."
+    ],
+    "expectedResults": [
+      "A direct query to the assigned authority returns the configured documentation address for www. This proves record serving, not registration, public delegation, or website access.",
+      "The optional apex alias returns its target public IP while that resource exists, and no longer supplies that resource-backed value after deletion and authoritative update; caches may lag.",
+      "Both private-zone links show Completed, and the manual db record exists independently of autoregistration.",
+      "Only if a correctly configured test VM was created, its private query returns 10.20.2.5. No database listener or route between the two unpeered VNets is established by this DNS exercise."
+    ],
+    "cleanup": [
+      "If a real owned domain was used, restore or intentionally migrate its registrar delegation and verify replacement DNS service before deleting its Azure authority. Do not leave a live domain delegated to deleted name servers.",
+      "Inspect rg-school-dns-lab and confirm every resource belongs exclusively to this exercise. Remove the optional VM and associated disks, NICs, public IPs, and any separately approved management resource. Verify that no shared resource or external link is included.",
+      "Remove the lab private-zone links, private and public zones, remaining alias sets, and empty lab VNets, or delete only the dedicated group after verifying its complete contents. Do not delete unrelated resource groups.",
+      "Refresh the subscription resource inventory to confirm the lab resources are gone, including any optional public IP. Review Cost Management after usage reporting catches up; deletion stops future use but does not erase charges already incurred."
+    ]
+  }
+}

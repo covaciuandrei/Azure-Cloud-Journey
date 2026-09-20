@@ -1,0 +1,54 @@
+{
+  "pathUrl": "https://learn.microsoft.com/en-us/training/paths/az-104-manage-virtual-networks/",
+  "reviewedAt": "2026-09-20",
+  "modules": [
+    {
+      "id": "virtual-networks",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/",
+      "lessonIds": ["packets-and-addresses", "cidr-and-subnets", "build-an-azure-network"],
+      "minimumWords": 3300
+    },
+    {
+      "id": "network-security-groups",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/configure-network-security-groups/",
+      "lessonIds": ["nsgs-and-asgs", "private-access-and-service-boundaries", "bastion-firewall-and-safe-access"],
+      "minimumWords": 2900
+    },
+    {
+      "id": "azure-dns",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/host-domain-azure-dns/",
+      "lessonIds": ["names-records-and-delegation", "private-dns-and-hybrid-resolution"],
+      "minimumWords": 2100
+    },
+    {
+      "id": "vnet-peering",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/",
+      "lessonIds": ["connect-vnets-with-peering", "hub-spoke-and-gateway-transit"],
+      "minimumWords": 2100
+    },
+    {
+      "id": "routing",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/",
+      "lessonIds": ["system-routes-and-longest-prefix", "route-through-an-appliance", "connect-to-on-premises"],
+      "minimumWords": 2800
+    },
+    {
+      "id": "load-balancer",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-load-balancer/",
+      "lessonIds": ["layer-four-load-balancing", "rules-probes-and-nat", "availability-and-troubleshooting"],
+      "minimumWords": 2700
+    },
+    {
+      "id": "application-gateway",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-application-gateway/",
+      "lessonIds": ["http-routing-and-tls", "waf-and-service-choice"],
+      "minimumWords": 1800
+    },
+    {
+      "id": "network-watcher",
+      "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-network-watcher/",
+      "lessonIds": ["troubleshoot-in-layers", "choose-a-diagnostic-tool", "flow-logs-and-a-final-case"],
+      "minimumWords": 2700
+    }
+  ]
+}

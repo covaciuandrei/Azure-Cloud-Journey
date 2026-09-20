@@ -1,0 +1,42 @@
+[
+  {
+    "id": "virtual-networks",
+    "digest": "224884a7da62bf0dfb962f14dffd2a4107898e900f1d6c17e3eac4a584ce0a2e",
+    "note": "Reviewed foundational prose and all worked examples and checkpoint keys. IPv4 bit arithmetic, prefix alignment, per-subnet Azure reservations, NIC static allocation versus guest DHCP, explicit DNS assumptions and current outbound defaults are explained from first principles. ARM example parses as JSON; no live resources were created."
+  },
+  {
+    "id": "network-security-groups",
+    "digest": "3211dbe1c8455b5dd8eefd57e3fc907c6947b779a756a6ea039fc0c81b21346d",
+    "note": "Reviewed rule priorities, independent subnet/NIC decisions, defaults and stateful-flow examples. Private endpoint and service endpoint addressing and authorization are separated. Bastion Developer, dedicated SKUs and Premium private-only exceptions are explicit. Optional lab remains configuration-only and cost-scoped."
+  },
+  {
+    "id": "azure-dns",
+    "digest": "957963ddd139952860044e365a54063d59c07d09a5a94364cc270668ef6f466e",
+    "note": "Reviewed all DNS explanatory prose, TTL calculations, delegation versus direct queries, alias and DNSSEC qualifications, private-zone links and hybrid forwarder paths. Every scenario names its resolver and connectivity assumptions. Manual labs distinguish configuration evidence from runtime evidence and preserve real-domain delegation."
+  },
+  {
+    "id": "vnet-peering",
+    "digest": "b357d362400e78ae040b48c6bccfcb1b121a2be4f3a0870b78bdc62bc31b0b85",
+    "note": "Reviewed nonoverlap arithmetic, reciprocal peering, cross-tenant permissions, current resize-and-sync behavior, nontransitivity and complete return paths. NVA and gateway-transit settings are not substituted for routing or DNS. Optional lab now distinguishes network-only permissions from compute and Run Command permissions."
+  },
+  {
+    "id": "routing",
+    "digest": "84ef4968cc68090ab527c820c0623084ace51ac808a5548c70fbf4d20b1f34b6",
+    "note": "Reviewed the complete explanatory prose, examples and checkpoint keys. Prefix arithmetic, preferred-system-route caveats, source-subnet UDR placement, NIC and guest forwarding, symmetric NVA paths, and hybrid DNS/routing separation are explicit. Optional labs are cost-scoped and were not run."
+  },
+  {
+    "id": "load-balancer",
+    "digest": "5f3cc496382d8b54cb28db5916072e9849a243ba7ec7010fc0d6f4c580291e22",
+    "note": "Reviewed all three lessons and worked calculations. L4 flow mapping, translated backend ports, independent probe paths, current NAT v2 distinctions, explicit egress, SNAT arithmetic and HA topology limits are appropriately qualified. Manual lab costs and cleanup are explicit; no live Azure deployment was performed."
+  },
+  {
+    "id": "application-gateway",
+    "digest": "97eecccfe43bfbb8bd08895e7ebbde3bfec040ba46044f8ca60f8979f54c8d68",
+    "note": "Reviewed HTTP request decomposition, host/path routing, two TLS legs, readiness versus authorization, WAF modes and evidence-based false-positive handling. Current Basic preview and TCP/TLS proxy preview are explicitly distinguished from production HTTP(S) examples and retired Basic Load Balancer. The gateway subnet is 10.20.5.0/24, separate from the NVA subnet. Reusing the example public IP denotes an alternative entry design, not simultaneous attachment."
+  },
+  {
+    "id": "network-watcher",
+    "digest": "cadbe0253a32de3083b80e7f39a2f8b89c1853e6bc6d05029c5c74e2adadb45d",
+    "note": "Reviewed the layered troubleshooting method, exact five-tuples, new versus existing NSG flows and capstone conclusions. Current first-party documentation supports the stated extension, capture-SAS and flow-log prerequisites; preview alternatives are qualified. Current VNet flow logs replace new NSG-flow-log creation, without claiming the workspace or NSGs are retired."
+  }
+]

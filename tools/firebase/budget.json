@@ -1,0 +1,35 @@
+{
+  "displayName": "study-az104: $1 monthly alert",
+  "budgetFilter": {
+    "projects": [
+      "projects/237261733668"
+    ],
+    "calendarPeriod": "MONTH",
+    "creditTypesTreatment": "INCLUDE_ALL_CREDITS"
+  },
+  "amount": {
+    "specifiedAmount": {
+      "currencyCode": "USD",
+      "units": "1",
+      "nanos": 0
+    }
+  },
+  "thresholdRules": [
+    {
+      "thresholdPercent": 0.5,
+      "spendBasis": "CURRENT_SPEND"
+    },
+    {
+      "thresholdPercent": 0.9,
+      "spendBasis": "CURRENT_SPEND"
+    },
+    {
+      "thresholdPercent": 1,
+      "spendBasis": "CURRENT_SPEND"
+    }
+  ],
+  "notificationsRule": {
+    "disableDefaultIamRecipients": false,
+    "enableProjectLevelRecipients": true
+  }
+}

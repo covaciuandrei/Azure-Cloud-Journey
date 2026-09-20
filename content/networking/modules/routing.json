@@ -1,0 +1,668 @@
+{
+  "schemaVersion": 1,
+  "id": "routing",
+  "title": "Routing: deciding where a packet goes next",
+  "summary": "Follow a school application's traffic through Azure, choose routes correctly, send traffic through an appliance, and distinguish a working hybrid network from a working DNS lookup.",
+  "priority": "core",
+  "priorityReason": "Configuring user-defined routes and troubleshooting network connectivity are explicit AZ-104 objectives. The appliance examples explain why route configuration matters in practice. The dedicated hybrid lesson is supporting background, not a claim that gateway design has the same exam emphasis.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Identify the routing capabilities of an Azure virtual network.",
+    "Configure routing within a virtual network.",
+    "Deploy a basic network virtual appliance.",
+    "Configure routing to send traffic through a network virtual appliance."
+  ],
+  "lessons": [
+    {
+      "id": "system-routes-and-longest-prefix",
+      "title": "Read the destination, then choose the route",
+      "summary": "Understand prefixes, system routes, route-source preference, important exceptions, and the effective routes that a VM actually sees.",
+      "objectives": [
+        "Choose the longest matching prefix and use route-source preference only for an equal-prefix choice.",
+        "Explain default routes, peering routes, gateway propagation, and service endpoint exceptions.",
+        "Use effective routes to distinguish configuration intent from the path available to a running VM."
+      ],
+      "sections": [
+        {
+          "id": "routing-destination-first",
+          "title": "An address is not a journey",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Your PC can know the address of a server without knowing how to reach it. Routing is the decision about where to send a packet next. A packet is a small piece of a conversation with source and destination IP addresses. A route describes a destination address range and a next hop, meaning the next forwarding action. The destination is still the final server even when the packet first visits a firewall. A route is not a login permission and does not prove that the destination application is listening."
+            },
+            {
+              "type": "paragraph",
+              "text": "Our fictional Romanian school's App VNet is 10.20.0.0/16. The web VM is 10.20.1.4 in web subnet 10.20.1.0/24; the database VM is 10.20.2.5 in database subnet 10.20.2.0/24. An IPv4 address has 32 bits. The number after the slash says how many leading bits identify the network. A /16 covers 65,536 addresses, while a /24 covers 256. A longer prefix describes a smaller, more specific set. These are address counts, not available VM counts. Azure reserves addresses within each subnet, and other resources also consume addresses."
+            }
+          ]
+        },
+        {
+          "id": "routing-system-paths",
+          "title": "What Azure already knows",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure creates system routes automatically. For this VNet, a 10.20.0.0/16 route with next hop Virtual network lets the web and database subnets communicate without a gateway or your own route table. Azure does not need a separate default system route for each /24 subnet. If we explicitly establish peering with Services VNet 10.40.0.0/16, Azure adds a route for that address space. Merely giving two VNets similar names does nothing. Network security groups, guest firewalls, and application permissions still decide whether the routed conversation is allowed."
+            },
+            {
+              "type": "table",
+              "caption": "Selected routes before customisation; peering is assumed to be configured",
+              "headers": ["Destination prefix", "Source", "Next hop", "Meaning"],
+              "rows": [
+                ["10.20.0.0/16", "System", "Virtual network", "Reach addresses inside App VNet."],
+                ["10.40.0.0/16", "System", "Virtual network peering", "Reach the directly peered Services VNet."],
+                ["10.0.0.0/8", "System", "None", "Drop unmatched destinations in this private range."],
+                ["172.16.0.0/12", "System", "None", "Drop unmatched private destinations from 172.16.0.0 through 172.31.255.255."],
+                ["192.168.0.0/16", "System", "None", "Drop unmatched destinations in this private range."],
+                ["100.64.0.0/10", "System", "None", "Drop unmatched destinations in shared address space."],
+                ["0.0.0.0/0", "System", "Internet", "Fallback routing direction, not a promise of outbound connectivity."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "None means drop, not ask DNS for another address. The table is a useful subset rather than a permanent inventory of every platform route. The Internet next hop also needs care: a routing direction does not allocate a public source address. Current portal-created private subnets require explicit outbound connectivity for ordinary internet access. The default change applies to new VNets with APIs released after March 31, 2026; it does not silently change existing VNets. NAT Gateway, correctly configured public Standard Load Balancer outbound rules, or an appropriate firewall design can supply explicit egress."
+            }
+          ]
+        },
+        {
+          "id": "routing-longest-match",
+          "title": "Work from matching ranges to the longest prefix",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For ordinary eligible routes, first discard every prefix that does not contain the destination. Next choose the matching route with the largest prefix length. This is longest-prefix matching. Do not start by asking who created the route. A user-defined route, shortened to UDR, is simply a custom route you supplied. A broad UDR can coexist with a more specific system route and lose the selection. The common sentence 'UDRs always win' misses this essential first step."
+            },
+            {
+              "type": "example",
+              "title": "Why a default firewall route does not capture database traffic",
+              "scenario": "The web subnet has a UDR for 0.0.0.0/0 to appliance 10.20.3.4. The system route for 10.20.0.0/16 remains. The web VM sends a packet to database 10.20.2.5.",
+              "steps": [
+                {"action": "List the matching routes: 0.0.0.0/0, 10.0.0.0/8, and 10.20.0.0/16.", "why": "The destination belongs to all three ranges. A configured 10.40.0.0/16 peering route is irrelevant to this destination."},
+                {"action": "Compare prefix lengths: 16 is greater than 8 and 0.", "why": "The /16 system route describes the most specific matching range. The UDR's source does not compensate for its shorter prefix."},
+                {"action": "Choose Virtual network as the next hop.", "why": "The packet takes the VNet path to the database rather than visiting the appliance. This is a route decision, assuming security permits the traffic."},
+                {"action": "Add a 10.20.2.0/24 UDR to 10.20.3.4 if database-subnet inspection is required.", "why": "The /24 covers 10.20.2.0 through 10.20.2.255, includes 10.20.2.5, and is more specific than the /16."}
+              ],
+              "result": "With only the default UDR, the database traffic bypasses the appliance. With the database /24 UDR, its next hop becomes the appliance. The appliance still needs forwarding and a working onward path."
+            }
+          ]
+        },
+        {
+          "id": "routing-ties-and-exceptions",
+          "title": "Resolve ties without forgetting Azure exceptions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "When eligible routes have the same destination prefix, the usual source preference is UDR, then BGP, then system. BGP, Border Gateway Protocol, exchanges information about reachable networks with another router. For example, an office 172.20.0.0/16 route learned through a gateway normally loses to a UDR for that exact /16. A UDR for only 0.0.0.0/0 does not win that comparison. You cannot add two UDRs with the same address prefix to one route table and expect Azure to divide traffic between them."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure documents preferred system routes for local VNet, peering, and service endpoint traffic over BGP routes, even more-specific BGP routes. Service endpoint routes have a stronger exception: you cannot override their service-destination path with a UDR. An enabled Storage service endpoint sends matching traffic directly over Azure's backbone. The destination remains a public service IP, while the service sees the subnet's private source and VNet identity. This is not a private endpoint address, and it does not grant data permissions. Configure service network access and authorisation separately."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Choose the prefix before the source",
+              "text": "For a normal UDR versus system-route problem, a /16 peering route beats a /0 UDR. For equal prefixes, apply source preference. Then check whether the question introduces a documented preferred system route or service endpoint exception. Service tags group maintained service prefixes; they are not service endpoints and do not themselves create endpoint connectivity."
+            },
+            {
+              "type": "paragraph",
+              "text": "A service tag can be used as the destination of a UDR so Microsoft maintains the service's changing address ranges. When an explicit prefix and a service tag expand to the same prefix, the explicit prefix is preferred. Overlapping service tags have documented specificity rules, such as regional tags before their broader service tags. These conveniences reduce maintenance, but they are not reasons to assume that all cloud-service traffic will traverse your firewall. Check the actual effective routes after enabling an endpoint."
+            }
+          ]
+        },
+        {
+          "id": "routing-browser-practice",
+          "title": "Predict a boundary crossing",
+          "blocks": [
+            {
+              "type": "interactive",
+              "tool": "routes",
+              "introduction": "Use the route selector to practise matching a destination to a prefix before comparing route sources. For the school example, reason through 10.20.2.5 with /0, 10.20.0.0/16, and 10.20.2.0/24 routes. Then compare destinations 10.20.2.127 and 10.20.2.128 against 10.20.2.128/25. The widget practises route selection, not live Azure forwarding, firewall permissions, service endpoint exceptions, or outbound NAT."
+            },
+            {
+              "type": "prediction",
+              "id": "routing-prefix-boundary",
+              "prompt": "A /24 UDR for 10.20.2.0/24 points to the appliance. A /25 UDR for 10.20.2.128/25 has next hop None. What happens to destinations 10.20.2.127 and 10.20.2.128?",
+              "answer": "10.20.2.127 selects the /24 appliance route. 10.20.2.128 selects the /25 drop route.",
+              "explanation": "The upper /25 covers 10.20.2.128 through 10.20.2.255, exactly 128 addresses. The lower value .127 is outside it. These are routing destinations, not a suggestion to allocate .128 to a VM in a /25 subnet, where the first addresses are reserved."
+            }
+          ]
+        },
+        {
+          "id": "routing-effective-evidence",
+          "title": "Inspect the routes at the source NIC",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A route table resource shows the UDRs you intended to apply. Effective routes on a network interface show the combined view of system routes, associated UDRs, and gateway-propagated routes. For a running web VM, open its network interface and Effective routes in the portal. Read destination prefix, source, next hop, and state. A replaced route can appear Invalid rather than disappearing. Check the correct NIC, especially on a VM with several interfaces. An unassociated route table changes no VM's path."
+            },
+            {
+              "type": "code",
+              "language": "azurecli",
+              "code": "az network nic show-effective-route-table \\\n  --resource-group rg-school-routing-lab \\\n  --name nic-school-web \\\n  --output table",
+              "explanation": "Optional read-only example, not executed by this course. It assumes the named lab NIC exists, its VM is running, Azure CLI is authenticated to the intended subscription, and you have permission to inspect it. Replace both names with your own disposable lab resources. This retrieves evidence; it does not create or repair a route."
+            },
+            {
+              "type": "paragraph",
+              "text": "For one destination, Network Watcher's Next hop tool can help confirm the selected forwarding action. Pair that result with an actual connection test and the destination's listener. A correct next hop does not prove an NVA is powered on, that its firewall permits the flow, or that replies can return. Record the source IP, destination IP, protocol, and port before troubleshooting. That small record stops you from comparing an internet browser request with an unrelated private database connection."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "routing-check-peering-prefix",
+          "kind": "single",
+          "prompt": "App VNet has connected peering to 10.40.0.0/16 and a /0 UDR to 10.20.3.4. No other matching custom route exists. Which next hop handles 10.40.8.9?",
+          "choices": [
+            {"id": "route-peering", "text": "Virtual network peering", "explanation": "The matching /16 is more specific than /0, so the system peering route wins this ordinary comparison."},
+            {"id": "route-appliance", "text": "The appliance, because the administrator created the UDR", "explanation": "Route-source preference is not evaluated before matching prefix length. A default UDR does not capture this peered prefix."},
+            {"id": "route-dns", "text": "Whichever route the DNS server returns", "explanation": "DNS returns name-resolution data, not the next hop for an IP packet."}
+          ],
+          "correctIds": ["route-peering"],
+          "explanation": "First identify the longest matching prefix. The destination falls within 10.40.0.0 through 10.40.255.255."
+        },
+        {
+          "id": "routing-check-equal-prefix",
+          "kind": "single",
+          "prompt": "The ordinary office destination 172.20.8.10 matches both a BGP 172.20.0.0/16 route and a UDR for exactly 172.20.0.0/16. Which is preferred?",
+          "choices": [
+            {"id": "route-user", "text": "The UDR", "explanation": "The prefix is identical, so the usual route-source preference puts the UDR before BGP."},
+            {"id": "route-bgp", "text": "BGP, because it updates automatically", "explanation": "Dynamic route learning does not outrank an equal-prefix UDR."},
+            {"id": "route-split", "text": "Both routes receive half the packets", "explanation": "This source-preference decision is not a load-balancing rule."}
+          ],
+          "correctIds": ["route-user"],
+          "explanation": "The question excludes the special preferred-system-route cases and fixes the prefixes as equal."
+        },
+        {
+          "id": "routing-check-endpoint",
+          "kind": "multiple",
+          "prompt": "A Storage service endpoint is enabled on the web subnet. Which two statements correctly describe matching service traffic?",
+          "choices": [
+            {"id": "endpoint-direct", "text": "Its service endpoint route cannot be overridden with a UDR.", "explanation": "Azure explicitly gives service endpoint routes this priority exception."},
+            {"id": "endpoint-public", "text": "The service destination remains public, although traffic uses the subnet's private source and VNet identity.", "explanation": "A service endpoint changes connectivity and service-side network identity, not the destination into a private endpoint NIC."},
+            {"id": "endpoint-rbac", "text": "The endpoint automatically grants permission to read every blob.", "explanation": "Network access does not grant data-plane authorisation, such as a suitable role or other supported credential."},
+            {"id": "endpoint-private", "text": "The Storage account is assigned 10.20.1.5 automatically.", "explanation": "That describes neither the addressing nor the resource model of a service endpoint."}
+          ],
+          "correctIds": ["endpoint-direct", "endpoint-public"],
+          "explanation": "Separate the route, the service's network restrictions, and permission to use the data."
+        },
+        {
+          "id": "routing-check-association",
+          "kind": "single",
+          "prompt": "You saved a database /24 UDR, but the running web VM's effective routes do not contain it. What should you verify first?",
+          "choices": [
+            {"id": "association-source", "text": "That its route table is associated with the web VM's source subnet.", "explanation": "A saved UDR affects traffic from associated subnets; creation alone is not enough."},
+            {"id": "association-hosts", "text": "That the database hostname is in the web VM's hosts file.", "explanation": "A name mapping does not attach a route table or install an Azure UDR."},
+            {"id": "association-public", "text": "That both VMs have public IP addresses.", "explanation": "Private inter-subnet routing does not need public addresses."}
+          ],
+          "correctIds": ["association-source"],
+          "explanation": "Inspect the correct source NIC and subnet association before changing the route itself."
+        }
+      ],
+      "takeaways": [
+        "A route chooses a next hop for a destination, not an application permission.",
+        "For ordinary eligible routes, compare prefix length before route source.",
+        "Equal-prefix source preference is UDR, BGP, then system, with documented platform exceptions.",
+        "Effective routes reveal the combined routing view at a running VM's NIC.",
+        "An Internet route is not the same thing as explicit outbound connectivity."
+      ],
+      "sourceIds": ["route-capabilities-unit", "route-selection", "route-effective", "route-service-endpoints", "route-private-outbound", "route-exam"]
+    },
+    {
+      "id": "route-through-an-appliance",
+      "title": "Send traffic through an appliance and bring replies back",
+      "summary": "Build a complete forwarding story: source-subnet UDR, reachable appliance, Azure NIC forwarding, guest forwarding, inspection policy, and return routing.",
+      "objectives": [
+        "Describe what a basic NVA does and what it does not secure automatically.",
+        "Place custom routes on the correct source subnets.",
+        "Trace both directions through an NVA without an accidental bypass or routing loop.",
+        "Diagnose failures using effective routes, forwarding settings, listeners, and packet evidence."
+      ],
+      "sections": [
+        {
+          "id": "nva-purpose",
+          "title": "Make the inspection point part of the actual path",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Installing a security program on one PC does not make other PCs send their traffic through it. The same idea applies in Azure. A network virtual appliance, or NVA, is usually a VM running networking software. It may route packets, inspect connections, act as a proxy, optimise WAN traffic, or detect attacks. A router forwards traffic between networks; a firewall additionally applies a policy about what to allow. The NVA label alone does not tell you which capabilities are installed or enabled."
+            },
+            {
+              "type": "paragraph",
+              "text": "The school wants web-to-database traffic inspected. We add an appliance subnet 10.20.3.0/24 and give the appliance NIC private IP 10.20.3.4. This is separate from the web and database subnets. A plain Linux VM with forwarding enabled is a useful teaching router, but it is not automatically a production firewall. A Marketplace appliance can provide inspection features and support, often with licence costs. Some products use separate management and data NICs, which makes vendor-supported routing and interface configuration important."
+            }
+          ]
+        },
+        {
+          "id": "nva-source-subnets",
+          "title": "Associate routes with the machines sending the packets",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Create a route table named rt-school-web. In it, create a route for destination 10.20.2.0/24, choose next hop Virtual appliance, and specify 10.20.3.4. Associate the table with web subnet 10.20.1.0/24. Azure consults that customisation when traffic leaves a VM in that subnet. Associating the table only with the destination database subnet would not redirect the original web request. One route table can serve several subnets, but each subnet has at most one associated route table."
+            },
+            {
+              "type": "table",
+              "caption": "A deliberately symmetric, single-NVA design without address translation",
+              "headers": ["Source subnet", "Custom destination", "Next hop", "Purpose"],
+              "rows": [
+                ["Web 10.20.1.0/24", "10.20.2.0/24", "Virtual appliance 10.20.3.4", "Inspect requests to database addresses."],
+                ["Database 10.20.2.0/24", "10.20.1.0/24", "Virtual appliance 10.20.3.4", "Return web replies through the same appliance."],
+                ["Appliance 10.20.3.0/24", "No self-pointing UDR", "System VNet routes", "Forward onward to web and database without a loop."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep the appliance's private address stable using its Azure NIC IP configuration, rather than inventing an address inside the guest. The next hop must be directly reachable using a supported topology. A UDR is not a magic tunnel to any private address on Earth. Service chaining can route through an NVA in a peered VNet, but requires real peering, appropriate forwarded-traffic settings, appliance routes, and a return path. You cannot manually choose Virtual network peering as a UDR next hop; that next-hop type is created by Azure."
+            }
+          ]
+        },
+        {
+          "id": "nva-two-forwarding-settings",
+          "title": "Enable forwarding in two different places",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An ordinary VM expects packets addressed to itself. Our appliance must receive packets addressed to 10.20.2.5, even though its own IP is 10.20.3.4. Enable IP forwarding on every Azure NIC used to forward transit traffic. This adjusts Azure's source and destination checks for that interface. It does not change the final destination to the appliance, does not install firewall rules, and does not enable routing inside Linux or Windows. The platform setting and the guest setting solve different parts of the problem."
+            },
+            {
+              "type": "paragraph",
+              "text": "Inside a Linux teaching appliance, IPv4 forwarding must also be enabled in the kernel and persist across a reboot. Check the current value and the saved operating-system configuration, not just a command's earlier success message. A Windows router or a commercial NVA has its own supported forwarding configuration. Then inspect the guest routing table and forwarding firewall policy. The appliance must permit the intended transit flow and its replies. NSGs on the appliance and endpoint subnets or NICs must also permit the relevant packets; a route never bypasses an NSG."
+            }
+          ]
+        },
+        {
+          "id": "nva-request-example",
+          "title": "Follow one database connection in both directions",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "A complete database connection through 10.20.3.4",
+              "scenario": "Assume the two UDRs in the table are associated, forwarding works at both layers, no SNAT is performed, and all required policies permit TCP. The database listens on TCP 1433. The web VM opens a connection from local port 51000.",
+              "steps": [
+                {"action": "Send TCP from 10.20.1.4:51000 to 10.20.2.5:1433.", "why": "The destination database /24 UDR is more specific than the VNet /16 system route, so Azure selects appliance 10.20.3.4."},
+                {"action": "At the appliance, inspect the original source and destination, then forward to 10.20.2.5.", "why": "A routed hop is not automatically address translation. In this example the packet still has source 10.20.1.4 and destination 10.20.2.5."},
+                {"action": "Receive the database reply from 10.20.2.5:1433 to 10.20.1.4:51000.", "why": "The database subnet's web /24 UDR sends the response to the same appliance instead of directly to the web subnet."},
+                {"action": "Let the appliance validate the returning connection and forward it to 10.20.1.4.", "why": "The appliance's own subnet uses the normal VNet route onward. It does not point these destinations back to itself."}
+              ],
+              "result": "Both directions cross the appliance, and the endpoints keep their original private addresses. The success conditions include routing, forwarding, filtering, and an actual database listener, not just the UDR."
+            },
+            {
+              "type": "diagram",
+              "title": "The same appliance sees request and reply",
+              "description": "The web VM sends the database request through the middle appliance to the database VM. The database's separate return UDR sends its reply through that same appliance back to the web VM. No source NAT or alternate path is assumed.",
+              "nodes": [
+                {"id": "nva-web", "label": "Web VM", "detail": "10.20.1.4; source port 51000", "column": 0, "row": 1},
+                {"id": "nva-router", "label": "NVA", "detail": "10.20.3.4; NIC and OS forwarding", "column": 1, "row": 1},
+                {"id": "nva-database", "label": "Database VM", "detail": "10.20.2.5; TCP 1433", "column": 2, "row": 1}
+              ],
+              "edges": [
+                {"from": "nva-web", "to": "nva-router", "label": "Request: database /24 UDR"},
+                {"from": "nva-router", "to": "nva-database", "label": "Forward request"},
+                {"from": "nva-database", "to": "nva-router", "label": "Reply: web /24 UDR"},
+                {"from": "nva-router", "to": "nva-web", "label": "Forward reply"}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nva-asymmetry",
+          "title": "A successful one-way trace can hide a broken design",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "If only the web subnet has a UDR, the request can cross the appliance while the database reply goes directly back through Azure's system route. That is asymmetric routing: the outward and return journeys differ. A basic stateless router can demonstrate this, which is useful for learning source-subnet scope. A stateful firewall tracks conversations and may need both directions through the same inspection instance. Asymmetry can break the connection or bypass the intended inspection even if a simple reachability test appears successful."
+            },
+            {
+              "type": "prediction",
+              "id": "nva-return-prediction",
+              "prompt": "Remove only the database subnet's web /24 UDR. Keep the web UDR and both forwarding settings. Will the reply still be forced through 10.20.3.4?",
+              "answer": "No. With the stated remaining routes, the reply selects the system 10.20.0.0/16 Virtual network route.",
+              "explanation": "The database VM makes its own outbound route choice. The web subnet's UDR does not apply to database-subnet traffic. A stateful appliance can now see only one side, so successful request forwarding is not enough evidence."
+            },
+            {
+              "type": "paragraph",
+              "text": "Source NAT on an appliance is another possible design tool, not an automatic cure to turn on blindly. It changes the source that the database sees and therefore affects logs and access policies. Our example deliberately avoids it to make the return route visible. Internet egress through an NVA has additional requirements: the appliance needs supported proxy or NAT behaviour and its own explicit outbound path. Adding a /0 route to an NVA that cannot reach public endpoints simply moves the failure to a different machine."
+            }
+          ]
+        },
+        {
+          "id": "nva-diagnosis",
+          "title": "Verify each link and plan for failure",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Troubleshoot in order. Confirm the source NIC's effective route and the table association. Confirm the appliance's actual private IP and power state. Check NIC forwarding, guest forwarding, and transit firewall policy. Test the database listener separately and inspect the reverse route. A narrowly filtered packet capture can show whether the NVA receives and forwards the same connection. A traceroute can provide clues, but missing replies from intermediate hops do not by themselves prove a broken data path. Use a real TCP connection to the service as well."
+            },
+            {
+              "type": "paragraph",
+              "text": "A single NVA becomes a single point of failure: if it stops, a UDR does not discover another appliance on its own. Production designs may put vendor-supported appliances behind an internal Standard Load Balancer with HA ports or use another supported failover design. That brings health probes, flow symmetry, and session-state questions. Do not copy a diagram without its assumptions. For the learning exercise, one disposable router is enough to understand the mechanism, provided nobody mistakes it for a highly available security boundary."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "A route and an appliance are separate requirements",
+              "text": "For an NVA question, check destination prefix, source-subnet association, next-hop private IP, Azure NIC forwarding, guest forwarding, and return path. Creating the VM or enabling just one forwarding switch is incomplete. Keep a self-pointing route off the appliance subnet to avoid a loop."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "nva-check-source",
+          "kind": "single",
+          "prompt": "Which association redirects the initial packet from web 10.20.1.4 to database 10.20.2.5 through 10.20.3.4?",
+          "choices": [
+            {"id": "nva-source-table", "text": "A database /24 UDR in a table associated with the web subnet.", "explanation": "The route applies where the original packet originates and matches its destination."},
+            {"id": "nva-destination-table", "text": "The same table associated only with the database subnet.", "explanation": "That changes packets sent from the database subnet, not the initial web request."},
+            {"id": "nva-name-record", "text": "A DNS alias for the database pointing to the NVA.", "explanation": "That changes the destination the application contacts; it does not establish transparent forwarding to the original database IP."}
+          ],
+          "correctIds": ["nva-source-table"],
+          "explanation": "Route-table association is a source-subnet decision."
+        },
+        {
+          "id": "nva-check-forwarding",
+          "kind": "multiple",
+          "prompt": "A basic Linux router receives transit packets but does not forward them. Which two separate forwarding configurations are required?",
+          "choices": [
+            {"id": "nva-nic-forward", "text": "Enable IP forwarding on the participating Azure NIC.", "explanation": "Azure must allow that interface to handle traffic whose endpoint addresses are not its own."},
+            {"id": "nva-guest-forward", "text": "Enable forwarding inside the guest and allow the transit flow in its firewall.", "explanation": "The operating system must actually route the packets after Azure delivers them."},
+            {"id": "nva-public-address", "text": "Give each database VM a public IP.", "explanation": "The stated flow is entirely private; public addressing does not enable the router's forwarding."},
+            {"id": "nva-same-subnet", "text": "Move the router into the web subnet and point all its routes to itself.", "explanation": "That risks a routing loop and does not replace either forwarding configuration."}
+          ],
+          "correctIds": ["nva-nic-forward", "nva-guest-forward"],
+          "explanation": "Platform permission to carry transit packets and guest behaviour are distinct."
+        },
+        {
+          "id": "nva-check-return",
+          "kind": "single",
+          "prompt": "Without SNAT, the request crosses a stateful NVA but the reply bypasses it. Which change directly fixes the stated path asymmetry?",
+          "choices": [
+            {"id": "nva-return-udr", "text": "Route the database subnet's web /24 destination through the same NVA.", "explanation": "That makes the database's outbound reply take the inspection path too."},
+            {"id": "nva-extra-default", "text": "Add another /0 UDR only to the web subnet.", "explanation": "It neither changes the database subnet's decision nor wins against its VNet /16 route."},
+            {"id": "nva-public-dns", "text": "Publish the database name in public DNS.", "explanation": "Name visibility does not control the reply packet's next hop."}
+          ],
+          "correctIds": ["nva-return-udr"],
+          "explanation": "A complete forwarding design must account for each source subnet in each direction."
+        },
+        {
+          "id": "nva-check-health",
+          "kind": "single",
+          "prompt": "Next hop reports the expected NVA, but the database connection times out. What does that result establish?",
+          "choices": [
+            {"id": "nva-route-only", "text": "The route decision points to the NVA; forwarding and application reachability still need testing.", "explanation": "Next-hop selection is evidence about routing, not proof that every later layer works."},
+            {"id": "nva-all-healthy", "text": "The database must be healthy because the route exists.", "explanation": "A route can point toward a stopped VM, blocked port, or non-listening service."},
+            {"id": "nva-automatic-failover", "text": "Azure will replace the NVA address with a healthy appliance automatically.", "explanation": "A static UDR alone provides no appliance health check or failover mechanism."}
+          ],
+          "correctIds": ["nva-route-only"],
+          "explanation": "Continue with forwarding, policy, listener, and reverse-path evidence."
+        }
+      ],
+      "takeaways": [
+        "An NVA inspects traffic only when the configured path actually traverses it.",
+        "Apply destination UDRs to the source subnets that should use them.",
+        "Enable forwarding both on Azure NICs and within the appliance.",
+        "A stateful inspection design needs a supported return path and failure strategy.",
+        "A Linux teaching router is not automatically a secure production firewall."
+      ],
+      "sourceIds": ["route-create-unit", "route-nva-unit", "route-nva-exercise", "route-traffic-exercise", "route-selection", "route-effective", "route-portal", "route-exam"]
+    },
+    {
+      "id": "connect-to-on-premises",
+      "title": "Connect the school office or a remote laptop",
+      "summary": "Choose P2S, S2S, or ExpressRoute for the right scope, then verify routes, return routes, and name resolution as separate requirements.",
+      "objectives": [
+        "Distinguish a single-client P2S VPN from a network-to-network S2S VPN and an ExpressRoute connection.",
+        "Explain how prefixes and gateway route propagation provide hybrid reachability.",
+        "Trace an office-to-Azure connection without confusing routing with DNS or authorisation."
+      ],
+      "sections": [
+        {
+          "id": "hybrid-scope",
+          "title": "Decide what needs to be connected",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school's office network is 172.20.0.0/16. A teacher working from home is not automatically part of that network, and neither location can reach Azure private IP addresses merely because it has internet access. Hybrid networking connects an organisation's own network to cloud networks. Before choosing a product, ask whether you need to connect one laptop, a whole building, or a long-term provider connection. Also ask who operates the router at the other end and what must continue working during a failure."
+            },
+            {
+              "type": "table",
+              "caption": "Three connection scopes, not three DNS settings",
+              "headers": ["Option", "What connects", "Underlying path", "Typical school use"],
+              "rows": [
+                ["Point-to-site VPN", "An authenticated individual client", "Encrypted tunnel over the internet", "One administrator or teacher working remotely."],
+                ["Site-to-site VPN", "An on-premises VPN device and Azure VPN Gateway", "IPsec/IKE tunnel over the internet", "Office PCs use an established network connection."],
+                ["ExpressRoute", "Organisation and Microsoft through a connectivity provider", "Private provider connectivity", "A larger organisation needing planned private connectivity."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "These are supporting concepts for understanding routes and connectivity incidents. The current AZ-104 guide explicitly lists UDR configuration and network troubleshooting; this lesson does not assign invented exam probabilities to specialised gateway designs. In a real team, a network specialist may provision the connection while an Azure administrator checks whether the expected prefixes reached the application subnet. You can understand that conversation without memorising every gateway SKU, cipher suite, or provider contract."
+            }
+          ]
+        },
+        {
+          "id": "hybrid-p2s",
+          "title": "Point-to-site starts at one client",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "With point-to-site, shortened to P2S, the laptop starts a VPN connection to a route-based Azure VPN gateway. VPN means virtual private network: traffic is carried inside a protected connection over another network. The client must use a supported protocol and authentication combination. Options include certificates, RADIUS, and Microsoft Entra ID; Entra ID authentication uses OpenVPN with the Azure VPN Client. Check current operating-system support before installation rather than assuming every VPN client supports every method."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose the dedicated P2S client pool is 172.21.0.0/24, and the connected laptop receives 172.21.0.10. This pool is separate from office 172.20.0.0/16 and Azure 10.20.0.0/16. The client profile and routing configuration must direct the Azure destination prefix into the tunnel. Do not treat every usable address in the pool as a promised concurrent-user limit; gateway and protocol limits also matter. A Connected status proves tunnel establishment, not access to every peered VNet or application. Check client routes, Azure return reachability, and security rules for the client pool."
+            }
+          ]
+        },
+        {
+          "id": "hybrid-s2s",
+          "title": "Site-to-site joins network edges",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "With site-to-site, shortened to S2S, the office VPN device builds an IPsec/IKE tunnel to Azure VPN Gateway. Individual office PCs normally use their usual local router instead of running separate P2S clients. Azure needs a gateway in the specifically named GatewaySubnet, a representation of the on-premises VPN endpoint and address ranges called a local network gateway, and a connection configuration. The on-premises device needs compatible settings too. A local network gateway is configuration describing the remote site, not a second VM deployed in the office."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a small design, you can explicitly configure office prefixes. In a supported BGP design, routers advertise reachable prefixes dynamically instead. BGP exchanges routing information; it does not encrypt packets. IPsec supplies encryption for the S2S tunnel. Route propagation allows gateway-learned routes to appear in application subnets. Disabling propagation on an application route table can therefore break a previously working office path. Do not disable propagation on GatewaySubnet or casually attach a default route there: gateway operation has specific routing requirements."
+            }
+          ]
+        },
+        {
+          "id": "hybrid-expressroute",
+          "title": "ExpressRoute is private connectivity, not automatic encryption",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "ExpressRoute connects through a provider rather than sending the circuit's traffic over the public internet. For private VNet access, the design includes private peering, BGP route exchange, and an ExpressRoute virtual network gateway connection. The provider circuit and gateway are different resources and cost components. BGP is required for ExpressRoute route exchange. An active provider circuit alone does not prove that App VNet is linked or that office 172.20.0.0/16 is being advertised. Inspect the connection and learned prefixes, not just the circuit's existence."
+            },
+            {
+              "type": "paragraph",
+              "text": "Private does not mean encrypted. ExpressRoute traffic is not encrypted by default; use application TLS or an appropriate additional encryption design when required. MACsec applies to ExpressRoute Direct physical links, while supported IPsec designs can protect end-to-end traffic. Redundancy at Microsoft's edge also does not fix a single failed office router. Provider links, local equipment, gateway configuration, and application availability all contribute. A UDR with next hop Virtual network gateway is supported for the documented VPN-gateway scenario, not as a shortcut for forcing traffic into an ExpressRoute gateway."
+            }
+          ]
+        },
+        {
+          "id": "hybrid-worked-path",
+          "title": "Trace the office request and its response",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "172.20.10.25 reaches the private school application",
+              "scenario": "Assume an established S2S connection with no NAT, office routes for 10.20.0.0/16, an Azure gateway-propagated 172.20.0.0/16 route, and permitted TCP 443. The application listens on web VM 10.20.1.4. No NVA UDR overrides this office path.",
+              "steps": [
+                {"action": "Office client 172.20.10.25:52000 sends to 10.20.1.4:443.", "why": "The office router has a route for the Azure /16 into the VPN. Its internet default route is not the intended path for this private destination."},
+                {"action": "The office VPN device protects the packet inside the tunnel, and Azure VPN Gateway delivers the inner packet to the VNet.", "why": "The inner private endpoint addresses remain the same in this no-NAT example. Tunnel endpoint addresses describe the outer transport, not the application's identity."},
+                {"action": "The web VM responds to 172.20.10.25:52000.", "why": "The propagated office /16 route is more specific than the general 172.16.0.0/12 None route and sends the reply through the gateway."},
+                {"action": "Confirm the office router delivers the returning packet to the client.", "why": "A two-way application exchange needs both networks to know their part of the return path."}
+              ],
+              "result": "Both ends communicate using private IP addresses. There is no need to publish the VM with a public IP just to make the office connection work."
+            },
+            {
+              "type": "paragraph",
+              "text": "Check the arithmetic rather than trusting similar-looking addresses. Office /16 covers 172.20.0.0 through 172.20.255.255. It does not include P2S pool 172.21.0.0/24. App /16 covers 10.20.0.0 through 10.20.255.255, so 10.20.1.4 belongs to it while 10.40.1.4 does not. Overlapping local and remote spaces cause ambiguity. If a laptop's home network also uses 10.20.1.0/24, its more-specific local route can divert traffic intended for Azure. Choose nonoverlapping ranges or a deliberately supported translation design."
+            }
+          ]
+        },
+        {
+          "id": "hybrid-dns-and-evidence",
+          "title": "Separate names, routes, security, and service health",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Assume db.classroom.internal has an intentionally configured record for 10.20.2.5 and a working resolver path to the appropriate private zone. A successful lookup only provides the address. It creates no VPN, route, NSG allowance, or database login. Conversely, if connecting to the IP works but the name does not, investigate DNS forwarding and zone links rather than changing the working VPN route. A VPN does not automatically configure hybrid DNS. The fictional public domain classroom.example is also not a real domain owned or deployed by this course."
+            },
+            {
+              "type": "prediction",
+              "id": "hybrid-dns-prediction",
+              "prompt": "An office PC resolves db.classroom.internal to 10.20.2.5, but its router has no Azure route or tunnel. Will adding a second identical DNS record fix database connectivity?",
+              "answer": "No. The missing requirement is a usable network path, not another name-to-address mapping.",
+              "explanation": "Test routing to the resolved address, establish the intended hybrid connection, verify return routes, and then check filtering and the database service. DNS success and network reachability are separate observations."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a hybrid incident, collect the client route, tunnel or circuit connection status, advertised or configured prefixes, Azure NIC effective routes, and the response path. Check whether route propagation was disabled or a more-specific UDR appeared. In hub-and-spoke designs, peering is not transitive: gateway transit needs the appropriate hub and spoke settings and supported client routing. An office connection to one VNet does not by itself connect every other VNet. Diagnose the exact destination prefix rather than relying on a broad statement that 'Azure is connected'."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Recognise the scope before changing the service",
+              "text": "One remote client suggests P2S; a routed office network suggests S2S; provider-based private connectivity suggests ExpressRoute. DNS translates names, BGP exchanges routes, and VPN protocols protect tunnels. These functions complement one another but are not interchangeable answers."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "hybrid-check-client",
+          "kind": "single",
+          "prompt": "One administrator needs private access from a supported home laptop, and cannot configure the home router. Which connection scope best fits?",
+          "choices": [
+            {"id": "hybrid-p2s-choice", "text": "Point-to-site VPN", "explanation": "The authenticated client initiates its own tunnel without requiring a site VPN device at home."},
+            {"id": "hybrid-s2s-choice", "text": "Site-to-site VPN", "explanation": "This normally needs configuration of an on-premises VPN device and connects networks rather than just the laptop."},
+            {"id": "hybrid-zone-choice", "text": "A public DNS zone", "explanation": "Publishing names provides no private network connection."}
+          ],
+          "correctIds": ["hybrid-p2s-choice"],
+          "explanation": "Choose the connection's scope before choosing protocol and authentication details."
+        },
+        {
+          "id": "hybrid-check-return-route",
+          "kind": "single",
+          "prompt": "Azure must reply to office client 172.20.10.25. Which stated route is the most specific match?",
+          "choices": [
+            {"id": "hybrid-office-route", "text": "172.20.0.0/16 through the VPN gateway", "explanation": "The client lies inside the office /16, which is more specific than the /12 and /0 alternatives."},
+            {"id": "hybrid-drop-route", "text": "172.16.0.0/12 with next hop None", "explanation": "It matches the address but is broader than the available office /16."},
+            {"id": "hybrid-default-route", "text": "0.0.0.0/0 to Internet", "explanation": "A default route is the least specific match and is not the desired private return path."}
+          ],
+          "correctIds": ["hybrid-office-route"],
+          "explanation": "Return packets require their own correct route selection."
+        },
+        {
+          "id": "hybrid-check-expressroute",
+          "kind": "multiple",
+          "prompt": "Which two statements about ExpressRoute are safe design assumptions?",
+          "choices": [
+            {"id": "hybrid-bgp-required", "text": "It uses BGP for route exchange.", "explanation": "ExpressRoute relies on BGP advertisements to exchange reachability information."},
+            {"id": "hybrid-encryption-separate", "text": "Traffic is not encrypted by default just because the connection is private.", "explanation": "Encryption must be provided through an appropriate additional mechanism when required."},
+            {"id": "hybrid-dns-encryption", "text": "A private DNS zone encrypts the circuit.", "explanation": "DNS zone visibility and link encryption are unrelated functions."},
+            {"id": "hybrid-udr-shortcut", "text": "A Virtual network gateway UDR can simply target an ExpressRoute gateway.", "explanation": "That UDR next-hop configuration is supported for the documented VPN-gateway case, not ExpressRoute gateways."}
+          ],
+          "correctIds": ["hybrid-bgp-required", "hybrid-encryption-separate"],
+          "explanation": "Distinguish provider connectivity, dynamic routing, and encryption."
+        },
+        {
+          "id": "hybrid-check-names",
+          "kind": "single",
+          "prompt": "The office PC can connect to 10.20.2.5:1433, but db.classroom.internal does not resolve. What is the most relevant next investigation?",
+          "choices": [
+            {"id": "hybrid-resolver", "text": "The configured private record and hybrid resolver or forwarding path.", "explanation": "IP connectivity already works; the remaining observation points to name resolution."},
+            {"id": "hybrid-public-ip", "text": "Assigning the database a public IP.", "explanation": "That unnecessarily changes exposure and does not repair the private DNS lookup."},
+            {"id": "hybrid-replace-tunnel", "text": "Replacing S2S with ExpressRoute immediately.", "explanation": "The working IP connection is evidence that the current path can carry the traffic."}
+          ],
+          "correctIds": ["hybrid-resolver"],
+          "explanation": "Use the successful test to narrow the fault rather than replacing unrelated infrastructure."
+        }
+      ],
+      "takeaways": [
+        "P2S connects an individual client; S2S connects network edges.",
+        "ExpressRoute provides provider-based private connectivity and requires BGP, not automatic encryption.",
+        "Both sides need correct, nonambiguous destination and return routes.",
+        "Gateway route propagation affects application-subnet reachability.",
+        "A correct DNS answer does not create connectivity or grant access."
+      ],
+      "sourceIds": ["route-p2s", "route-vpn", "route-expressroute", "route-encryption", "route-selection", "route-effective", "route-exam"]
+    }
+  ],
+  "glossary": [
+    {"term": "Packet", "definition": "A unit of network traffic carrying source and destination addresses along with data."},
+    {"term": "Prefix", "definition": "A network address and CIDR length that identify a destination range, such as 10.20.2.0/24."},
+    {"term": "Next hop", "definition": "The forwarding action or intermediate destination selected by a route."},
+    {"term": "System route", "definition": "A route Azure maintains automatically for default or configured platform connectivity."},
+    {"term": "UDR", "definition": "User-defined route: a custom route placed in a route table associated with a subnet."},
+    {"term": "Longest-prefix match", "definition": "Selection of the most specific matching eligible destination prefix, before ordinary equal-prefix source preference."},
+    {"term": "Effective routes", "definition": "The combined routing view for a VM NIC, including system, custom, and gateway-propagated routes."},
+    {"term": "NVA", "definition": "Network virtual appliance: software on a VM providing functions such as routing, firewalling, or proxying."},
+    {"term": "IP forwarding", "definition": "Handling packets whose final destination is another machine; Azure NIC settings and guest behaviour both matter."},
+    {"term": "Asymmetric routing", "definition": "A request and its response follow different paths, which can disrupt stateful inspection."},
+    {"term": "BGP", "definition": "Border Gateway Protocol: a protocol routers use to exchange reachable prefixes, not to encrypt traffic."},
+    {"term": "Route propagation", "definition": "Making routes learned or configured through a gateway available to subnet routing."},
+    {"term": "P2S", "definition": "Point-to-site VPN: an authenticated individual client connects to an Azure VPN gateway."},
+    {"term": "S2S", "definition": "Site-to-site VPN: an on-premises VPN device and Azure VPN Gateway connect networks through a tunnel."},
+    {"term": "ExpressRoute", "definition": "Private provider connectivity to Microsoft cloud networks, with BGP route exchange and separate encryption considerations."},
+    {"term": "Service endpoint", "definition": "Subnet-scoped connectivity to a supported Azure service's public destination using private source addressing and VNet identity."}
+  ],
+  "sources": [
+    {"id": "route-module", "url": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/", "title": "Learn: Manage and control traffic flow with routes", "supports": "The four official objectives and the complete unit sequence, including optional route and NVA exercises."},
+    {"id": "route-capabilities-unit", "url": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/2-azure-virtual-network-route", "title": "Learn: Identify routing capabilities", "supports": "Instructional coverage of system routes, custom routes, service chaining, service tags, BGP, and route selection; current product documentation refines exceptions."},
+    {"id": "route-create-unit", "url": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/3-exercise-create-custom-routes", "title": "Learn: Create custom routes", "supports": "Creating a destination route, creating subnets, and associating a route table with the source subnet."},
+    {"id": "route-nva-unit", "url": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/4-network-virtual-appliances", "title": "Learn: What is an NVA?", "supports": "Appliance functions, Marketplace choices, multiple interfaces, route-table association limits, and the need for high availability."},
+    {"id": "route-nva-exercise", "url": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/5-exercise-create-nva-vm", "title": "Learn: Create an NVA and virtual machines", "supports": "Separate Azure NIC and guest operating-system IP forwarding requirements."},
+    {"id": "route-traffic-exercise", "url": "https://learn.microsoft.com/en-us/training/modules/control-network-traffic-flow-with-routes/6-exercise-route-traffic-through-nva", "title": "Learn: Route traffic through the NVA", "supports": "Comparing forward and reverse paths; the authored lesson explains why the exercise's one-sided route is insufficient for a symmetric stateful design."},
+    {"id": "route-selection", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-udr-overview", "title": "Azure virtual network traffic routing", "supports": "Longest-prefix selection, equal-prefix source preference, preferred system routes, service endpoint exceptions, next-hop restrictions, service tags, BGP, and propagation."},
+    {"id": "route-effective", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/diagnose-network-routing-problem", "title": "Diagnose a virtual machine routing problem", "supports": "Inspecting effective routes on running VM NICs, the optional CLI inspection command, and next-hop troubleshooting."},
+    {"id": "route-service-endpoints", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-service-endpoints-overview", "title": "Virtual network service endpoints", "supports": "Public service destinations, private source and VNet identity, direct service routing, and service-side network access configuration."},
+    {"id": "route-portal", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/tutorial-create-route-table-portal", "title": "Tutorial: Route traffic with a route table", "supports": "Manual portal setup of a teaching NVA, NIC and persistent guest forwarding, route association, and traffic testing."},
+    {"id": "route-private-outbound", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/default-outbound-access", "title": "Default outbound access in Azure", "supports": "Private-subnet defaults, the API-version scope of the March 2026 change, and explicit outbound requirements rather than assuming Internet routes provide egress."},
+    {"id": "route-p2s", "url": "https://learn.microsoft.com/en-us/azure/vpn-gateway/point-to-site-about", "title": "About Point-to-Site VPN", "supports": "Individual-client connections, route-based gateways, address pools, protocol and authentication compatibility, and current client-support considerations."},
+    {"id": "route-vpn", "url": "https://learn.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpngateways", "title": "What is Azure VPN Gateway?", "supports": "S2S IPsec/IKE tunnels, P2S scope, gateway resource planning, resilience, and gateway charging categories."},
+    {"id": "route-expressroute", "url": "https://learn.microsoft.com/en-us/azure/expressroute/expressroute-introduction", "title": "What is Azure ExpressRoute?", "supports": "Private provider connectivity, required BGP exchange, built-in edge redundancy, and circuit versus gateway planning."},
+    {"id": "route-encryption", "url": "https://learn.microsoft.com/en-us/azure/expressroute/expressroute-about-encryption", "title": "About encryption for ExpressRoute", "supports": "ExpressRoute is not encrypted by default; MACsec scope is ExpressRoute Direct, and IPsec can provide supported end-to-end protection."},
+    {"id": "route-exam", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "AZ-104 study guide", "supports": "Current explicit objectives for UDR configuration, network connectivity troubleshooting, service endpoints, and Network Watcher."}
+  ],
+  "lab": {
+    "title": "Optional manual lab: prove a symmetric appliance route",
+    "purpose": "Observe source-subnet route association, two-layer forwarding, and the return path. The browser route selector and worked examples are sufficient for the main lesson; no deployment is automatic.",
+    "prerequisites": [
+      "An explicitly approved personal training subscription and permission to create and delete resources in one new disposable resource group.",
+      "A checked regional cost estimate and a short scheduled cleanup window; do not use a production VNet or an existing school network.",
+      "Basic Linux administration or a helper for the guest forwarding and firewall steps in the cited portal tutorial.",
+      "A supported management method, such as a separately budgeted Bastion deployment, and a plan for explicit outbound access if package installation is needed."
+    ],
+    "costWarning": "This is not a free-lab promise. Three running VMs, managed disks, any Marketplace licence, Standard public IP resources, Bastion, optional NAT Gateway, traffic processing, and data transfer can incur charges. Bastion and NAT Gateway can continue billing while idle; stopping a VM does not remove its disks. No VPN gateway or ExpressRoute circuit is needed for this lab. Check current regional prices before creating anything.",
+    "steps": [
+      "Without opening Azure, use the routes widget to predict the /16, /24, and /25 examples and write down the expected next hops. Stop here if you do not want a paid deployment.",
+      "If you choose to continue manually, create a new uniquely named resource group such as rg-school-routing-lab-<your-suffix>. Record every resource created. Build an isolated App VNet 10.20.0.0/16 with web 10.20.1.0/24, database 10.20.2.0/24, and appliance 10.20.3.0/24 subnets.",
+      "Following the cited portal tutorial's VM creation steps, create three small supported Linux VMs with no instance public IPs. Set private IPs through Azure NIC configuration to web 10.20.1.4, database 10.20.2.5, and NVA 10.20.3.4. Use your approved management path; do not expose SSH or RDP to all internet sources.",
+      "For a Bastion-based management choice, create a dedicated AzureBastionSubnet such as 10.20.4.0/26 and the required Bastion resources in this lab group, following their current portal requirements. Permit only required management traffic. If software downloads are necessary, deliberately configure budgeted explicit outbound connectivity on the relevant subnet rather than assuming default egress.",
+      "Enable IP forwarding on the NVA NIC. Follow the tutorial's guest-forwarding procedure and verify that IPv4 forwarding remains enabled after a restart. Check the forwarding firewall policy. Do not associate a self-pointing route table with the appliance subnet.",
+      "Choose an installed TCP listener on the database VM, for example its SSH service on TCP 22, purely as a connectivity target. Permit the web private source to that port in applicable NSGs and the guest firewall. Test reachability by IP before adding UDRs; no DNS record or real database installation is required.",
+      "Create rt-school-web with 10.20.2.0/24 to Virtual appliance 10.20.3.4 and associate it only with the web subnet. Inspect the running web VM's effective routes. Compare forward and reverse next-hop evidence, noting that the database still has its direct VNet route.",
+      "Create rt-school-database with 10.20.1.0/24 to the same NVA and associate it with the database subnet. Inspect effective routes on both endpoint NICs and perform a new TCP connection test. Use narrowly filtered appliance packet evidence, where supported, to confirm both directions rather than relying only on traceroute output.",
+      "Optionally, during this isolated lab only, disable guest forwarding briefly and start a new connection. Observe the failure even though the UDR remains present, then restore forwarding and confirm recovery. Finish by completing cleanup immediately."
+    ],
+    "expectedResults": [
+      "The web NIC shows the database /24 UDR with the NVA private next hop after association, not merely after route-table creation.",
+      "Before the database return UDR, reverse routing is direct; after it, both intended directions select the same NVA.",
+      "Transit fails when required forwarding is disabled and recovers when restored, assuming security rules and the listener remain correct."
+    ],
+    "cleanup": [
+      "Review the exact lab resource group's contents and recorded resource list. Delete the group only after confirming that every item is disposable and belongs to this exercise; never delete a shared group.",
+      "Check that the three VMs, their disks and NICs, route tables, VNet, NSGs, and any lab-only Bastion, NAT Gateway, and public IP resources are removed. Inspect any deliberately created resources outside the group individually.",
+      "Verify deletion completion in the portal and review Cost Management later for delayed usage records. A stopped VM or a completed browser exercise is not evidence that chargeable resources were deleted."
+    ]
+  }
+}

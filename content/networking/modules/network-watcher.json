@@ -1,0 +1,734 @@
+{
+  "schemaVersion": 1,
+  "id": "network-watcher",
+  "title": "Network Watcher: investigate before changing",
+  "summary": "Turn a vague school application outage into testable questions, choose diagnostics by the evidence they provide, and combine current flow logs with application evidence to resolve a realistic incident.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 study guide effective April 17, 2026 explicitly names troubleshooting connectivity, evaluating effective NSG rules, analyzing monitoring data, and using Network Watcher and Connection monitor. Those are core administration skills here. Detailed packet analysis, hybrid agent installation, and advanced analytics are supporting techniques to use when the evidence requires them, not equally weighted facts to memorize.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-network-watcher/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Explain what Azure Network Watcher is and the functionality it provides.",
+    "Determine whether Azure Network Watcher meets an organization's monitoring and diagnostic needs."
+  ],
+  "lessons": [
+    {
+      "id": "troubleshoot-in-layers",
+      "title": "Turn an outage into a sequence of questions",
+      "summary": "Separate DNS, routing, network security, guest services, and application authorization so that each observation rules something in or out.",
+      "objectives": [
+        "Describe Network Watcher's monitoring, diagnostic, and traffic-analysis roles.",
+        "Write a precise connectivity problem including endpoints, protocol, port, and time.",
+        "Investigate DNS, route, security, guest listener, and application authorization in a defensible order.",
+        "Explain what a successful network test does not prove."
+      ],
+      "sections": [
+        {
+          "id": "define-the-failure",
+          "title": "Replace 'the network is down' with an observation",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A student reports that the homework page does not work. That sentence is useful as an alert, but not yet a diagnosis. Does the name fail to resolve, does a connection time out, or does the page return an error? Is everyone affected, or only one account? Did it begin after a deployment? Record the source, destination name and address, protocol, destination port, time with timezone, and exact result. These details let someone else repeat the test. A screenshot saying 'failed' without the target or time is much weaker evidence."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Network Watcher collects several kinds of network evidence. Topology shows resource relationships. Diagnostic tools examine security decisions, routing, and connectivity. Connection monitor repeats tests so that you can see changes over time. Flow logs describe observed IP traffic, and Traffic analytics summarizes that history. These tools focus on Azure infrastructure networking, particularly virtual networks and virtual machines. They do not explain a student's grades, an application's business logic, or every internal failure of a managed platform service. Use service health, application logs, and platform-specific diagnostics where the problem requires them."
+            },
+            {
+              "type": "paragraph",
+              "text": "Network Watcher is regional within a subscription. Creating or updating a VNet normally enables it in that region unless automatic enablement was opted out of. Check that it exists and that your account has permission for the intended operation. Its presence does not mean every VM has an extension, every connection is monitored, or every packet has been logged since the VNet was created. Historical evidence exists only if the relevant collection was enabled and working at the time. Enabling monitoring after an incident cannot reconstruct missing past traffic."
+            }
+          ]
+        },
+        {
+          "id": "draw-the-actual-path",
+          "title": "Name the connection that actually failed",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Our fictional Romanian school uses App VNet 10.20.0.0/16. The web VM is 10.20.1.4 in web subnet 10.20.1.0/24. The database VM is 10.20.2.5 in database subnet 10.20.2.0/24. Assume a test database service listens on TCP 1433. The browser's request to classroom.example is not the same connection as the web application's request to db.classroom.internal. A healthy public homepage can coexist with a broken web-to-database connection. Diagnose that second connection from the web VM's context, not only from your laptop."
+            },
+            {
+              "type": "diagram",
+              "title": "DNS supplies an address; the app then uses it",
+              "description": "Web VM 10.20.1.4 asks the configured resolver about db.classroom.internal. With a deliberately created record and linked private zone, the resolver returns 10.20.2.5. The web VM then opens a separate TCP connection to database VM 10.20.2.5 on port 1433. The DNS answer is not itself the database connection or permission to use the database.",
+              "nodes": [
+                { "id": "web-vm", "label": "Web VM", "detail": "10.20.1.4; web subnet 10.20.1.0/24", "column": 0, "row": 0 },
+                { "id": "dns-answer", "label": "Configured DNS", "detail": "db.classroom.internal -> 10.20.2.5", "column": 1, "row": 1 },
+                { "id": "db-vm", "label": "Database VM", "detail": "10.20.2.5; database subnet 10.20.2.0/24", "column": 2, "row": 0 }
+              ],
+              "edges": [
+                { "from": "web-vm", "to": "dns-answer", "label": "Resolve the name" },
+                { "from": "dns-answer", "to": "web-vm", "label": "Return 10.20.2.5" },
+                { "from": "web-vm", "to": "db-vm", "label": "Separate TCP 1433" }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Topology helps confirm which NIC, subnet, NSG, and other resources are associated. A NIC is the VM's network interface, the point where its private IP belongs. Topology is a map of configuration, not a successful test packet. If the portal map contains both VMs, that proves neither a listening database service nor an allowed NSG path. For services VNet 10.40.0.0/16 and office network 172.20.0.0/16, draw only connections that were actually configured. Address ranges written on a diagram do not establish peering or a VPN."
+            }
+          ]
+        },
+        {
+          "id": "first-dns",
+          "title": "First: did the source resolve the right name?",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Begin with DNS when the application uses a name. Assume the private zone classroom.internal has an A record named db pointing to 10.20.2.5, and that the zone is linked for resolution to the App VNet. Also assume the VM uses a resolver able to consult that zone. Those are configuration choices, not consequences of naming a VM 'db'. Inspect the actual answer from the failing source. A custom DNS server may need forwarding configuration; a correct answer on an administrator's PC does not prove that the web VM receives the same answer."
+            },
+            {
+              "type": "paragraph",
+              "text": "Compare a connection test to the intended IP with a test to the name. If the intended IP is reachable but the name resolves elsewhere, investigate the record, resolver, zone link, and caching before changing NSGs. A cached answer can persist for its remaining lifetime. Retest after correcting the authoritative configuration and accounting for the client cache. Do not make a permanent hosts-file workaround your first repair, because it can hide the real fault on one machine while everyone else continues to fail. Name resolution supplies a destination; it does not supply a route or database permission."
+            }
+          ]
+        },
+        {
+          "id": "then-route",
+          "title": "Second: where would Azure send the packet?",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A route chooses where a packet should go next. The Next hop tool examines a source VM and NIC, source address, and destination IP, then reports the selected next-hop type and route information. With an ordinary unchanged App VNet, traffic from 10.20.1.4 to 10.20.2.5 uses the virtual-network path across subnets. A more specific user-defined route could change that. If the result unexpectedly points to a virtual appliance, inspect the route table and the appliance's forwarding path. If it is None, the selected route discards traffic."
+            },
+            {
+              "type": "paragraph",
+              "text": "Check the route back as well. A connection needs replies, and an asymmetric path through stateful appliances can cause failure. Next hop reports a forwarding decision, not a promise that the next device forwards successfully. Similarly, an Internet next-hop route does not itself provide source address translation or explicit outbound connectivity. Do not assume an internal load balancer or a route automatically gives a VM internet access. Keep this lesson's database test private and local so that unnecessary outbound assumptions do not distract from the actual failure."
+            }
+          ]
+        },
+        {
+          "id": "then-security",
+          "title": "Third: is this particular flow allowed?",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A TCP conversation is identified by source IP, source port, destination IP, destination port, and protocol, together called a five-tuple. The client often chooses a temporary source port, such as 51000; the database listens on destination port 1433. IP flow verify logically evaluates the applicable security rules for that tuple and direction. It does not send a database query. Effective security rules shows the rules associated with the NIC and subnet so you can understand why a result occurred, rather than checking only the NSG whose name looks familiar."
+            },
+            {
+              "type": "paragraph",
+              "text": "For inbound NSG evaluation, an allow at the subnet does not cancel a deny at the NIC. Within an NSG, lower priority numbers are evaluated first. Default VNet allow rules can be overridden by higher-priority custom rules. In these school examples, assume there are no Azure Virtual Network Manager security admin rules; in an organization using them, inspect those too because they can affect the decision before NSGs. Check outbound filtering at the source and inbound filtering at the destination. An allowed result still says nothing about the guest operating system's firewall."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-allowed-not-working",
+              "prompt": "DNS returns 10.20.2.5, Next hop reports the expected virtual-network path, and IP flow verify allows TCP 1433. Must the database connection now succeed?",
+              "answer": "No. The guest firewall, database listener, TLS configuration, or application credentials may still prevent success.",
+              "explanation": "Each successful test removes a specific hypothesis. None of these tests establishes that a database process is accepting connections and authorizing the caller."
+            }
+          ]
+        },
+        {
+          "id": "guest-and-application",
+          "title": "Fourth and fifth: is a service listening, and may you use it?",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The guest operating system is the Windows or Linux installation inside the VM. Its firewall is separate from Azure NSGs. A listener is a running process accepting connections on an address and port. A database bound only to 127.0.0.1 can answer local tests yet refuse connections to 10.20.2.5. Confirm the VM is running, the process is healthy, the expected interface and port are bound, and the guest firewall permits the intended source. A timeout suggests missing replies, while a reset can suggest rejection or no listener; neither symptom alone identifies the exact device responsible."
+            },
+            {
+              "type": "paragraph",
+              "text": "After the connection works, test the application protocol, any TLS identity requirements, and authorization. Authentication establishes an identity; authorization decides what that identity may do. A database login failure after successful TCP establishment is evidence to inspect credentials and database permissions, not to open more network ports. A healthy gateway probe and a successful TCP test can both coexist with a forbidden homework operation. Do not paste secrets into a ticket. Record sanitized errors and request identifiers so the application owner can investigate safely."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "A method, not five interchangeable tools",
+              "text": "Use DNS -> route -> security -> guest listener -> application authorization as a reasoning order. Existing evidence may let you skip a disproved hypothesis, but a successful lower-layer check never proves every higher layer. Match the requested evidence to the test instead of memorizing tool names."
+            }
+          ]
+        },
+        {
+          "id": "worked-wrong-address",
+          "title": "Worked example: the database moved, but the name did not",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Repair the first demonstrated fault",
+              "scenario": "The school replaced a test database VM. Its approved address is now 10.20.2.5, but the web app on 10.20.1.4 times out when using db.classroom.internal. An administrator tested the database locally and says it works. All evidence below is fictional and can be analyzed in the browser.",
+              "steps": [
+                { "action": "Record that the failed source is 10.20.1.4 and the intended destination is db.classroom.internal on TCP 1433.", "why": "A local test on the database is not the same connection. The ticket needs the source that actually fails." },
+                { "action": "Inspect name resolution from the web VM; it returns the old address 10.20.2.50.", "why": "This is the first concrete mismatch. A perfectly configured route or NSG to 10.20.2.5 cannot correct a request sent to the wrong host." },
+                { "action": "Compare with a narrowly scoped test to 10.20.2.5 on TCP 1433; it succeeds.", "why": "The comparison supports a name-resolution fault instead of a general failure between the two subnets. It does not yet prove database login." },
+                { "action": "Correct the approved private DNS record, verify the VNet link and resolver path, then account for cached answers and retest the name.", "why": "Fixing the shared authoritative configuration resolves the actual error instead of masking it with a one-machine override." },
+                { "action": "Use the approved test identity to load the homework data and record the successful result.", "why": "This final check covers the database operation that the user needed, not merely a repaired DNS answer." }
+              ],
+              "result": "The source now resolves db.classroom.internal to 10.20.2.5 and the authorized homework operation succeeds. No NSG was weakened. If the final login had failed, the ticket would continue at the application layer rather than falsely claiming full recovery."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "watcher-dns-check",
+          "kind": "single",
+          "prompt": "Understanding: TCP 1433 to 10.20.2.5 succeeds, but db.classroom.internal resolves to 10.20.2.50 on the web VM. What is the most evidence-based next step?",
+          "choices": [
+            { "id": "correct-resolution", "text": "Inspect and correct the intended DNS record and resolution path, then retest after considering the cache.", "explanation": "The name points to the wrong address from the failing source. This mismatch directly explains why a successful test to the correct IP does not reproduce the application's behavior." },
+            { "id": "allow-all", "text": "Add an allow-all inbound rule to the database NSG.", "explanation": "The intended IP is already reachable on the required port. Opening unrelated access does not repair the name." },
+            { "id": "recreate-peering", "text": "Create peering between the web and database subnets.", "explanation": "These subnets are in one VNet, not separate VNets to be peered. The evidence points to DNS, not missing peering." }
+          ],
+          "correctIds": ["correct-resolution"],
+          "explanation": "Fix the demonstrated mismatch before changing an unrelated layer."
+        },
+        {
+          "id": "watcher-permission-check",
+          "kind": "single",
+          "prompt": "Understanding: TCP connects successfully, and the database responds 'login failed' for the web application's identity. What does this most strongly suggest?",
+          "choices": [
+            { "id": "credentials-permissions", "text": "Investigate database authentication and permissions with the application owner.", "explanation": "The server has responded at the application protocol layer. The identity-related error is the next relevant evidence." },
+            { "id": "missing-route", "text": "There is definitely no route to the database.", "explanation": "A completed connection and database response contradict a total absence of a usable path for that test." },
+            { "id": "dns-global", "text": "Move the private DNS record into a public DNS zone.", "explanation": "Publishing a database name does not fix credentials and can create an unnecessary information exposure." }
+          ],
+          "correctIds": ["credentials-permissions"],
+          "explanation": "Successful transport and permitted application use are separate outcomes."
+        },
+        {
+          "id": "watcher-subnet-nic-check",
+          "kind": "single",
+          "prompt": "Understanding: with no security admin rules, a database subnet NSG permits the flow but the database NIC NSG denies it. What happens to a new inbound connection?",
+          "choices": [
+            { "id": "nic-deny", "text": "It is denied because both applicable NSGs must permit it.", "explanation": "An allow at one association does not override the deny at the other association." },
+            { "id": "first-allow", "text": "It succeeds because the subnet's allow ends all security evaluation.", "explanation": "Finishing rule matching within one NSG does not bypass the other applicable NSG." },
+            { "id": "dns-override", "text": "It succeeds if the private DNS record is correct.", "explanation": "A correct address does not grant network access or override security policy." }
+          ],
+          "correctIds": ["nic-deny"],
+          "explanation": "Inspect the effective rules of the actual NIC, not one convenient NSG in isolation."
+        },
+        {
+          "id": "watcher-topology-check",
+          "kind": "multiple",
+          "prompt": "Understanding: select the two valid conclusions about a topology map and a Next hop result.",
+          "choices": [
+            { "id": "map-associations", "text": "Topology helps identify resource associations to investigate.", "explanation": "The map can reveal the NIC, subnet, and security-resource relationships needed to scope the ticket." },
+            { "id": "next-route", "text": "Next hop identifies a forwarding decision for a particular source and destination.", "explanation": "Its result narrows routing investigation, including an unexpected appliance or discard route." },
+            { "id": "map-login", "text": "A line between resources proves the student's database login will succeed.", "explanation": "A configuration relationship is not a network test or an application authorization result." },
+            { "id": "internet-snat", "text": "An Internet next hop automatically supplies all required outbound address translation.", "explanation": "Routing and outbound connectivity configuration are different. A route is not proof of an explicit outbound method." }
+          ],
+          "correctIds": ["map-associations", "next-route"],
+          "explanation": "Interpret each artifact within the limited question it answers."
+        }
+      ],
+      "takeaways": [
+        "A useful ticket specifies the failing source, destination, protocol, port, time, and observed result.",
+        "DNS, routing, security, guest services, and application authorization are separate layers.",
+        "Test from the source that fails; a laptop or local-server test may take a different path.",
+        "Topology shows associations, Next hop shows a routing decision, and IP flow verify evaluates policy.",
+        "A successful TCP test does not establish database login or a user's permission to see a page."
+      ],
+      "sourceIds": ["watcher-module", "watcher-what", "watcher-how", "watcher-when", "watcher-overview", "ip-flow", "effective-rules", "next-hop", "connection-troubleshoot", "nsg-overview", "az104-guide"]
+    },
+    {
+      "id": "choose-a-diagnostic-tool",
+      "title": "Choose the evidence, then choose the tool",
+      "summary": "Use logical checks, active tests, continuous monitoring, and carefully limited packet captures for different questions, with their real prerequisites.",
+      "objectives": [
+        "Distinguish rule evaluation, route selection, a point-in-time connectivity test, and continuous monitoring.",
+        "Construct the local and remote fields of an IP flow verify test correctly.",
+        "Explain agent, permission, storage, and connectivity prerequisites for the relevant tools.",
+        "Interpret packet capture and latency evidence without claiming an unsupported root cause."
+      ],
+      "sections": [
+        {
+          "id": "tool-questions",
+          "title": "The question determines the tool",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Imagine that the homework app fails only for two minutes after lunch. A screenshot of a successful connection at 16:00 does not disprove a failure at 13:00. Equally, a historical traffic chart cannot guarantee that the next connection will work. Before selecting a tool, decide whether you need configuration evidence, an immediate active test, repeated observations, or packet-level detail. The source module groups these into monitoring, diagnostics, and traffic analysis. The categories help you organize work, but the actual question is more important than the menu location."
+            },
+            {
+              "type": "table",
+              "caption": "Ask a question that the selected tool can actually answer",
+              "headers": ["Question", "Tool", "What it does not prove"],
+              "rows": [
+                ["Which resources and associations form this deployment?", "Topology", "That packets pass or an application is healthy."],
+                ["Would this TCP or UDP tuple be allowed by applicable security rules?", "IP flow verify", "That a process listens or the guest firewall permits it."],
+                ["Which NIC, subnet, and admin rules contribute to policy?", "Effective security rules", "A live connection result."],
+                ["Which route and next hop are selected for this destination?", "Next hop", "That every later device or return route works."],
+                ["Can this source reach this destination now?", "Connection troubleshoot", "That connectivity was good during yesterday's outage."],
+                ["When do failures or latency changes occur?", "Connection monitor", "The correctness of every real user's operation."],
+                ["Which packets reach or leave this VM during reproduction?", "Packet capture", "Plaintext inside TLS or packets dropped before reaching that capture point."]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "prepare-diagnostics",
+          "title": "Check prerequisites before trusting a failed test",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Choose the correct subscription, region, resource, and NIC, and verify the account's permission to run the diagnostic and read the result. Keep the source VM running and use a supported operating system for extension-based diagnostics. An unavailable agent, insufficient permission, or a stopped VM can prevent the tool from running; that is not the same as evidence that the tested database port is blocked. Record the diagnostic's own errors separately from the target connection's result. Read-only rule and route analysis does not require you to install a packet-capture agent on every target."
+            },
+            {
+              "type": "paragraph",
+              "text": "Some Network Watcher operations use the Network Watcher Agent VM extension. For the documented agent-based VM experience, confirm extension health and its required platform connectivity: outbound TCP to 169.254.169.254 on port 80 and to 168.63.129.16 on port 8037. Storage upload also needs an allowed path to the storage destination. Do not assume a restrictive subnet has working internet egress simply because a route exists. Use the documented requirements for the selected feature, not a blanket allow-all firewall change. Packet capture and Azure VM Connection monitor sources specifically depend on the Network Watcher extension."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Connection troubleshoot has a documented preview alternative",
+              "text": "Current Connection troubleshoot documentation describes an agentless experience in preview. The established agent-based VM workflow uses the Network Watcher extension; an available agentless preview does not require it for that test. Check the chosen experience and current support before diagnosing an extension as missing. Do not extrapolate that preview to packet capture or Connection monitor prerequisites."
+            }
+          ]
+        },
+        {
+          "id": "tuple-direction",
+          "title": "Write the five-tuple from the selected VM's viewpoint",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose web VM 10.20.1.4 opens a new TCP connection from temporary port 51000 to database VM 10.20.2.5 on port 1433. On the database NIC, an inbound IP flow verify test uses local IP 10.20.2.5, local port 1433, remote IP 10.20.1.4, and remote port 51000. On the web NIC, an outbound test uses local IP 10.20.1.4 and local port 51000, with remote IP 10.20.2.5 and remote port 1433. 'Local' means the selected VM, not always the connection's client."
+            },
+            {
+              "type": "paragraph",
+              "text": "IP flow verify evaluates TCP and UDP rules and returns an allow or deny decision with the matching rule information. It is not an ICMP ping tool. Effective security rules provides the surrounding policy context, including subnet and NIC associations and applicable security admin rules. NSG diagnostics is a related feature for broader supported resource types, including scale sets and Application Gateway, and can evaluate scenarios beyond IP flow verify's TCP/UDP scope. Use its analysis before considering any proposed rule addition; an offered higher-priority allow is not automatically an authorized or safe repair."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-local-port",
+              "prompt": "You select the database VM for an inbound test of the web-to-database connection. Should local port be 51000 because the web client selected it?",
+              "answer": "No. Local port is 1433 on the database VM; remote port is 51000.",
+              "explanation": "The fields describe the selected NIC's viewpoint. Reversing them tests a different hypothetical flow and can produce a misleading rule decision."
+            }
+          ]
+        },
+        {
+          "id": "one-test-or-history",
+          "title": "A snapshot and a monitor serve different purposes",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Connection troubleshoot performs a point-in-time check and can report reachability, failed probes, latency, path information, and detected issues involving DNS, routes, security rules, guest firewalls, or listeners. Choose the real destination name or IP and the relevant protocol and port. If you test an IP, you are not testing name resolution. Its documented sources now extend beyond a single VM to supported scale sets, Bastion, and v2 gateways, with deployment limitations. A 'reachable' result means the selected test succeeded, not that a student can complete an authenticated database transaction."
+            },
+            {
+              "type": "paragraph",
+              "text": "Connection monitor repeats configured tests between source and destination endpoints. A test configuration specifies the protocol, relevant port, frequency, and failure or latency thresholds; a test group combines endpoints with those configurations. For the school, monitor TCP 1433 from 10.20.1.4 to 10.20.2.5 over the period when reports fail. HTTP checks can evaluate an expected response, while TCP and ICMP measurements answer different reachability questions. Round-trip time is the time for a request and its response, not just one-way travel. A two-minute outage is easier to investigate when the graph preserves the failed checks."
+            },
+            {
+              "type": "paragraph",
+              "text": "Agent requirements apply to monitoring sources, not every destination. Azure VM sources need the Network Watcher extension. A destination can simply be a supported address, name, or URL; it does not need that extension merely to receive probes. Results integrate with Azure Monitor metrics and Log Analytics logs, so select the intended workspace and verify data arrival. A monitor with no data is not a healthy connection. For cross-region planning, compare representative sources and times, then account for workload placement, cost, and data dependencies rather than moving the school app after one unusually slow probe."
+            }
+          ]
+        },
+        {
+          "id": "hybrid-boundaries",
+          "title": "Hybrid monitoring and VPN diagnosis have boundaries",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The office network 172.20.0.0/16 is useful for a hybrid example only if a connection to Azure has deliberately been built. Current guidance for using an on-premises host as a Connection monitor source requires Azure Arc enablement and the documented Azure Monitor Agent and Network Watcher extension setup. Do not reuse an old tutorial that installs the retired Log Analytics agent. The Network Watcher extension and Azure Monitor Agent have different roles; installing one is not a promise that all features of the other are available."
+            },
+            {
+              "type": "paragraph",
+              "text": "When office users lose a site-to-site VPN connection, VPN troubleshoot can examine supported route-based VPN gateways and connections and write diagnostic results to storage. Confirm access to the selected gateway and storage destination and allow the operation to finish before starting another in that subscription. It is not a universal ExpressRoute or point-to-site VPN troubleshooting tool. A healthy tunnel also does not prove that db.classroom.internal resolves in the office or that its route and application permissions work. Combine gateway evidence with the layered method instead of stopping at a green tunnel status."
+            }
+          ]
+        },
+        {
+          "id": "capture-with-a-question",
+          "title": "Capture packets only when they answer the remaining question",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Packet capture records traffic visible at a supported VM or scale-set instance through the Network Watcher extension. Before starting, obtain authorization, verify extension health and sufficient local disk space or a usable storage destination, and define a filter, duration, and size limit. For the database ticket, filter TCP between 10.20.1.4 and 10.20.2.5 on the relevant server port and capture a brief reproduction. Capturing all traffic for hours creates unnecessary cost and may expose sensitive data. Treat the capture as restricted evidence, not something to upload to a public ticket."
+            },
+            {
+              "type": "paragraph",
+              "text": "Captures can be saved locally or to Azure Blob Storage. The documented storage upload uses shared-access-signature authorization and requires storage key access; if policy forbids that, use an approved local-disk capture rather than relaxing organizational controls just for convenience. Also verify that the VM can reach the chosen storage destination. TLS application payload remains encrypted in an ordinary network capture, but addresses, timing, retries, and TCP flags can still be useful. A packet dropped by an NSG before reaching the VM cannot be expected in a capture inside that VM."
+            }
+          ]
+        },
+        {
+          "id": "worked-intermittent-ticket",
+          "title": "Worked example: the port works now, but failed at lunch",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Use a timeline to locate a listener restart",
+              "scenario": "The web VM 10.20.1.4 intermittently loses database access to 10.20.2.5:1433. DNS consistently resolves correctly. The school already has an authorized Connection monitor test and permission for short captures in this fictional environment. An afternoon Connection troubleshoot test succeeds.",
+              "steps": [
+                { "action": "Compare the incident times with the monitor's TCP 1433 failures instead of closing the ticket after the afternoon success.", "why": "A point-in-time result cannot contradict historical failures. The monitor shows failures clustering around 13:00." },
+                { "action": "During the next approved reproduction, check Next hop and the applicable security rules for the same source, destination, and port.", "why": "An expected route and allow decisions narrow the investigation, although they do not establish listener health." },
+                { "action": "Run a short filtered capture and correlate it with the database service's own logs and listener status.", "why": "In this example, the destination receives connection attempts and returns resets while the service log records a scheduled restart and the listener is absent. The combined evidence is stronger than a reset alone." },
+                { "action": "Ask the service owner to move the scheduled restart to the maintenance window, then repeat the same monitoring interval and a real test query.", "why": "The fault is the unavailable service, not an NSG that needs opening. Retesting both transport and the application verifies the intended recovery." },
+                { "action": "Stop the capture, retain only approved sanitized evidence, and record the before-and-after times.", "why": "The ticket should explain the cause and the confirmed repair without leaving unrestricted capture or unnecessary data collection running." }
+              ],
+              "result": "The lunch-time failures cease after the scheduled task is corrected. The diagnosis rests on aligned monitor, packet, and guest-service evidence, not on recognizing a tool name or assuming every reset means a particular firewall."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Distinguish purpose and prerequisite",
+              "text": "IP flow verify evaluates policy; Connection troubleshoot tests now; Connection monitor repeats tests; packet capture records packets at a specific observation point. A tool error is not automatically a network failure, and Network Watcher extension requirements must not be replaced with 'install any monitoring agent.'"
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "tool-history-check",
+          "kind": "single",
+          "prompt": "Understanding: a connection works at 16:00 but repeatedly fails around 13:00. Which evidence is most useful for establishing when it fails?",
+          "choices": [
+            { "id": "monitor-timeline", "text": "Connection monitor results covering the reported failure period.", "explanation": "Repeated tests preserve a timeline of failed checks and latency rather than a single later observation." },
+            { "id": "one-success", "text": "One successful Connection troubleshoot result at 16:00.", "explanation": "That result describes its own test time and cannot establish what happened at lunch." },
+            { "id": "map-alone", "text": "A topology map with both VM names visible.", "explanation": "Resource relationships do not show whether a connection failed during a specific time window." }
+          ],
+          "correctIds": ["monitor-timeline"],
+          "explanation": "Use evidence with the same time scope as the question."
+        },
+        {
+          "id": "tool-tuple-check",
+          "kind": "single",
+          "prompt": "Understanding: web VM 10.20.1.4:51000 connects to DB VM 10.20.2.5:1433. Which fields fit an inbound IP flow verify test on the database NIC?",
+          "choices": [
+            { "id": "db-local", "text": "Local 10.20.2.5:1433; remote 10.20.1.4:51000; TCP.", "explanation": "The database is the selected local resource and receives the connection on its listening port." },
+            { "id": "web-local", "text": "Local 10.20.1.4:51000; remote 10.20.2.5:1433; TCP.", "explanation": "Those local and remote values describe an outbound test on the web VM, not the selected database NIC." },
+            { "id": "same-port", "text": "Local 10.20.2.5:1433; remote 10.20.1.4:1433; UDP.", "explanation": "This changes both the client's temporary port and the protocol, so it evaluates a different hypothetical flow." }
+          ],
+          "correctIds": ["db-local"],
+          "explanation": "Translate the connection into the selected NIC's perspective before interpreting its rule result."
+        },
+        {
+          "id": "tool-capture-check",
+          "kind": "multiple",
+          "prompt": "Understanding: select the two appropriate preparations for an authorized database packet capture.",
+          "choices": [
+            { "id": "capture-filter", "text": "Set a narrow endpoint and port filter with a short duration and size limit.", "explanation": "These limits focus the evidence and reduce unnecessary sensitive data and storage usage." },
+            { "id": "capture-prerequisites", "text": "Verify the Network Watcher extension and the chosen local or storage destination.", "explanation": "Capture needs the correct extension and somewhere usable to save its output; storage upload has additional connectivity and authorization requirements." },
+            { "id": "ama-substitute", "text": "Assume Azure Monitor Agent alone supplies Network Watcher packet capture.", "explanation": "These are distinct extensions with distinct purposes. AMA is not a replacement for the capture extension." },
+            { "id": "tls-plaintext", "text": "Expect the capture to reveal every TLS-encrypted database query as plaintext.", "explanation": "An ordinary network capture does not automatically decrypt TLS, although transport metadata remains useful." }
+          ],
+          "correctIds": ["capture-filter", "capture-prerequisites"],
+          "explanation": "Make capture a bounded evidence-gathering operation rather than unrestricted traffic collection."
+        },
+        {
+          "id": "tool-agent-check",
+          "kind": "single",
+          "prompt": "Understanding: a colleague says every Network Watcher operation requires the same VM agent, including the new agentless preview. Which correction is accurate?",
+          "choices": [
+            { "id": "feature-specific", "text": "Requirements are feature-specific: the Connection troubleshoot agentless preview differs from packet capture and Azure VM Connection monitor sources.", "explanation": "Current documentation explicitly separates the agentless preview from established extension-based features. Check the selected experience." },
+            { "id": "remove-all", "text": "Remove the Network Watcher extension because preview support makes it obsolete everywhere.", "explanation": "Packet capture and Azure VM Connection monitor sources still require it under the documented setup." },
+            { "id": "install-mma", "text": "Install the retired Log Analytics agent to satisfy all Network Watcher prerequisites.", "explanation": "MMA is not the Network Watcher extension and is not a current universal monitoring solution." }
+          ],
+          "correctIds": ["feature-specific"],
+          "explanation": "Product names and extension names are not interchangeable prerequisites."
+        }
+      ],
+      "takeaways": [
+        "Choose configuration analysis, an active snapshot, a monitoring timeline, or a capture according to the question.",
+        "Local and remote in IP flow verify refer to the selected VM, not permanently to client and server roles.",
+        "Verify diagnostic permissions, source readiness, and feature-specific agent requirements.",
+        "Connection monitor sources need the documented setup; destinations do not all need an agent.",
+        "VPN troubleshoot has supported gateway and connection types, not universal VPN or ExpressRoute coverage.",
+        "Correlate packet observations with guest and application evidence before naming a root cause."
+      ],
+      "sourceIds": ["watcher-how", "watcher-when", "watcher-overview", "ip-flow", "effective-rules", "next-hop", "connection-troubleshoot", "connection-monitor", "packet-capture", "vpn-troubleshoot", "network-agent", "arc-agents"]
+    },
+    {
+      "id": "flow-logs-and-a-final-case",
+      "title": "Use traffic history to resolve the final school incident",
+      "summary": "Understand VNet flow logs and Traffic analytics, separate modern collection paths from retired agents, and combine historical and live evidence in a complete diagnosis.",
+      "objectives": [
+        "Explain what VNet flow logs record and why they are not packet captures or application audit logs.",
+        "Describe the current storage and workspace pipeline for Traffic analytics.",
+        "Distinguish NSG flow-log retirement from NSGs themselves and MMA retirement from the Log Analytics service.",
+        "Resolve an incident using the layered method and verify the user's actual operation."
+      ],
+      "sections": [
+        {
+          "id": "flows-not-payloads",
+          "title": "A flow log records a conversation's outline",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A flow is a network conversation identified by addresses, ports, and protocol. Virtual network flow logs record information about IP traffic at supported resources in a selected VNet, subnet, or NIC scope. Records can include time, direction, the relevant rule, flow state, and packet or byte counts. They are collected by the Azure platform and written to Azure Storage, not by installing a log-reading agent inside every VM. This makes them useful for asking who communicated with 10.20.2.5, on which port, and during which time period."
+            },
+            {
+              "type": "paragraph",
+              "text": "A flow log is not a copy of the HTTP page or database query. It cannot tell you whether a student had permission to see a grade, and an allowed flow does not prove that a query succeeded. Supported scope also matters: not every Azure service or traffic observation point has identical coverage. For example, private endpoint traffic is not captured at the private endpoint itself; a supported source VM can provide evidence of traffic to it. Check collection health, selected scope, time range, and documented limitations before interpreting an absent record as proof that nothing happened."
+            }
+          ]
+        },
+        {
+          "id": "current-flow-log-choice",
+          "title": "Use VNet flow logs for new designs",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "As of this module's review date, creating new NSG flow logs is no longer supported. Existing NSG flow logs have a retirement date of September 30, 2027. Plan migration to virtual network flow logs instead of following an older exercise that creates NSG flow logs. This retirement is about the logging feature, not the retirement of network security groups or their packet-filtering function. NSGs remain part of the school's access controls, and VNet flow logs can still identify traffic permitted or denied by applicable security rules."
+            },
+            {
+              "type": "paragraph",
+              "text": "Inventory existing collection before enabling the replacement. Microsoft recommends disabling NSG flow logs before enabling VNet flow logs for the same underlying workloads to avoid duplicate recording and additional costs. Coordinate that switch, record the cutover time, and verify new records rather than deleting history blindly. Retirement of NSG flow-log resources does not mean the historical blobs in Azure Storage are automatically erased; their retention still matters. A migration should also update dashboards and queries that depended on the old data format, rather than merely changing a checkbox."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Do not turn a historical feature into a new recommendation",
+              "text": "Recognize NSG flow logs when reading an existing system, but choose VNet flow logs for new logging. Separately, recognize retired MMA or Log Analytics agent guidance without treating the Log Analytics workspace service as retired. A feature, an agent, and a data store have different lifecycles."
+            }
+          ]
+        },
+        {
+          "id": "storage-and-analytics",
+          "title": "Follow the data through storage and the workspace",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For VNet flow logs, select a supported standard storage account in the same region as the logged virtual network. It can be in the VNet's subscription or another subscription associated with the same Microsoft Entra tenant, subject to the required access. Premium storage is not supported for this purpose. Confirm provider registration, including Microsoft.Insights, and the permissions needed to configure logging and use the selected destination. In a small exercise, a dedicated standard general-purpose v2 account in the same subscription and region avoids unnecessary cross-subscription complexity."
+            },
+            {
+              "type": "paragraph",
+              "text": "Traffic analytics is an optional processing layer, not another name for the raw storage account. It reads flow logs, aggregates related flows, adds network and geographic context, and stores processed results in a Log Analytics workspace for analysis and visualization. Select an explicitly approved workspace and check that its region is supported for Traffic analytics. The workspace does not always have to share the VNet's region; current availability guidance permits another supported workspace region when required. This differs from the same-region requirement for the raw flow-log storage account."
+            },
+            {
+              "type": "diagram",
+              "title": "Observed traffic becomes logs, then optional analysis",
+              "description": "The web VM at 10.20.1.4 attempts TCP 1433 connections to database VM 10.20.2.5 in App VNet 10.20.0.0/16. Azure's VNet flow-log collection writes records to a same-region standard storage account. Optional Traffic analytics processes those records into a supported Log Analytics workspace. The storage and workspace nodes are managed data destinations, not extra routers on the VM traffic path.",
+              "nodes": [
+                { "id": "flow-source", "label": "Web VM", "detail": "10.20.1.4 in 10.20.0.0/16", "column": 0, "row": 0 },
+                { "id": "flow-target", "label": "DB VM", "detail": "10.20.2.5; TCP 1433", "column": 1, "row": 0 },
+                { "id": "flow-storage", "label": "Raw flow logs", "detail": "Same-region standard Azure Storage", "column": 1, "row": 1 },
+                { "id": "flow-workspace", "label": "Analytics results", "detail": "Supported Log Analytics workspace", "column": 2, "row": 1 }
+              ],
+              "edges": [
+                { "from": "flow-source", "to": "flow-target", "label": "Observed attempts" },
+                { "from": "flow-target", "to": "flow-storage", "label": "Platform collection" },
+                { "from": "flow-storage", "to": "flow-workspace", "label": "Traffic analytics" }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "The portal offers Traffic analytics processing intervals of one hour or ten minutes. These are processing choices, not a guarantee that every event appears immediately at the interval boundary. Allow for collection, processing, and ingestion delay. Check raw blobs first when distinguishing 'no traffic' from 'analytics has not processed it yet'. Choose retention consciously: zero days in the flow-log retention setting means keep indefinitely, not delete immediately. Flow-log collection, storage capacity and operations, analytics processing, and workspace ingestion or retention can each contribute to cost. Restrict access because even metadata can reveal who contacted which services."
+            }
+          ]
+        },
+        {
+          "id": "read-flow-evidence",
+          "title": "Interpret the record before counting it",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The raw VNet flow-log format includes states such as Begin, Continuing, End, and Deny. A begin record is not a completed application request, and a deny record indicates a blocked attempt rather than a successful exchange. Continuing and end counters describe traffic since the preceding update for that flow, so understand their meaning before calculating totals. Direction belongs to the observed interface. Correlate the timestamp, addresses, protocol, destination port, and rule, rather than counting every row as one distinct student or one login attempt."
+            },
+            {
+              "type": "table",
+              "caption": "Sanitized fictional evidence from the school case",
+              "headers": ["Observation", "What it supports", "What it does not prove"],
+              "rows": [
+                ["09:01 UTC: 10.20.1.4:51000 -> 10.20.2.5:1433, TCP, inbound Deny, rule MaintenanceBlock.", "This observed new attempt was denied at the recorded security boundary.", "That the database password was wrong or the service was stopped."],
+                ["09:02 UTC: an older web-to-database flow still has continuing traffic.", "A previously established flow was still active.", "That every newly initiated connection was permitted."],
+                ["09:10 UTC: new attempts are allowed after an approved rule correction.", "Network policy no longer rejects those observed attempts.", "That the final homework operation or database authorization succeeded."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "VNet flow logs also include an encryption-state field for Azure virtual network encryption. Do not mistake an unencrypted value there for proof that HTTPS or database TLS was absent: it describes that platform encryption feature, not an inspection of application TLS. Traffic analytics summarizes patterns such as communicating hosts, blocked flows, and cross-region traffic. A summary can suggest where to investigate, but an unfamiliar destination is not automatically malicious and a large byte count is not automatically a fault. Connect the observation to an expected workload."
+            }
+          ]
+        },
+        {
+          "id": "agents-and-retirement",
+          "title": "Keep three collection mechanisms separate",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The Log Analytics agent, also called Microsoft Monitoring Agent or MMA, retired on August 31, 2024. Current guidance warns that its cloud data upload can stop after March 2, 2026. Do not install it as the solution to a new monitoring requirement. Azure Monitor Agent, or AMA, replaces its Azure Monitor collection role, with data collection rules, or DCRs, specifying what supported data to collect and where it goes. Verify the required data arrives after migration; the presence of an installed extension alone is not a working collection pipeline."
+            },
+            {
+              "type": "paragraph",
+              "text": "The Network Watcher extension is a different component used by features such as packet capture and Azure VM Connection monitor sources. AMA does not replace that extension. For current on-premises Connection monitor sources, follow the documented Arc, AMA, and Network Watcher extension setup, rather than treating an office machine as a destination that automatically becomes a source. General AMA guest-log collection uses the appropriate DCR and association. VNet flow logs and Traffic analytics, however, use the platform-to-storage-to-workspace path described above; they do not require installing AMA or a DCR on every logged VM."
+            }
+          ]
+        },
+        {
+          "id": "final-school-case",
+          "title": "Capstone: the homepage works, new homework requests fail",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "predict-old-flow",
+              "prompt": "At 09:00 UTC, an NSG rule is tightened. Some existing database sessions still work, but new web workers fail to connect. Does the surviving traffic prove the new rule is irrelevant?",
+              "answer": "No. NSGs are stateful, so established flows can continue while newly initiated flows meet the changed rules.",
+              "explanation": "Test fresh connections and compare their tuples and times with the policy change. Do not use a surviving pooled database connection as the sole verification of a new rule."
+            },
+            {
+              "type": "example",
+              "title": "Resolve ticket SCHOOL-42 using a complete evidence chain",
+              "scenario": "At 09:05 UTC, teachers can open the public homepage at classroom.example but new homework requests fail. The gateway still reports its simple /health endpoint healthy. App VNet is 10.20.0.0/16, with web VM 10.20.1.4 and DB VM 10.20.2.5. A configured private zone and resolver return db.classroom.internal as 10.20.2.5. VNet flow logs were already enabled and recording. No security admin rules apply. A maintenance NSG change occurred at 09:00 UTC.",
+              "steps": [
+                { "action": "Separate the browser-to-web request from the web-to-database dependency and reproduce one new TCP 1433 connection from 10.20.1.4.", "why": "The homepage and simple probe do not exercise the same database operation. Use a fresh connection because pooled sessions can survive a security-rule change." },
+                { "action": "Verify resolution on the web VM and inspect Next hop to 10.20.2.5 and the return path; the results show the expected same-VNet route.", "why": "Correct DNS and forwarding evidence reduce the likelihood that the change created a name or routing fault. They do not yet establish permission." },
+                { "action": "Run IP flow verify for the database NIC: inbound TCP, local 10.20.2.5:1433, remote 10.20.1.4:51000. It returns Deny with MaintenanceBlock.", "why": "This is a concrete security decision for the failed type of connection, not a guess based on a general timeout." },
+                { "action": "Inspect effective security rules. The subnet permits the flow. On the database NIC, MaintenanceBlock denies inbound TCP from 10.20.1.0/24 to 10.20.2.5:1433 at priority 200, while an intended allow from 10.20.1.4/32 to that same destination is priority 300. Both rules accept any source port.", "why": "Both rules match, but the lower priority number wins within that NIC NSG. NSGs do not use the routing rule of longest prefix to make the narrower allow win. The subnet allow cannot override the NIC deny. Confirm the temporary block is no longer intended." },
+                { "action": "Correlate the current result with raw VNet flow records showing new inbound denials under MaintenanceBlock after 09:00 UTC and earlier established traffic continuing.", "why": "The history explains why only new sessions failed and links the reported onset to the policy change. Traffic analytics may arrive later, so its temporary lack of a chart is not contradictory." },
+                { "action": "Have the authorized owner remove the expired maintenance rule after reviewing its intended scope, retaining the narrow required allow rather than adding an unrestricted higher-priority exception.", "why": "This restores the approved policy and fixes the cause. Opening all ports or all source networks would be an unrelated security regression." },
+                { "action": "Retest a new connection, verify the guest listener and application TLS as applicable, and submit homework using the approved test identity.", "why": "A new network allow is necessary but not sufficient. The real operation checks the remaining guest and application layers, including database authorization." },
+                { "action": "Record restored user behavior and fresh allowed flow evidence, and keep the targeted monitor over the next expected busy period.", "why": "The resolution must demonstrate the user's outcome and watch for recurrence, not merely show that a portal setting was saved." }
+              ],
+              "result": "New database connections and the authorized homework operation succeed. The root cause was an expired, higher-priority NIC NSG maintenance deny, not DNS, gateway capacity, or a database password. Existing sessions survived because of stateful filtering. If the final application test had still failed, the ticket would remain open at the guest or application layer."
+            }
+          ]
+        },
+        {
+          "id": "close-with-evidence",
+          "title": "Close the ticket without losing the lesson",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A useful resolution note states the symptom, affected connection, first confirmed fault, approved change, and observed recovery. For SCHOOL-42, include the UTC timeline, source and destination, the two competing rule priorities, and a successful fresh connection plus homework operation. Avoid attaching credentials, real student records, or unrestricted packet files. State any remaining uncertainty, such as an unmonitored office path, instead of claiming the entire school network is proven healthy. A precise boundary makes the report more trustworthy, not less complete."
+            },
+            {
+              "type": "paragraph",
+              "text": "The Learn module asks when Network Watcher is appropriate. This case shows the answer: use it when Azure infrastructure networking evidence can distinguish plausible causes. Use Connection monitor for recurrence, flow logs for historical patterns, and a narrow diagnostic for the current decision. Escalate to application owners when the evidence reaches authorization or business logic, and to platform-specific health tools for managed-service internals. Stop temporary captures, remove only exercise-owned monitoring, and review retained storage. Operational discipline includes knowing when enough evidence has been collected and when further collection only adds cost."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "flow-current-check",
+          "kind": "single",
+          "prompt": "Recall with application: a new school deployment needs traffic history in September 2026. Which plan follows current guidance?",
+          "choices": [
+            { "id": "new-vnet-logs", "text": "Configure supported VNet flow logs and plan storage, retention, and optional analytics.", "explanation": "This is the current logging direction; new NSG flow-log creation is no longer supported." },
+            { "id": "new-nsg-logs", "text": "Create new NSG flow logs because NSGs are still used for filtering.", "explanation": "The continued use of NSGs does not preserve creation of the retiring NSG logging feature." },
+            { "id": "no-nsg", "text": "Delete NSGs because their flow-log feature is retiring.", "explanation": "Logging retirement is not retirement of network security filtering. Removing NSGs would change the access policy unnecessarily." }
+          ],
+          "correctIds": ["new-vnet-logs"],
+          "explanation": "Separate the lifecycle of a security control from the lifecycle of its historical logging mechanism."
+        },
+        {
+          "id": "flow-storage-check",
+          "kind": "multiple",
+          "prompt": "Understanding: select the two accurate statements about VNet flow logs and Traffic analytics.",
+          "choices": [
+            { "id": "standard-storage", "text": "Raw VNet flow logs require supported standard storage in the VNet's region.", "explanation": "Same-region standard storage is the documented raw-log requirement; a premium account is not the intended destination." },
+            { "id": "workspace-results", "text": "Traffic analytics stores processed results in a supported Log Analytics workspace.", "explanation": "The workspace is the analysis destination after processing; it is not a replacement for the raw-log storage account." },
+            { "id": "ama-required", "text": "Every logged VM must install AMA and a DCR before a VNet flow log can record traffic.", "explanation": "VNet flow logs are collected by the Azure platform, not through AMA guest-log collection." },
+            { "id": "immediate-history", "text": "Enabling analytics reconstructs all traffic from before logging began.", "explanation": "Processing works from available records. Missing historical collection cannot be recreated by enabling a later dashboard." }
+          ],
+          "correctIds": ["standard-storage", "workspace-results"],
+          "explanation": "Follow the actual data pipeline and verify collection before interpreting an empty analytics view."
+        },
+        {
+          "id": "flow-capstone-check",
+          "kind": "single",
+          "prompt": "Understanding: SCHOOL-42 has an inbound NIC deny at priority 200 and a matching allow at 300, with a subnet allow. Why do new connections fail?",
+          "choices": [
+            { "id": "priority-deny", "text": "The NIC's matching deny is evaluated before its allow, and the subnet allow cannot cancel it.", "explanation": "Lower priority numbers run first within the NSG, while both applicable NSGs must permit the new flow in this scenario." },
+            { "id": "largest-wins", "text": "The allow's larger priority number should win, so DNS must be the problem.", "explanation": "This reverses the priority rule and ignores the direct deny evidence for the actual tuple." },
+            { "id": "all-sessions-fail", "text": "The deny is unrelated because any rule change must immediately terminate every existing session.", "explanation": "NSGs are stateful. Existing flows can continue while new connections are evaluated against the changed rules." }
+          ],
+          "correctIds": ["priority-deny"],
+          "explanation": "The effective policy and stateful behavior jointly explain both the failures and the apparently contradictory surviving traffic."
+        },
+        {
+          "id": "flow-close-check",
+          "kind": "single",
+          "prompt": "Understanding: after correcting MaintenanceBlock, flow records show allowed attempts but the homework submission still fails. Can the ticket be closed as fully resolved?",
+          "choices": [
+            { "id": "continue-app", "text": "No. Verify guest listener, protocol or TLS requirements, and application authorization until the required operation succeeds.", "explanation": "Allowed network metadata establishes only part of the recovery. The user's actual outcome is still unverified." },
+            { "id": "allow-equals-success", "text": "Yes. An allowed flow proves the homework was accepted by the database.", "explanation": "Flow logs do not contain the application's success or authorization decision." },
+            { "id": "install-mma-now", "text": "Yes, after installing MMA to turn flow logs into homework audit logs.", "explanation": "MMA is retired and does not transform network records into application audit events. The application needs its own relevant evidence." }
+          ],
+          "correctIds": ["continue-app"],
+          "explanation": "Close a ticket against its requested outcome, not against the first green diagnostic."
+        }
+      ],
+      "takeaways": [
+        "Use VNet flow logs for new collection; NSG filtering remains valid even though its older flow-log feature is retiring.",
+        "Raw logs go to supported same-region standard storage; Traffic analytics sends processed results to a supported workspace.",
+        "Missing or delayed analytics is not proof that no traffic occurred.",
+        "MMA, AMA, the Network Watcher extension, and platform flow-log collection are different mechanisms.",
+        "A surviving established connection can hide a rule that blocks new sessions.",
+        "Resolve the first proven fault, then verify the real application operation before closing the incident."
+      ],
+      "sourceIds": ["watcher-module", "watcher-overview", "vnet-flows", "flow-portal", "traffic-analytics", "mma-retirement", "arc-agents", "connection-monitor", "nsg-overview", "ip-flow", "effective-rules", "az104-guide"]
+    }
+  ],
+  "glossary": [
+    { "term": "IaaS", "definition": "Infrastructure as a service: cloud resources such as VMs and virtual networks whose guest systems and configuration the customer helps manage." },
+    { "term": "NIC", "definition": "Network interface: the resource through which a VM uses its assigned network addresses and subnet." },
+    { "term": "Five-tuple", "definition": "Source address, source port, destination address, destination port, and protocol, used to identify a network flow." },
+    { "term": "Temporary source port", "definition": "A client-selected port used for a particular conversation, distinct from the service's listening destination port." },
+    { "term": "Effective security rules", "definition": "The applicable NIC, subnet, and security admin rules shown together for investigation, not a guarantee of application success." },
+    { "term": "Next hop", "definition": "The forwarding choice selected for traffic from a source to a particular destination." },
+    { "term": "Guest firewall", "definition": "The Windows or Linux firewall inside a VM, separate from Azure's NSGs." },
+    { "term": "Listener", "definition": "A running service accepting connections on a particular address and port." },
+    { "term": "Authentication", "definition": "Establishing which identity is making a request." },
+    { "term": "Authorization", "definition": "Deciding which operations an identity may perform." },
+    { "term": "Round-trip time", "definition": "The measured duration for a test message and its response, often used to describe connection latency." },
+    { "term": "Packet capture", "definition": "A recording of packets visible at a selected observation point, with limits determined by filters, placement, and encryption." },
+    { "term": "Flow log", "definition": "A record of network-conversation metadata such as endpoints, protocol, state, rule, and counters, not the application payload." },
+    { "term": "Traffic analytics", "definition": "Optional processing of flow logs into aggregated and enriched results for visualization and investigation." },
+    { "term": "Log Analytics workspace", "definition": "An Azure Monitor log-data store used for queries and analysis; it is not the retired Log Analytics agent." },
+    { "term": "Network Watcher extension", "definition": "The VM extension used by specific Network Watcher diagnostics and monitoring sources, including packet capture and Azure VM Connection monitor." },
+    { "term": "AMA", "definition": "Azure Monitor Agent, the current agent for supported guest monitoring collection formerly handled by MMA." },
+    { "term": "DCR", "definition": "Data collection rule: a configuration describing supported data to collect and its destination for an Azure Monitor collection scenario." },
+    { "term": "Stateful filtering", "definition": "Filtering that remembers established connections, so existing sessions may survive a rule change that affects new flows." }
+  ],
+  "sources": [
+    { "id": "watcher-module", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-network-watcher/", "title": "Introduction to Azure Network Watcher", "supports": "The official objectives and source-module structure: introduction, capabilities, operation, suitability, assessment, and summary." },
+    { "id": "watcher-what", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-network-watcher/2-what-is-azure-network-watcher", "title": "What is Azure Network Watcher?", "supports": "The monitoring, diagnostic, and traffic-analysis categories and the IaaS-focused scope." },
+    { "id": "watcher-how", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-network-watcher/3-how-azure-network-watcher-works", "title": "How Azure Network Watcher works", "supports": "Instructional coverage of topology, connection monitoring, IP flow verify, Next hop, effective rules, packet capture, connection troubleshooting, and VPN diagnostics." },
+    { "id": "watcher-when", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-network-watcher/4-when-to-use-azure-network-watcher", "title": "When to use Azure Network Watcher", "supports": "VM connectivity, hybrid VPN diagnosis, cross-region latency investigation, and limitations for application analytics and PaaS internals." },
+    { "id": "watcher-overview", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/network-watcher-overview", "title": "What is Azure Network Watcher?", "supports": "Current regional enablement, topology scope, tool categories, no new NSG flow-log creation, September 30, 2027 NSG flow-log retirement, and preservation of historical storage records under retention policies." },
+    { "id": "ip-flow", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/ip-flow-verify-overview", "title": "IP flow verify overview", "supports": "Logical TCP/UDP security-rule evaluation, local and remote tuple inputs, applicable NSG and security admin rules, regional Network Watcher and permission requirements." },
+    { "id": "effective-rules", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/effective-security-rules-overview", "title": "Effective security rules overview", "supports": "Visibility into inbound and outbound rules associated with NICs and subnets, plus applicable Azure Virtual Network Manager admin rules." },
+    { "id": "next-hop", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/network-watcher-next-hop-overview", "title": "Next hop overview", "supports": "Reporting next-hop type, address, and route table for a source and destination, including virtual network, appliance, and None next hops." },
+    { "id": "connection-troubleshoot", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/connection-troubleshoot-overview", "title": "Connection troubleshoot overview", "supports": "Point-in-time reachability and fault evidence, supported sources, listener and guest-firewall issues, and the currently documented agentless preview distinct from the earlier agent-based experience." },
+    { "id": "connection-monitor", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/connection-monitor-overview", "title": "Connection monitor overview", "supports": "Repeated TCP, HTTP, and ICMP tests, sources and destinations, test groups and configurations, thresholds, metrics and logs, Azure VM source extensions, and current hybrid-source requirements." },
+    { "id": "packet-capture", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/packet-capture-overview", "title": "Packet capture overview", "supports": "Network Watcher extension prerequisite, capture filters and limits, local or storage output, and shared-key-enabled storage access for SAS-based uploads." },
+    { "id": "vpn-troubleshoot", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/vpn-troubleshoot-overview", "title": "VPN troubleshoot overview", "supports": "Supported route-based VPN gateway and connection types, unsupported ExpressRoute and VPNClient connection types, storage output, and one active operation per subscription." },
+    { "id": "network-agent", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/network-watcher-agent-manage", "title": "Manage Network Watcher Agent virtual machine extension", "supports": "Supported VM operating systems and agent connectivity prerequisites, including platform addresses 169.254.169.254:80 and 168.63.129.16:8037 plus storage connectivity for uploads." },
+    { "id": "vnet-flows", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/vnet-flow-logs-overview", "title": "Virtual network flow logs", "supports": "Platform collection, flow states and counters, virtual network encryption status, supported traffic scope, duplicate-logging cautions, same-region standard storage and tenant requirements, and separate collection, analytics, and storage costs." },
+    { "id": "flow-portal", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/vnet-flow-logs-portal", "title": "Create, change, enable, disable, or delete virtual network flow logs", "supports": "Manual portal workflow, VNet/subnet/NIC targets, Microsoft.Insights registration, storage and workspace selection, indefinite retention at zero days, and one-hour or ten-minute analytics processing choices." },
+    { "id": "traffic-analytics", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/traffic-analytics", "title": "Traffic analytics overview", "supports": "Aggregation and enrichment of raw flow logs into a Log Analytics workspace, available visualization questions, and supported-region requirements distinct from raw-storage location rules." },
+    { "id": "mma-retirement", "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/agents/azure-monitor-agent-migration", "title": "Migrate from Log Analytics agent to Azure Monitor Agent", "supports": "MMA retirement on August 31, 2024, data-upload shutdown warning after March 2, 2026, AMA replacement, DCR-based guest collection, and verification of data after migration." },
+    { "id": "arc-agents", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/connection-monitor-install-azure-monitor-agent", "title": "Install and upgrade Azure Monitor Agent on Azure Arc-enabled servers", "supports": "Current hybrid Connection monitor setup uses an Arc-enabled host with AMA and the Network Watcher extension, which are distinct components." },
+    { "id": "nsg-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Azure network security groups overview", "supports": "Five-tuple evaluation, lower-number-first priority, default VNet rules, security admin rule precedence, and established flows surviving rule changes." },
+    { "id": "az104-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "Study guide for Exam AZ-104", "supports": "Objectives effective April 17, 2026 explicitly include connectivity troubleshooting, effective NSGs, log analysis, Network Watcher, and Connection monitor, establishing core teaching priority." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: gather a small, accountable evidence set",
+    "purpose": "Practice a rule check, live connection test, and optional flow-log inspection only in an approved disposable environment. The worked examples and scored questions require no Azure account.",
+    "prerequisites": [
+      "Use only a learner-owned or instructor-approved disposable resource group with two running supported VMs on private subnets. Record their real IPs; the story's 10.20.1.4 and 10.20.2.5 are not deployed for you.",
+      "Have a harmless test TCP service already listening on a known private address and port, plus an approved client-side test. Use test data, not a production database or student records.",
+      "Have permission for the selected Network Watcher operations. For extension-based tests, verify Network Watcher extension health and its documented platform and destination connectivity.",
+      "Record an inventory of exercise-owned resources and configuration before any changes. Obtain a separate budget and explicit owner approval before enabling paid monitoring, logging, or analytics.",
+      "If choosing the optional logging step, have approved same-region standard storage, a supported-region workspace if using Traffic analytics, required provider registration, and access to those destinations."
+    ],
+    "costWarning": "No resource is created or tested automatically by this course. Running VMs, retained disks, storage operations and capacity, flow-log collection, Connection monitor tests, Traffic analytics processing, and workspace ingestion or retention may incur charges. Prefer the browser-only cases if a budget is unavailable. Do not assume free allowances cover the exercise or that stopping a VM removes all charges.",
+    "steps": [
+      "Open Network Watcher in the approved subscription and region. Record the tool permissions and whether the needed regional instance is available; do not change an organization-wide opt-out policy.",
+      "Inspect topology and the actual source and destination NICs, subnets, NSGs, and addresses. Write a precise test tuple and timestamp.",
+      "If using a hostname, verify the source's configured DNS answer. Inspect Next hop to the intended destination and the return path before changing rules.",
+      "Inspect effective security rules, then run IP flow verify for the correct direction, protocol, local endpoint, and remote endpoint. Save only sanitized results.",
+      "Run an authorized Connection troubleshoot check to the same address or name and port. Confirm whether your chosen experience is extension-based or the documented agentless preview, and distinguish tool errors from connection failures.",
+      "Compare the diagnostic with the preapproved real service request. Explain any difference rather than adding a broad allow rule.",
+      "Only if separately authorized and budgeted, create one narrowly scoped Connection monitor test for the same endpoint pair, choose an approved workspace, and observe a bounded interval. Otherwise interpret the lesson's fictional timeline.",
+      "Only if separately authorized and budgeted, enable VNet flow logging for the dedicated test scope with the approved standard storage and finite retention. Check for overlapping legacy collection first. Optionally select Traffic analytics and an approved workspace; do not accept an unintended automatically created workspace.",
+      "Generate a few harmless test requests, record their times, inspect raw records when available, and allow for processing delay before comparing analytics. Never treat an empty chart as immediate proof of no traffic.",
+      "Write a short outcome stating which layer each result verified and which application behavior remains untested. Packet capture is not required; do not start unrestricted capture as an extra experiment."
+    ],
+    "expectedResults": [
+      "The selected tuple, IP flow verify decision, and effective rules agree, or the discrepancy is explicitly explained.",
+      "You can distinguish a tool setup failure, a blocked connection, and a reachable service that rejects application access.",
+      "If optional collection was enabled, new records identify the intended endpoints and time window; delayed analytics is checked against raw collection health.",
+      "The final note states what actually succeeded without claiming that one successful port test proves all application behavior."
+    ],
+    "cleanup": [
+      "Stop and remove only the temporary connection monitor and any capture session you personally created for the exercise. Verify they are no longer collecting.",
+      "Disable and delete only the exercise-owned flow-log resource if it was created. Flow-log resources can reside under a shared regional Network Watcher outside the VM resource group; do not delete the shared watcher or its resource group.",
+      "Inspect retained blobs, workspace data retention, and any automatically created destinations. Delete exercise-only artifacts according to the approved retention policy, and leave shared accounts and workspaces intact.",
+      "If you created the entire disposable environment separately, compare its contents with the inventory before deleting that specific resource group. If using an instructor's environment, leave its VMs and networking unchanged.",
+      "Check for remaining exercise-owned disks, public IPs, storage, monitors, logs, and resource-group contents. Review subsequent cost records because billing and retention effects may appear later."
+    ]
+  }
+}

@@ -1,0 +1,813 @@
+{
+  "schemaVersion": 1,
+  "id": "network-security-groups",
+  "title": "Network security: permit the right connection, not every connection",
+  "summary": "Protect the fictional school's web and database machines, compare service endpoints with private endpoints, and distinguish safe administration through Bastion from centralized filtering through Azure Firewall.",
+  "priority": "core",
+  "priorityReason": "The current AZ-104 guide explicitly requires NSGs, ASGs, effective security rules, Bastion, service endpoints, and private endpoints. These are core administration skills. Firewall and web application firewall boundaries are supporting context for choosing the right control, not a claim that every product detail has equal exam weight.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/configure-network-security-groups/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Decide when network security groups are appropriate for filtering network traffic.",
+    "Create network security groups and associate them with the intended network resources.",
+    "Create security rules and evaluate their effective allow or deny result.",
+    "Explain application security groups and use workload membership in security rules."
+  ],
+  "lessons": [
+    {
+      "id": "nsgs-and-asgs",
+      "title": "Read the whole connection before writing the rule",
+      "summary": "Use addresses, ports, priorities, associations, and application groups to control the school's database traffic without confusing permission with routing.",
+      "objectives": [
+        "Create an NSG rule with an appropriate direction, source, destination, protocol, ports, and priority.",
+        "Evaluate default and custom rules in the correct order at subnet and NIC levels.",
+        "Explain how statefulness affects replies and tests after a rule change.",
+        "Use ASG membership and service tags without treating either as a firewall appliance.",
+        "Diagnose the effective result rather than relying on one visible allow rule."
+      ],
+      "sections": [
+        {
+          "id": "decide-the-permission",
+          "title": "The school needs a specific permission",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school web VM, 10.20.1.4, needs to query the database VM, 10.20.2.5, over TCP destination port 1433. An unrelated test VM should not query that database. Both belong to application VNet 10.20.0.0/16, so Azure already has a route between their subnets. The missing design decision is permission, not a path. Least privilege means allowing only the access needed for a defined task. Here that means the web workload may contact the database service, not that every private address is trusted."
+            },
+            {
+              "type": "paragraph",
+              "text": "A network security group, or NSG, contains rules that allow or deny network traffic. You associate an NSG with a subnet, a VM network interface, or both. Associate means attach the rule collection to the place where it should apply. Each subnet and each NIC can have at most one associated NSG, while the same NSG can be reused on multiple subnets or NICs. Reuse saves maintenance, but changing that shared NSG affects every association. Creating an unattached NSG does not protect anything."
+            },
+            {
+              "type": "paragraph",
+              "text": "Subnet rules can affect traffic between VMs even within that same subnet; an NSG is not only an internet-edge filter. A screened subnet, sometimes called a DMZ, is a network segment deliberately restricted between more-trusted systems and less-trusted clients. The label itself creates no protection. Our web subnet could serve that role only with an appropriate traffic policy. These examples assume ordinary NSGs and no overriding Azure Virtual Network Manager security admin rules, which are centrally managed rules evaluated before NSGs."
+            }
+          ]
+        },
+        {
+          "id": "describe-a-flow",
+          "title": "Describe the flow and its decision",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A flow is a tracked network conversation. Its five-tuple is simply five identifying values: source address, source port, destination address, destination port, and protocol. For the school's query, assume TCP from 10.20.1.4:51000 to 10.20.2.5:1433. An NSG rule also needs direction, action, priority, and a name. Inbound means toward the protected NIC; outbound means away from it. This query is outbound at the web VM and inbound at the database. Source and destination fields apply in both directions."
+            },
+            {
+              "type": "paragraph",
+              "text": "At the database subnet, an initial narrow rule could allow source 10.20.1.4/32, source port Any, destination 10.20.2.5/32, destination port 1433, protocol TCP, direction Inbound, priority 200. A /32 selects one IPv4 address because no host bits remain. Any source port is appropriate because the web client chooses a temporary port; requiring source port 1433 would miss this connection. The rule name should describe its intent, such as Allow-Web-To-Database, rather than merely saying Rule1."
+            },
+            {
+              "type": "paragraph",
+              "text": "Protocol is not just a label for the port. TCP 1433 and UDP 1433 are different matches. ICMP, Internet Control Message Protocol, carries diagnostic and control messages such as ping rather than application requests to a TCP port. NSGs also support ESP, Encapsulating Security Payload, and AH, Authentication Header, used by IPsec, a family of packet-security protocols. Those less common choices require supported template or scripting tools rather than the portal's ordinary protocol selector. You do not need to configure them for the school database example."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a VM reached through its associated public IP, inbound NSG evaluation happens after Azure translates the public destination to the VM's private address. Therefore, identify the private destination in a rule targeting that VM, not merely the public address the remote client typed. Outbound NSG evaluation happens before private source addresses are translated to public ones. Translation changes addressing at a boundary; it is not itself an allow rule."
+            },
+            {
+              "type": "paragraph",
+              "text": "Custom priorities range from 100 through 4096. Smaller numbers are checked first, and the first matching rule decides the result within that NSG and direction. Leave gaps, such as 200 and 300, for future rules. Priorities must be unique within a direction in one NSG; the same number may be used in the other direction. Deny does not universally beat Allow: a matching Allow at 200 wins before a matching Deny at 300. Conversely, a broad Deny at 100 can prevent a specific Allow at 200 from ever being reached."
+            }
+          ]
+        },
+        {
+          "id": "read-the-defaults",
+          "title": "Your custom rules are not the entire policy",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Default NSG behavior, after any matching custom rules",
+              "headers": ["Direction", "Priority", "Default rule", "Meaning"],
+              "rows": [
+                ["Inbound", "65000", "AllowVNetInBound", "Allow traffic matching VirtualNetwork to VirtualNetwork"],
+                ["Inbound", "65001", "AllowAzureLoadBalancerInBound", "Allow Azure load-balancer infrastructure traffic"],
+                ["Inbound", "65500", "DenyAllInBound", "Deny remaining inbound traffic"],
+                ["Outbound", "65000", "AllowVNetOutBound", "Allow traffic matching VirtualNetwork to VirtualNetwork"],
+                ["Outbound", "65001", "AllowInternetOutBound", "Allow traffic toward Internet at this filter"],
+                ["Outbound", "65500", "DenyAllOutBound", "Deny remaining outbound traffic"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "You cannot delete these default rules, but a matching custom rule is evaluated before them. The VirtualNetwork and Internet labels are service tags, Microsoft-maintained groups of address prefixes used in rules. VirtualNetwork is not always just the local subnet or even just the local VNet: its scope can include connected networks. AzureLoadBalancer represents load-balancer infrastructure such as health probes, not all users whose requests happen to pass through a load balancer. A health probe is a service's check that a backend is responding."
+            },
+            {
+              "type": "paragraph",
+              "text": "An important consequence is easy to miss. Adding an Allow-Web-To-Database rule does not mean only the web VM may connect. Other same-VNet machines can still match AllowVNetInBound at 65000. To restrict database TCP 1433, follow the specific allow with a lower-precedence custom deny for other sources to that destination and port. This restriction protects that database port only; it says nothing about other ports unless you define additional policy. Similarly, AllowInternetOutBound permits a flow but does not supply the explicit outbound connectivity needed by a private subnet."
+            }
+          ]
+        },
+        {
+          "id": "combine-associations",
+          "title": "Two attached NSGs are two separate decisions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For traffic arriving at a VM, Azure evaluates the subnet NSG first and the NIC NSG next, if each exists. Both must permit the flow. A matching default allow can count; you do not always need a custom allow at both levels. For outbound traffic, the order reverses: NIC NSG first, then subnet NSG. An NSG absent at one level contributes no rule at that level. Do not confuse that with Standard public IP secure-by-default inbound requirements, or with a claim that the guest firewall is absent."
+            },
+            {
+              "type": "paragraph",
+              "text": "A subnet Allow at priority 200 cannot override a NIC Deny at priority 300. Those priorities are not placed into one global sorted list. Each NSG reaches its own decision, and a required deny blocks the new connection. The source VM's outbound rules may also block the request before it reaches the destination. For a simple design, using subnet NSGs without unnecessary NIC-level duplication is easier to understand. Where an existing design has both, inspect both rather than deleting a layer to make the symptom disappear."
+            },
+            {
+              "type": "diagram",
+              "title": "An inbound allow must survive both attached NSGs",
+              "description": "Assume source outbound rules and routes permit the web VM's new TCP request. It leaves 10.20.1.4 for 10.20.2.5:1433, reaches the database subnet NSG, then the database NIC NSG, and finally the database VM only if both NSGs allow it. The boxes represent separate rule evaluations, not extra network appliances.",
+              "nodes": [
+                {"id": "school-web", "label": "Web source", "detail": "10.20.1.4:51000", "column": 0, "row": 0},
+                {"id": "database-subnet-filter", "label": "Subnet NSG", "detail": "Inbound on 10.20.2.0/24", "column": 1, "row": 0},
+                {"id": "database-nic-filter", "label": "NIC NSG", "detail": "Inbound on database NIC", "column": 2, "row": 0},
+                {"id": "school-database", "label": "Database VM", "detail": "10.20.2.5:1433", "column": 2, "row": 1}
+              ],
+              "edges": [
+                {"from": "school-web", "to": "database-subnet-filter", "label": "New TCP flow"},
+                {"from": "database-subnet-filter", "to": "database-nic-filter", "label": "If allowed"},
+                {"from": "database-nic-filter", "to": "school-database", "label": "If also allowed"}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "state-and-testing",
+          "title": "Replies and new connections are not the same",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "NSGs are stateful: Azure tracks allowed connections so that their reply traffic can return without a separate reverse-direction allow rule. If the web VM is permitted to initiate the database query, the matching database reply belongs to that existing flow. This does not authorize the database to start an unrelated new connection toward the web VM. A reply and a newly initiated conversation may have similar-looking addresses, but their connection state is different."
+            },
+            {
+              "type": "paragraph",
+              "text": "Changing a rule does not immediately re-evaluate and terminate every established connection. Suppose an administrator removes the allow while an existing database session stays connected. That observation does not prove the new policy failed. Close the test connection and create a genuinely new one after the change has propagated. Some applications keep and reuse connection pools, meaning collections of existing connections; refreshing a page may reuse the same session. In an urgent incident, do not rely on an NSG edit alone to terminate an already established application session."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-existing-session",
+              "prompt": "A deny rule is added and a previously established database session still works. Does that prove new database connections are allowed?",
+              "answer": "No. An existing permitted flow can remain active after the rule change.",
+              "explanation": "Test a fresh connection and inspect the effective rules. Otherwise, stateful connection tracking can hide the difference between old and new traffic."
+            }
+          ]
+        },
+        {
+          "id": "group-the-workload",
+          "title": "ASGs express roles, not a new firewall box",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An application security group, or ASG, is a logical grouping of network interfaces used as a source or destination in NSG rules. Create asg-web and asg-database, assign the web NIC to the first and database NIC to the second, then write the database rule using those groups. A replacement web VM can join asg-web without rewriting a list of individual web IP addresses. Membership must actually be configured; naming a VM web-02 does not put it into asg-web."
+            },
+            {
+              "type": "paragraph",
+              "text": "An ASG is not an appliance that forwards packets, an antivirus product, or an automatic source of deny rules. Members can be in different subnets of the same VNet, so logical grouping does not require moving every role into one subnet. All NICs within an ASG must belong to the same VNet. When both rule endpoints use ASGs, both groups' NICs must be in that same VNet. An ASG and a service tag serve different purposes: you maintain workload membership; Microsoft maintains the address prefixes represented by service tags."
+            },
+            {
+              "type": "paragraph",
+              "text": "In the portal, create the ASGs, use the VM networking settings to assign the relevant NIC memberships, then create an NSG in the intended region and resource group. Under inbound or outbound rules, choose the source, source ports, destination, destination ports, protocol, action, priority, and a descriptive name. Associate the NSG with the intended subnet or NIC and inspect that association afterward. Augmented rules can combine multiple explicit IP addresses, ranges, and ports into one rule. Do not assume every field accepts an arbitrary mixture or list of service tags and ASGs; use the documented selector types."
+            }
+          ]
+        },
+        {
+          "id": "work-the-rules",
+          "title": "Worked example: one permitted role, one blocked role",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Protect database TCP 1433",
+              "scenario": "Assume web 10.20.1.4 belongs to asg-web, database 10.20.2.5 belongs to asg-database, and test VM 10.20.1.20 belongs to neither. A database-subnet NSG is attached. There is no NIC NSG, source outbound traffic is permitted, and the database listener and guest firewall are correctly configured.",
+              "steps": [
+                {"action": "Create an inbound Allow at priority 200 from asg-web to asg-database, TCP destination 1433, with source ports Any.", "why": "The allowed role and database listener are specific, while the client's temporary source port can vary."},
+                {"action": "Create an inbound Deny at priority 300 from Any to asg-database, TCP destination 1433, with source ports Any.", "why": "Other clients must be stopped before the broad default VirtualNetwork allow at 65000."},
+                {"action": "Evaluate a new request from 10.20.1.4:51000 to 10.20.2.5:1433.", "why": "Its source membership, destination membership, protocol, and port match priority 200, so evaluation stops with Allow."},
+                {"action": "Evaluate a new request from 10.20.1.20:52000 to the same database port.", "why": "The test VM is not in asg-web, so it misses 200. It matches 300 and is denied before reaching the default allow."},
+                {"action": "Check the effective security rules on the database NIC and test fresh connections.", "why": "Effective means the rules actually applying through current associations. This catches an unattached NSG, forgotten membership, or unexpected additional NIC policy."}
+              ],
+              "result": "The web role can initiate database TCP 1433, while the test VM cannot. This example does not claim that every other database port is blocked or that a permitted client receives database credentials."
+            },
+            {
+              "type": "interactive",
+              "tool": "nsg",
+              "introduction": "Keep source 10.20.1.4, destination port 1433, and TCP in this local evaluator. Initially, predict subnet Allow at 200 but NIC Deny at 300: the path is blocked. Select the checkbox adding the NIC allow at 200, then predict both allows. Next select the subnet deny at 100 and explain why the NIC allow cannot cancel it. This widget uses address ranges, not ASG membership: its web-subnet allow also matches 10.20.1.20, unlike the narrower ASG example above. It models a new flow, not a real listener, identity, or existing session."
+            }
+          ]
+        },
+        {
+          "id": "check-the-effective-result",
+          "title": "Investigate evidence, not just rule names",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Effective security rules provide a combined view of policies applying to a NIC. Network Watcher's IP flow verify can evaluate a specified direction, protocol, and pair of endpoints and identify the rule that allows or denies it. Network Watcher is Azure's network diagnostic service. An Allow result still does not test database credentials, prove DNS returned the right address, or prove a listener is running. If flow logging is needed for a real approved deployment, current guidance is to use virtual network flow logs; creating new NSG flow logs is no longer supported."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "First matching rule within each required NSG",
+              "text": "Do not compare priority numbers across separate NSGs or assume a deny always wins inside one NSG. Identify direction, sort that NSG's rules by ascending number, find the first full match, and repeat at the other associated level. Include defaults and use a new connection when checking a policy change."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "nsg-priority-understanding",
+          "kind": "single",
+          "prompt": "Understanding: in one inbound NSG, a database flow matches both Allow at 200 and Deny at 300. What is the result at this NSG?",
+          "choices": [
+            {"id": "allow-first-match", "text": "Allow, because 200 is evaluated first", "explanation": "The first matching rule ends evaluation for this flow in this NSG and direction."},
+            {"id": "deny-always-wins", "text": "Deny, because every deny overrides every allow", "explanation": "NSGs do not use an unconditional deny-wins rule. A matching higher-precedence allow can decide the result."},
+            {"id": "latest-rule-wins", "text": "Whichever rule was created most recently", "explanation": "Creation time is not the selection criterion. Priority and matching fields determine the result."}
+          ],
+          "correctIds": ["allow-first-match"],
+          "explanation": "Smaller priority number means earlier evaluation, not weaker importance."
+        },
+        {
+          "id": "nsg-two-layers",
+          "kind": "single",
+          "prompt": "Understanding: a new inbound flow is allowed by the subnet NSG at 200 but denied by the NIC NSG at 300. Assume no overriding security admin policy. What happens?",
+          "choices": [
+            {"id": "blocked-by-nic", "text": "The NIC NSG blocks it.", "explanation": "Both attached NSGs must permit the new inbound flow. The NIC is a separate evaluation."},
+            {"id": "globally-lower-wins", "text": "The subnet's 200 overrides the NIC's 300.", "explanation": "Priority numbers are not sorted globally across separate NSGs."},
+            {"id": "subnet-only-inbound", "text": "Only the subnet NSG is evaluated for inbound traffic.", "explanation": "The NIC NSG is evaluated after the subnet permits the flow."}
+          ],
+          "correctIds": ["blocked-by-nic"],
+          "explanation": "An allow at one layer cannot cancel a required deny at another layer."
+        },
+        {
+          "id": "nsg-default-gap",
+          "kind": "single",
+          "prompt": "Understanding: the only custom database rule allows asg-web to TCP 1433. A test VM in the same VNet still connects. What best explains this?",
+          "choices": [
+            {"id": "default-allows-other", "text": "The test VM can match the default VirtualNetwork allow.", "explanation": "A specific allow does not remove later broad default allows. Add the intended restriction before the default."},
+            {"id": "asg-forwarding", "text": "The ASG forwarded the test VM's packets.", "explanation": "An ASG is membership used in rule matching, not a forwarding appliance."},
+            {"id": "subnet-ignores-local", "text": "Subnet NSGs never apply to same-VNet traffic.", "explanation": "NSGs can filter same-VNet and even same-subnet traffic."}
+          ],
+          "correctIds": ["default-allows-other"],
+          "explanation": "Always read the fallback policy after a specific allow. Intended exclusivity requires an actual deny for other sources."
+        },
+        {
+          "id": "nsg-state-membership",
+          "kind": "multiple",
+          "prompt": "Understanding: which TWO statements correctly describe ASGs and stateful NSGs?",
+          "choices": [
+            {"id": "membership-explicit", "text": "A replacement web VM needs its NIC assigned to the intended ASG.", "explanation": "ASG-based matching depends on configured membership, not VM naming."},
+            {"id": "fresh-test-required", "text": "A fresh connection is needed to test a newly restrictive NSG rule reliably.", "explanation": "Existing flows may remain permitted by connection tracking after rules change."},
+            {"id": "reverse-new-allowed", "text": "An allowed web-to-database query authorizes any new database-to-web connection.", "explanation": "Statefulness permits the matching reply, not arbitrary new connections in the reverse direction."},
+            {"id": "asg-spans-peers", "text": "One ASG can group NICs from any peered VNets.", "explanation": "ASG NIC membership is constrained to the same VNet; peering does not remove that constraint."}
+          ],
+          "correctIds": ["membership-explicit", "fresh-test-required"],
+          "explanation": "Group membership selects which rules match, and connection state determines whether a test is exercising a new policy decision."
+        }
+      ],
+      "takeaways": [
+        "Describe the initiator, destination, protocol, and ports before creating a rule.",
+        "Within one NSG and direction, the first matching rule in ascending priority order wins.",
+        "Every attached NSG on the required path must permit a new flow; defaults can supply permission.",
+        "A specific allow does not remove the default VirtualNetwork allow for other sources.",
+        "ASGs identify workload membership; service tags identify maintained address groups.",
+        "NSG statefulness permits replies and means old connections are poor tests of new restrictions."
+      ],
+      "sourceIds": ["learn-nsg", "learn-implement", "learn-create-rules", "learn-asgs", "nsg-overview", "nsg-processing", "asg-reference", "exam-guide"]
+    },
+    {
+      "id": "private-access-and-service-boundaries",
+      "title": "Reach a managed service privately without confusing the controls",
+      "summary": "Add a school archive service and compare service endpoints, private endpoints, DNS, service firewalls, and data permissions.",
+      "objectives": [
+        "Explain which addresses and identities change with a service endpoint.",
+        "Explain the private IP, approval, and DNS requirements of a private endpoint.",
+        "Distinguish service-side network restrictions from NSGs and data authorization.",
+        "Choose a suitable design for cloud and office clients.",
+        "Diagnose wrong DNS, network denial, and missing data permission separately."
+      ],
+      "sections": [
+        {
+          "id": "managed-service-boundary",
+          "title": "A storage account is not another school VM",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school now needs an archive for uploaded worksheets. Assume it chooses Azure Blob Storage, which stores objects such as files inside a storage account. This is a platform as a service, or PaaS, offering: Microsoft operates the underlying service rather than the school managing a storage-server VM. A storage account is not automatically a member of app-vnet just because both resources belong to the same subscription or resource group. The database VM remains 10.20.2.5; adding managed storage does not silently replace it."
+            },
+            {
+              "type": "paragraph",
+              "text": "An endpoint is the network address through which a client contacts a service. A managed service may have a public endpoint even when every school VM has only a private address. We must answer three separate questions: which endpoint will the web VM contact, which network paths may reach it, and which identity may read the worksheets? Service endpoints and private endpoints primarily change network access. They do not give a student, VM, or administrator permission to read every stored object."
+            }
+          ]
+        },
+        {
+          "id": "service-endpoint-path",
+          "title": "Service endpoint: a public destination with subnet identity",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A classic VNet service endpoint is enabled on a source subnet for a supported Azure service, such as Microsoft.Storage. It gives that subnet a direct service path over Microsoft's backbone, the provider network carrying traffic between Azure locations and services. The storage hostname still resolves to the service's public IP address. No new private storage IP is allocated in the school subnet. For service-endpoint traffic, the source uses the VM's private address, and Azure supplies the VNet and subnet identity that the service can recognize."
+            },
+            {
+              "type": "paragraph",
+              "text": "Configuration therefore has two sides. Enable the appropriate service endpoint on the web subnet, then configure the storage account's network rules to allow that subnet and reject undesired public access. For a storage service-endpoint design, use selected-network access rather than disabling the public endpoint entirely: the allowed subnet still contacts that public endpoint. Enabling the subnet endpoint alone does not restrict the account, and allowing the subnet does not grant a data role. Existing rules based on a client's previous public source address may stop matching when the source changes."
+            },
+            {
+              "type": "paragraph",
+              "text": "Enable service endpoints on each source subnet that needs them. Peering does not automatically give another subnet the same identity or configuration. Office clients in 172.20.0.0/16 do not directly inherit the web subnet's service endpoint merely by having a VPN connection. Also, service endpoint routes have special precedence for their service destinations and can bypass an ordinary forced route through a firewall. If inspection is a requirement, inspect the effective routes, the actual routes applying to the client NIC, before assuming all storage traffic crosses the firewall."
+            }
+          ]
+        },
+        {
+          "id": "private-endpoint-path",
+          "title": "Private endpoint: a private destination for one service target",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A private endpoint creates a special NIC with a private IP in a chosen VNet subnet. Azure Private Link connects that endpoint to a supported service resource. For the school, reserve an otherwise unused endpoints subnet, 10.20.4.0/24. Assume a Blob private endpoint has actually been allocated 10.20.4.4; this is a stated observation for the example, not a promise that Azure always chooses .4 first. The storage service itself is still managed outside the VM subnets. Its private access point is what appears inside our address plan."
+            },
+            {
+              "type": "paragraph",
+              "text": "The private endpoint targets a specific resource and subresource. A subresource is a particular service interface, such as Blob rather than Files in the same storage account. A Blob private endpoint does not automatically provide a Files private endpoint. The connection must also be Approved, either automatically through sufficient permissions or manually by the service owner. Pending means the access connection has not yet been approved. Approval authorizes the private link connection, not the application's right to read or change data."
+            },
+            {
+              "type": "paragraph",
+              "text": "Creating a private endpoint does not automatically disable the storage account's public endpoint. Restrict or disable public network access separately if private-only access is the requirement. For Azure Storage, its public-endpoint firewall is not the filter for approved private-endpoint traffic; data authorization still applies. Private endpoints can be reached from connected office networks through an appropriately configured VPN or ExpressRoute path, provided routing, filters, and DNS all work. They do not create that office connection by themselves."
+            }
+          ]
+        },
+        {
+          "id": "dns-and-identity",
+          "title": "Keep the normal service name, but get the private answer",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose schoolarchivepilot is an illustrative storage-account name, not a claim about a real deployed account. The application would use schoolarchivepilot.blob.core.windows.net. For a Blob private endpoint, configure the recommended private zone privatelink.blob.core.windows.net and the account's A record containing 10.20.4.4, then link the zone to app-vnet. A CNAME record is a DNS alias pointing one name at another; the service's DNS alias chain can lead the normal hostname to the private-zone record. DNS integration must be explicitly configured or verified, not assumed."
+            },
+            {
+              "type": "paragraph",
+              "text": "Continue using the normal service hostname and connection settings, not the raw private IP or the privatelink hostname as an improvised replacement. TLS, Transport Layer Security, encrypts communication and helps verify the server's identity using a certificate. A certificate is a signed statement tying an identity to cryptographic keys. Using an unexpected name can break that identity check. The unrelated db.classroom.internal record still identifies the database VM; do not repoint it at Blob Storage to repair an archive problem."
+            },
+            {
+              "type": "paragraph",
+              "text": "If school clients use custom DNS, that resolver needs records or forwarding that reaches the relevant private DNS zone. The office may need a DNS forwarding design through Azure DNS Private Resolver or another configured DNS server. DNS Private Resolver is a managed service for forwarding DNS questions between Azure and connected networks. Network permission remains distinct from role-based access control, or RBAC: roles specify which actions an identity may perform at a chosen scope. Grant the application only the necessary data permission, not broad administration rights to compensate for a network mistake."
+            }
+          ]
+        },
+        {
+          "id": "compare-the-controls",
+          "title": "Compare what changes, not which name sounds safer",
+          "blocks": [
+            {
+              "type": "table",
+              "caption": "Two network access methods, with separate authorization",
+              "headers": ["Question", "Service endpoint", "Private endpoint"],
+              "rows": [
+                ["Destination seen by the client", "The service's public IP", "A private IP such as 10.20.4.4 when DNS is configured"],
+                ["New NIC and private IP in the VNet", "No", "Yes"],
+                ["Important configuration", "Endpoint on source subnet plus service-side allowed-subnet rule", "Target subresource, approval, private DNS, and connectivity"],
+                ["Office access through a VPN", "Office traffic does not directly inherit the subnet endpoint", "Possible with a working private route, DNS, and permission"],
+                ["Application data permission", "Still required", "Still required"]
+              ]
+            },
+            {
+              "type": "diagram",
+              "title": "Two alternative paths to the school archive",
+              "description": "The web VM at 10.20.1.4 has two alternative designs, not a single combined path. The upper path goes through service-endpoint routing to the storage public endpoint using private source addressing and subnet identity. The lower path goes to an approved private endpoint at 10.20.4.4 and through Private Link to the Blob service. The storage service still checks data authorization in either case.",
+              "nodes": [
+                {"id": "archive-client", "label": "Web VM", "detail": "10.20.1.4", "column": 0, "row": 1},
+                {"id": "service-endpoint-route", "label": "Service endpoint", "detail": "Public destination; private source", "column": 1, "row": 0},
+                {"id": "private-endpoint-nic", "label": "Private endpoint", "detail": "10.20.4.4, Blob, Approved", "column": 1, "row": 2},
+                {"id": "archive-service", "label": "Blob service", "detail": "School account; data permission required", "column": 2, "row": 1}
+              ],
+              "edges": [
+                {"from": "archive-client", "to": "service-endpoint-route", "label": "Alternative one"},
+                {"from": "service-endpoint-route", "to": "archive-service", "label": "Subnet identity"},
+                {"from": "archive-client", "to": "private-endpoint-nic", "label": "Alternative two"},
+                {"from": "private-endpoint-nic", "to": "archive-service", "label": "Private Link"}
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "An outbound NSG rule using the Storage service tag permits a maintained group of Storage address prefixes. It is not a rule for only this school's storage account. The service-side allowed-subnet rule controls which networks may reach the chosen account; a private endpoint targets a chosen service resource and subresource. If applying NSGs to the private endpoint itself, check that NSG network-policy support is enabled on its subnet. Those private-endpoint policy settings are distinct from rules protecting ordinary VM NICs in the same subnet."
+            }
+          ]
+        },
+        {
+          "id": "private-archive-worked",
+          "title": "Worked example: make the archive private without losing the diagnosis",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "The web app and office need a private archive",
+              "scenario": "Plan private Blob access for web VM 10.20.1.4 and office clients in 172.20.0.0/16. Assume the office VPN and return routes are already correctly configured. The storage account supports private endpoints, and the planned endpoint subnet is 10.20.4.0/24. These are paper design steps, not an automatic deployment.",
+              "steps": [
+                {"action": "Select the intended storage account and Blob subresource, then require an Approved endpoint connection.", "why": "The wrong service target or a Pending request cannot meet the worksheet archive requirement."},
+                {"action": "Record the endpoint's observed private IP, assumed here to be 10.20.4.4.", "why": "The DNS record must match the real allocation rather than a guessed next available address."},
+                {"action": "Configure the Blob private DNS zone, A record, VNet link, and office resolver path.", "why": "Both client locations must resolve the normal account hostname to the intended private IP. A link for the web VNet alone does not configure office DNS."},
+                {"action": "Permit required client-to-endpoint traffic, including TCP 443 for the application's HTTPS requests.", "why": "Routes, VM outbound NSGs, and any enabled private-endpoint policies must agree with the intended path."},
+                {"action": "Grant the application's identity the required data access and test from each intended client location.", "why": "A successful network connection does not prove that the caller may read the archive. Conversely, possessing a role does not make a missing route appear."},
+                {"action": "After validating the private path, disable undesired public network access and repeat both permitted and prohibited-path checks.", "why": "Private-endpoint creation alone leaves public access policy unchanged. Check that valid private clients still work and unintended public access is rejected."}
+              ],
+              "result": "The design supplies a private destination, a verified name-resolution path, and independent data permission. A separate Files requirement would need its own service-target review."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-private-dns-missing",
+              "prompt": "The private endpoint is Approved, public network access is disabled, but the web VM still resolves the normal storage hostname to a public IP. Will the approved endpoint automatically intercept that request?",
+              "answer": "No. The client is still attempting the public destination.",
+              "explanation": "Fix the client's DNS resolution path to return the private endpoint IP. Approval does not rewrite every packet addressed to the service's public IP."
+            }
+          ]
+        },
+        {
+          "id": "endpoint-troubleshooting",
+          "title": "Read failures at the right boundary",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "From the failing client's location, first record the resolved destination address. For the private design, expect 10.20.4.4, not merely any address with 10 at the beginning. Then check connection approval, client routes, relevant filters, and the requested subresource. If the service returns an authorization error, inspect its error details and logs: both network restrictions and missing data permission can produce access-denied responses, so an HTTP status alone is not a full diagnosis. Test with the intended application identity rather than an administrator's broader access."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Private source is not the same as private destination",
+              "text": "Service endpoints retain the service's public destination and identify the source subnet. Private endpoints allocate a private destination and require a correct DNS path. Neither grants RBAC data permission, and creating a private endpoint does not by itself disable public access. Choose from the stated connectivity requirement, not from the word private alone."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "service-endpoint-addresses",
+          "kind": "single",
+          "prompt": "Understanding: Microsoft.Storage service endpoints are enabled on the web subnet. What should remain true for that endpoint path?",
+          "choices": [
+            {"id": "public-destination-remains", "text": "The service hostname still resolves to a public destination, while endpoint traffic uses private source addressing and subnet identity.", "explanation": "Service endpoints change the path and source identity, not the service into a private-IP NIC in the subnet."},
+            {"id": "new-private-nic", "text": "A storage private-endpoint NIC is automatically created.", "explanation": "That is the private endpoint model, not a subnet service endpoint."},
+            {"id": "all-data-granted", "text": "Every VM in the subnet automatically receives permission to read the account's data.", "explanation": "Service network admission and data authorization remain separate."}
+          ],
+          "correctIds": ["public-destination-remains"],
+          "explanation": "Keep destination addressing, source identity, and data permission as separate observations."
+        },
+        {
+          "id": "private-endpoint-public-access",
+          "kind": "single",
+          "prompt": "Understanding: the school's Blob private endpoint is Approved and private access works. The requirement is private-only account access. What must still be reviewed?",
+          "choices": [
+            {"id": "review-public-policy", "text": "The storage account's public network access policy", "explanation": "Creating the private endpoint does not automatically disable the public endpoint."},
+            {"id": "make-dns-public", "text": "Whether to publish 10.20.4.4 in the school's public website record", "explanation": "That would neither disable public storage access nor configure the recommended service-specific private DNS path."},
+            {"id": "remove-data-roles", "text": "Removing all application data roles because private access replaces them", "explanation": "The application still needs authorization to read or write data over the private connection."}
+          ],
+          "correctIds": ["review-public-policy"],
+          "explanation": "Private access working is only one side of private-only access. Confirm that the undesired public path is restricted too."
+        },
+        {
+          "id": "office-dns-path",
+          "kind": "single",
+          "prompt": "Understanding: the web VM resolves the archive to 10.20.4.4 and succeeds. The office has working VPN routes but resolves the same name to a public IP and fails. What should you investigate first?",
+          "choices": [
+            {"id": "office-resolution", "text": "The office DNS resolver and forwarding path to the private DNS zone", "explanation": "The evidence shows different destination selection. Working VPN routes do not automatically change the office resolver's answer."},
+            {"id": "remove-vpn", "text": "Delete the VPN because private endpoints require internet-only clients", "explanation": "Private endpoints support correctly connected on-premises clients. Deleting their private route would worsen the design."},
+            {"id": "change-db-address", "text": "Change db.classroom.internal to 10.20.4.4", "explanation": "That name belongs to the database VM, not the Blob service, and changing it would create a different fault."}
+          ],
+          "correctIds": ["office-resolution"],
+          "explanation": "Follow the first differing observation between a working client and a failing client."
+        },
+        {
+          "id": "endpoint-boundary-check",
+          "kind": "multiple",
+          "prompt": "Understanding: which TWO statements belong in a correct private-endpoint checklist?",
+          "choices": [
+            {"id": "target-subresource", "text": "Verify that the endpoint targets the required subresource, such as Blob.", "explanation": "An endpoint for Blob does not automatically provide a Files connection."},
+            {"id": "retain-authz", "text": "Verify the intended application's data permissions independently of network access.", "explanation": "Approval and reachability do not replace the service's authorization checks."},
+            {"id": "any-private-answer", "text": "Accept any private DNS answer, even if it is not the endpoint's allocated IP.", "explanation": "A private-looking but incorrect destination is still incorrect."},
+            {"id": "automatic-filter-policy", "text": "Assume an ordinary subnet NSG always filters private endpoints without reviewing network-policy support.", "explanation": "Private endpoint NSG policy support must be enabled and checked separately from ordinary VM filtering."}
+          ],
+          "correctIds": ["target-subresource", "retain-authz"],
+          "explanation": "Verify the exact target, actual address, enabled policies, and caller permissions instead of inferring them from the resource name."
+        }
+      ],
+      "takeaways": [
+        "A managed service is not automatically inside a VNet because it shares a subscription or resource group.",
+        "Service endpoints use public service destinations with private source addressing and subnet identity.",
+        "Private endpoints provide private IP destinations for specific service resources and subresources.",
+        "Private DNS must make the normal service hostname resolve to the intended endpoint address.",
+        "Service network rules, NSGs, private endpoint approval, and RBAC answer different questions.",
+        "Private-only access requires reviewing the public access policy as well as establishing a private path."
+      ],
+      "sourceIds": ["service-endpoints", "private-endpoints", "storage-private", "private-endpoint-policies", "nsg-overview", "routing-reference", "exam-guide"]
+    },
+    {
+      "id": "bastion-firewall-and-safe-access",
+      "title": "Give the administrator a safe path and the traffic a clear policy",
+      "summary": "Choose Bastion for VM administration, understand its two connection legs, and distinguish NSGs, Azure Firewall, and web application protection.",
+      "objectives": [
+        "Explain the browser-to-Bastion and Bastion-to-VM connections without mixing their ports.",
+        "Match Bastion subnet, public IP, client features, and NSG requirements to the stated SKU and deployment mode.",
+        "Distinguish Bastion, NSGs, Azure Firewall, and a web application firewall.",
+        "Explain why firewall deployment and a broad route do not prove traffic is inspected.",
+        "Plan safe changes, useful observations, cost checks, and cleanup."
+      ],
+      "sections": [
+        {
+          "id": "administration-is-a-workload",
+          "title": "The administrator needs a different connection from the student",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Students need the timetable website, the web VM needs the database, and a school administrator needs to maintain the machines. These are different requirements with different identities and ports. SSH, Secure Shell, provides a remote command-line session, commonly on TCP 22. RDP, Remote Desktop Protocol, provides a remote graphical desktop, commonly on TCP 3389. Opening either port from the whole internet to every VM creates unnecessary exposure. Putting the database on a private address avoids that direct public entry, but the administrator still needs a deliberate access path."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Bastion is a managed service for reaching VMs by SSH or RDP without giving the target VMs public IP addresses. Managed means Microsoft operates the Bastion hosts; the school still controls deployment settings, access permissions, and the target operating systems. Bastion is not a VPN for every application and not the route through which all student web or database traffic must pass. The administrator's ability to use Bastion also does not replace valid login credentials or the target VM's own access controls."
+            }
+          ]
+        },
+        {
+          "id": "two-bastion-legs",
+          "title": "There are two network legs with different ports",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Choose a specific scenario: a public, dedicated Bastion Basic deployment and a Linux web VM using the standard SSH port. The administrator's browser connects to Bastion over HTTPS using TCP 443. Bastion then opens a separate private connection to 10.20.1.4 on TCP 22. TLS protects the browser connection; SSH provides the VM's remote-login protocol. For a Windows VM using standard RDP, the second leg would use TCP 3389. The target VM does not need to listen on 443 merely because the browser uses 443."
+            },
+            {
+              "type": "diagram",
+              "title": "Browser administration is not direct public SSH",
+              "description": "For the explicitly chosen public Bastion Basic design, the administrator's browser connects over TCP 443 to Bastion. Bastion, deployed in AzureBastionSubnet 10.20.10.0/26, opens a separate SSH connection over private networking to web VM 10.20.1.4 on TCP 22. The target has no public IP. A standard Windows RDP target would use TCP 3389 on the second leg instead.",
+              "nodes": [
+                {"id": "admin-browser", "label": "Admin browser", "detail": "Authorized administrator", "column": 0, "row": 1},
+                {"id": "school-bastion", "label": "Bastion Basic", "detail": "AzureBastionSubnet 10.20.10.0/26", "column": 1, "row": 1},
+                {"id": "admin-target", "label": "Private web VM", "detail": "10.20.1.4, SSH TCP 22", "column": 2, "row": 1}
+              ],
+              "edges": [
+                {"from": "admin-browser", "to": "school-bastion", "label": "HTTPS TCP 443"},
+                {"from": "school-bastion", "to": "admin-target", "label": "Private SSH TCP 22"}
+              ]
+            },
+            {
+              "type": "prediction",
+              "id": "predict-bastion-target-port",
+              "prompt": "The browser reaches Bastion on 443, but the target Linux VM allows only inbound 443 and blocks 22. Can this Basic Bastion session reach the standard SSH listener?",
+              "answer": "No. The second connection leg needs the target's TCP 22.",
+              "explanation": "The browser's destination port does not become the VM's SSH destination port. Diagnose the Bastion-to-VM leg separately."
+            }
+          ]
+        },
+        {
+          "id": "bastion-deployment-settings",
+          "title": "Match the requirements to the named SKU",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For this dedicated Basic deployment, plan a subnet named exactly AzureBastionSubnet, reserved for Bastion, and a compatible Standard static public IP for Bastion. The /26-or-larger subnet requirement applies to new dedicated Basic, Standard, and Premium deployments, not Developer. Our unused 10.20.10.0/26 is aligned, contains 64 addresses, and does not overlap web, database, or endpoint subnets. A /27 is smaller, not larger: it contains only 32 addresses. Do not place an ordinary web VM in the dedicated Bastion subnet or treat its addresses as general VM capacity."
+            },
+            {
+              "type": "paragraph",
+              "text": "Bastion currently has four SKUs: Developer, Basic, Standard, and Premium. Basic remains valid; retired Basic public IP and Basic Load Balancer guidance must not be applied to it. Basic provides a dedicated service with fixed capacity. Standard adds native-client connections using installed SSH or RDP software, custom target ports, and host scaling, which increases the number of managed Bastion instances. Premium includes these Standard features and adds session recording and an optional private-only deployment without a Bastion public IP. Private-only still requires the dedicated subnet and a private client access path; selecting Premium does not automatically enable that mode."
+            },
+            {
+              "type": "paragraph",
+              "text": "Developer instead uses shared infrastructure. It does not require a dedicated Bastion host, AzureBastionSubnet, or Bastion public IP resource from the school. It supports one VM connection at a time in the same VNet, not simultaneous sessions or access to VMs in peered VNets. It lacks the native-client and host-scaling features described for Standard and Premium, and is available only in supported regions. Consider it for development and testing, not as an equivalent production replacement for Basic. For example, sharing one administration service across app-vnet and peered services-vnet is not a Developer scenario."
+            }
+          ]
+        },
+        {
+          "id": "bastion-required-flows",
+          "title": "Protect Bastion without breaking its required communication",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For our dedicated Basic scenario, permit the target VM's required management port from the AzureBastionSubnet range, not from the entire internet. Check both the target subnet and NIC NSGs if both exist. The guest firewall must also allow the connection and the SSH or RDP service must be running. To make management truly exclusive to Bastion, also examine broader rules such as the default VirtualNetwork allow. A narrow new allow does not by itself remove an existing broader permission."
+            },
+            {
+              "type": "paragraph",
+              "text": "If an NSG is attached to AzureBastionSubnet in this public Basic design, a client-443 rule alone is incomplete. Bastion needs Azure management, health-check, internal-component, and outbound service communication. A service tag such as GatewayManager identifies the relevant Microsoft-managed address group. The following checklist is for this public, dedicated scenario, not Developer or Premium private-only. Before any real deployment, use the linked Bastion NSG article and the selected deployment mode's guidance for complete current rule fields and supported source restrictions. Do not replace a working production policy with this teaching table."
+            },
+            {
+              "type": "table",
+              "caption": "Required communication categories for our public Bastion Basic subnet",
+              "headers": ["Direction", "Source or destination", "Destination ports", "Purpose"],
+              "rows": [
+                ["Inbound", "Approved client public addresses, or Internet as documented", "TCP 443", "Browser session entry"],
+                ["Inbound", "GatewayManager source tag", "TCP 443", "Azure control and management"],
+                ["Inbound", "AzureLoadBalancer source tag", "TCP 443", "Platform health checks"],
+                ["Inbound", "VirtualNetwork to VirtualNetwork", "8080 and 5701", "Communication among Bastion components"],
+                ["Outbound", "Target VMs in VirtualNetwork", "22 and 3389", "Private SSH and RDP access"],
+                ["Outbound", "VirtualNetwork to VirtualNetwork", "8080 and 5701", "Communication among Bastion components"],
+                ["Outbound", "AzureCloud destination tag", "TCP 443", "Required Azure service communication"],
+                ["Outbound", "Internet destination tag", "80", "Session and certificate validation dependencies"]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "choose-the-control",
+          "title": "Bastion, NSG, Firewall, and WAF solve different problems",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure Firewall is a managed, stateful filtering service that can provide centralized policy for traffic routed through it. Network rules consider addresses, ports, and protocols. Application rules can restrict supported traffic by fully qualified domain name, or FQDN, meaning the complete hostname such as updates.classroom.example in a fictional design. This is useful when the requirement is approved web destinations rather than just any TCP 443 destination. Basic, Standard, and Premium Firewall have different capabilities, so choose features from the actual SKU documentation."
+            },
+            {
+              "type": "paragraph",
+              "text": "Allowing TCP 443 in an NSG does not inspect the contents of a web request. HTTP is the application protocol carrying requests such as page retrieval; HTTPS carries HTTP within TLS protection. A web application firewall, or WAF, examines web requests for suspicious application patterns, such as attempts to make a database interpret malicious input. Azure WAF can be used with services such as Application Gateway. It complements secure application code and authentication; it does not repair every programming defect. An ordinary NSG is not a WAF."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Firewall's domain-based application filtering is also not identical to a WAF protecting an incoming school website. Firewall Premium can add TLS inspection and an intrusion detection and prevention system, called IDPS, which looks for known malicious traffic patterns. Those capabilities require appropriate configuration and do not exist in every Firewall SKU. Bastion, meanwhile, supplies an administrative session path; it does not inspect all database or internet traffic. State the requirement first, then select the product that acts at the relevant point."
+            }
+          ]
+        },
+        {
+          "id": "firewall-path-proof",
+          "title": "A firewall can filter only traffic that reaches it",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A user-defined route, or UDR, is a route you configure in a route table associated with a subnet. Its next hop is where matching traffic is sent next, for example a reachable firewall's private IP. A 0.0.0.0/0 route matches all IPv4 destinations but is the least specific match. In ordinary route selection, the longest matching prefix is chosen first. For the same prefix, UDRs take precedence over BGP-learned routes, then system routes. BGP, Border Gateway Protocol, is a protocol by which routers exchange route information."
+            },
+            {
+              "type": "paragraph",
+              "text": "Do not shorten that rule to custom routes always win. If app-vnet peers with services-vnet 10.40.0.0/16, traffic to 10.40.1.8 normally follows the /16 peering route instead of a /0 UDR pointing at a firewall. The /16 matches more destination bits. Azure also has preferred system-route behavior for VNet and peering routes relative to BGP, and service-endpoint routes cannot be overridden by an ordinary route table. A broad firewall route therefore proves neither service inspection nor inspection between every subnet."
+            },
+            {
+              "type": "example",
+              "title": "Prove the school's proposed update-control path",
+              "scenario": "Assume an approved design already has a reachable Azure Firewall with the necessary public outbound configuration in services-vnet 10.40.0.0/16. The school wants web-VM internet update traffic to cross it. No cloud changes are executed here.",
+              "steps": [
+                {"action": "Identify the exact update destinations and any required name-resolution dependencies.", "why": "Allowing arbitrary HTTPS would not enforce a requirement to contact only approved update services."},
+                {"action": "Associate the planned route table with the web subnet and examine its effective routes.", "why": "A route table that merely exists, or is attached to a different subnet, cannot steer this VM's traffic."},
+                {"action": "For each intended destination, check whether the firewall route is actually selected.", "why": "More-specific VNet, peering, private-endpoint, or special service-endpoint routes may direct traffic elsewhere."},
+                {"action": "Check firewall rules, NSGs, return routing, and the firewall's outbound translation configuration.", "why": "Routing toward a firewall is not permission through it, and permission alone is not the public source translation required for internet access."},
+                {"action": "Plan a fresh permitted request and a prohibited request, then compare expected firewall observations.", "why": "Seeing the allowed request in the firewall's logs is evidence of the intended path. A successful request without that evidence might have bypassed the firewall."}
+              ],
+              "result": "The proposal is justified by a destination-specific path and policy, not simply by the presence of a Firewall resource. Private school database traffic remains a separate access requirement."
+            }
+          ]
+        },
+        {
+          "id": "safe-administration",
+          "title": "Make a reversible change and retain a way back",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Before tightening management rules, record existing associations and rule priorities and retain an approved recovery method. Test a fresh permitted administration session before ending the current one. An old SSH session continuing to work does not prove a new administrator can reconnect. In a real maintenance window, change one reasoned part at a time and keep a record of expected and observed behavior. Do not respond to a failed login by exposing SSH or RDP from Any to every VM."
+            },
+            {
+              "type": "paragraph",
+              "text": "Dedicated Bastion SKUs and Azure Firewall can incur ongoing deployment charges even while nobody is actively using the application. Developer has no Bastion service charge, but that does not make its target VM or other Azure resources free. A public IP, processed traffic, logs, and storage can add costs. Stopping the target VM does not delete a dedicated Bastion or Firewall deployment, and VM disks can remain billable. This course's optional lab uses network definitions rather than these managed services. For any separately approved service lab, verify removal of its disposable resources afterward; never delete a shared school resource group."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the connection leg, SKU, and control",
+              "text": "In the public Basic scenario, browser-to-Bastion uses 443 and Bastion-to-target uses SSH 22 or RDP 3389. Basic is valid and is not a retired Basic public IP. Do not apply dedicated-subnet requirements to Developer or assume every Premium deployment has a public IP. Native-client support starts at Standard and is inherited by Premium. An NSG allow, a route, a firewall policy, and an application login still answer different questions."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "bastion-port-pair",
+          "kind": "single",
+          "prompt": "Understanding: for public Bastion Basic and a Linux VM using standard SSH, which destination-port pair is correct?",
+          "choices": [
+            {"id": "browser443-target22", "text": "Browser to Bastion: TCP 443; Bastion to VM: TCP 22", "explanation": "The browser's protected session and the target SSH connection are separate legs."},
+            {"id": "browser22-target443", "text": "Browser to Bastion: TCP 22; Bastion to VM: TCP 443", "explanation": "This reverses the protocols. The browser uses HTTPS, while this VM listens for SSH on 22."},
+            {"id": "both443", "text": "TCP 443 on both legs because Bastion replaces SSH", "explanation": "Bastion does not convert the target into an HTTPS administration server. Its second leg still uses SSH."}
+          ],
+          "correctIds": ["browser443-target22"],
+          "explanation": "Read the initiator and destination of each leg instead of remembering one port for the whole architecture."
+        },
+        {
+          "id": "bastion-basic-requirement",
+          "kind": "single",
+          "prompt": "Recall: which is a valid plan for the stated new dedicated Bastion Basic deployment?",
+          "choices": [
+            {"id": "dedicated26-standard-ip", "text": "AzureBastionSubnet 10.20.10.0/26 and a compatible Standard static public IP", "explanation": "The subnet has the required dedicated name and minimum size, and Basic Bastion uses a Standard static public IP."},
+            {"id": "shared27-basic-ip", "text": "A shared web subnet /27 and a Basic public IP", "explanation": "The subnet is not dedicated and is too small for a new dedicated deployment; Basic public IP is also retired."},
+            {"id": "basic-retired-everywhere", "text": "No valid plan exists because every Azure product named Basic has retired", "explanation": "SKU names are product-specific. Bastion Basic remains available."}
+          ],
+          "correctIds": ["dedicated26-standard-ip"],
+          "explanation": "Apply the requirements of the actual Bastion SKU, not assumptions borrowed from another product."
+        },
+        {
+          "id": "bastion-sku-boundaries",
+          "kind": "multiple",
+          "prompt": "Understanding: the school compares a Developer test setup with a Premium private-only design. Which TWO statements are correct?",
+          "choices": [
+            {"id": "developer-shared-limits", "text": "Developer needs no dedicated AzureBastionSubnet or Bastion public IP, but supports only one VM connection at a time and no peered-VNet access.", "explanation": "Developer's shared deployment avoids those dedicated resources while imposing capacity and connectivity limits. It is not merely Basic with a smaller subnet."},
+            {"id": "premium-private-subnet", "text": "Premium private-only needs no Bastion public IP but still requires a dedicated AzureBastionSubnet of /26 or larger for a new deployment.", "explanation": "Private-only changes the public access model, not Premium's dedicated deployment or minimum subnet requirement."},
+            {"id": "developer-native-client", "text": "Developer supports the same native SSH and RDP client connections as Standard.", "explanation": "Native-client connections are Standard and Premium features, not Developer or Basic features."},
+            {"id": "premium-always-private", "text": "Selecting Premium automatically makes any existing Bastion deployment private-only.", "explanation": "Private-only is a specific deployment option. Premium also supports public deployments, and choosing its SKU is not equivalent to selecting private-only mode."}
+          ],
+          "correctIds": ["developer-shared-limits", "premium-private-subnet"],
+          "explanation": "First identify shared versus dedicated deployment, then the SKU features and public versus private-only mode. A requirement from one combination must not become a rule for every Bastion plan."
+        },
+        {
+          "id": "firewall-route-specificity",
+          "kind": "single",
+          "prompt": "Understanding: app-vnet has a system peering route for 10.40.0.0/16 and a 0.0.0.0/0 UDR to a firewall. With no other relevant routes, which handles traffic to 10.40.1.8?",
+          "choices": [
+            {"id": "specific-peering-route", "text": "The /16 peering route", "explanation": "It matches more destination bits than /0. A custom route does not win merely because it is custom."},
+            {"id": "custom-always-route", "text": "The /0 firewall route because all UDRs beat all system routes", "explanation": "Route-source preference is not a replacement for checking the matching prefix length."},
+            {"id": "nsg-selects-route", "text": "Whichever route has an NSG allow rule", "explanation": "NSGs filter traffic; their allow rules do not select the next hop."}
+          ],
+          "correctIds": ["specific-peering-route"],
+          "explanation": "A firewall resource and a broad route are insufficient evidence that a specific private destination is inspected."
+        },
+        {
+          "id": "control-boundary-pairs",
+          "kind": "multiple",
+          "prompt": "Understanding: which TWO product-to-requirement matches are appropriate?",
+          "choices": [
+            {"id": "bastion-admin-path", "text": "Bastion for administrator SSH or RDP access to VMs without target public IPs", "explanation": "Bastion provides the managed administration path described in this lesson."},
+            {"id": "waf-http-inspection", "text": "A WAF for inspecting incoming web requests for common application attack patterns", "explanation": "This requires application-aware web filtering, not merely an allowed TCP destination port."},
+            {"id": "nsg-update-hostname", "text": "An ordinary NSG application rule to allow only one HTTPS hostname", "explanation": "NSGs match address, protocol, and port information; they do not provide Azure Firewall-style hostname application rules."},
+            {"id": "firewall-auto-everything", "text": "A Firewall resource with no traffic steering to guarantee inspection of all VNet traffic", "explanation": "A firewall cannot inspect traffic whose effective path never reaches it."}
+          ],
+          "correctIds": ["bastion-admin-path", "waf-http-inspection"],
+          "explanation": "Choose a control for the layer and path where the requirement exists, then verify that traffic actually reaches that control."
+        }
+      ],
+      "takeaways": [
+        "Separate student, application, and administrator connections before deciding which ports to allow.",
+        "Bastion's client 443 connection is distinct from the private target 22 or 3389 connection.",
+        "New dedicated Basic, Standard, and Premium deployments require AzureBastionSubnet /26 or larger; shared Developer does not.",
+        "Bastion Basic remains valid; product-specific SKU names do not share one retirement policy.",
+        "Azure Firewall needs a working traffic path, policy, and return/outbound design; deployment alone proves none of them.",
+        "Use WAF for web-request protection rather than expecting an NSG port allow to inspect application content.",
+        "Test new sessions, retain recovery access, and remove only verified disposable resources."
+      ],
+      "sourceIds": ["bastion-skus", "bastion-settings", "bastion-nsg", "firewall-features", "waf-overview", "routing-reference", "nsg-overview", "public-ip-retirement", "load-balancer-retirement", "exam-guide"]
+    }
+  ],
+  "glossary": [
+    {"term": "NSG", "definition": "Network security group: an associated collection of inbound and outbound allow or deny rules for network traffic."},
+    {"term": "Five-tuple", "definition": "The source address, source port, destination address, destination port, and protocol used to identify a flow."},
+    {"term": "Priority", "definition": "An NSG rule's evaluation order number; smaller numbers are considered before larger numbers in the same direction."},
+    {"term": "Stateful", "definition": "Tracking a connection so its replies can be recognized without treating them as unrelated new connections."},
+    {"term": "Effective security rules", "definition": "The security rules actually applying to a NIC through its current associations and relevant policies."},
+    {"term": "ASG", "definition": "Application security group: logical network-interface membership used as a source or destination selector in NSG rules."},
+    {"term": "Service tag", "definition": "A Microsoft-maintained group of address prefixes used to simplify rule definitions."},
+    {"term": "PaaS", "definition": "Platform as a service: a managed platform, such as Blob Storage, whose underlying servers the customer does not administer."},
+    {"term": "Service endpoint", "definition": "A subnet-enabled path and identity for supported Azure services that retain public service destination addresses."},
+    {"term": "Private endpoint", "definition": "A private-IP network interface connecting a VNet to a specific resource and subresource through Azure Private Link."},
+    {"term": "Subresource", "definition": "A particular service interface of a resource, such as Blob or Files within a storage account."},
+    {"term": "RBAC", "definition": "Role-based access control: assigning an identity permission to perform specified actions at a defined scope."},
+    {"term": "TLS", "definition": "Transport Layer Security: a protocol protecting communication with encryption and server-identity checks."},
+    {"term": "Bastion", "definition": "Azure's managed service for remote SSH or RDP administration without requiring public IPs on the target VMs."},
+    {"term": "Azure Firewall", "definition": "A managed stateful filtering service applying network and supported application policies to traffic that reaches it."},
+    {"term": "WAF", "definition": "Web application firewall: a control that examines web requests for application-level threats."},
+    {"term": "UDR", "definition": "User-defined route: an administrator-configured next-hop instruction associated with a subnet through a route table."},
+    {"term": "Least privilege", "definition": "Giving a person, application, or network flow only the access required for its intended task."}
+  ],
+  "sources": [
+    {"id": "learn-nsg", "url": "https://learn.microsoft.com/en-us/training/modules/configure-network-security-groups/", "title": "Configure network security groups", "supports": "Official objectives covering NSG selection, creation, rule implementation and evaluation, and ASGs."},
+    {"id": "learn-implement", "url": "https://learn.microsoft.com/en-us/training/modules/configure-network-security-groups/2-implement-network-security-groups", "title": "Implement network security groups", "supports": "Subnet and NIC associations, reuse of an NSG, one NSG per association point, and screened-subnet concepts."},
+    {"id": "learn-create-rules", "url": "https://learn.microsoft.com/en-us/training/modules/configure-network-security-groups/5-create-network-security-groups-rules", "title": "Create network security group rules", "supports": "Portal rule creation and augmented-rule teaching topics; current NSG reference governs exact selector constraints."},
+    {"id": "learn-asgs", "url": "https://learn.microsoft.com/en-us/training/modules/configure-network-security-groups/6-implement-asgs", "title": "Implement application security groups", "supports": "Grouping NICs by workload role and using those groups in NSG rules rather than maintaining individual VM address lists."},
+    {"id": "nsg-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Azure network security groups overview", "supports": "Five-tuple matching, first-match priority, default rules, statefulness, established-flow behavior, augmented rules, security admin precedence, and the end of new NSG flow-log creation."},
+    {"id": "nsg-processing", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-group-how-it-works", "title": "How network security groups filter traffic", "supports": "Independent subnet and NIC decisions, absent-association behavior, same-subnet filtering, effective security rules, and IP flow verify."},
+    {"id": "asg-reference", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/application-security-groups", "title": "Application security groups", "supports": "NIC membership, same-VNet constraints, and the need for a database-port deny before the default VNet allow."},
+    {"id": "service-endpoints", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-service-endpoints-overview", "title": "Virtual network service endpoints", "supports": "Public destination with private source and subnet identity, per-subnet configuration, service-side rules, office-client limitations, source changes, and special service-route precedence."},
+    {"id": "private-endpoints", "url": "https://learn.microsoft.com/en-us/azure/private-link/private-endpoint-overview", "title": "What is a private endpoint?", "supports": "Private NIC and address, resource and subresource targeting, Approved connection status, connected on-premises access, separate public-access controls, and DNS requirements."},
+    {"id": "storage-private", "url": "https://learn.microsoft.com/en-us/azure/storage/common/storage-private-endpoints", "title": "Use private endpoints for Azure Storage", "supports": "Blob versus Files subresources, storage public-endpoint firewall scope, unchanged authorization, normal connection strings, private DNS alias behavior, and privatelink.blob.core.windows.net."},
+    {"id": "private-endpoint-policies", "url": "https://learn.microsoft.com/en-us/azure/private-link/disable-private-endpoint-network-policy", "title": "Manage network policies for private endpoints", "supports": "Enabling NSG or route-table policy support for private endpoints independently of ordinary resources in their subnet."},
+    {"id": "bastion-skus", "url": "https://learn.microsoft.com/en-us/azure/bastion/bastion-sku-comparison", "title": "Choose the right Azure Bastion SKU", "supports": "Current Developer, Basic, Standard, and Premium tiers; Developer shared deployment without AzureBastionSubnet or Bastion public IP, one-connection capacity and no peering; dedicated-SKU subnet requirements; Standard/Premium native clients; optional Premium private-only and recording; and SKU-specific charges."},
+    {"id": "bastion-settings", "url": "https://learn.microsoft.com/en-us/azure/bastion/configuration-settings", "title": "Azure Bastion configuration settings", "supports": "AzureBastionSubnet /26 minimum for new dedicated Basic, Standard, and Premium deployments, excluding Developer; Standard static public IP for public dedicated deployments, excluding private-only; and custom-port and Premium feature qualifications."},
+    {"id": "bastion-nsg", "url": "https://learn.microsoft.com/en-us/azure/bastion/bastion-nsg", "title": "Configure NSG rules for Azure Bastion", "supports": "Client TCP 443 versus target SSH/RDP ports and the platform ingress, egress, and target rules used by this lesson's explicitly public, dedicated Basic example, not a universal rule set for every SKU or deployment mode."},
+    {"id": "public-ip-retirement", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/public-ip-addresses", "title": "Public IP addresses in Azure", "supports": "Basic public IP retirement in September 2025 is distinct from the continuing availability of Bastion Basic; Standard public IPs use static allocation."},
+    {"id": "load-balancer-retirement", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-overview", "title": "What is Azure Load Balancer?", "supports": "Basic Load Balancer retired in September 2025; this product-specific retirement does not retire Bastion Basic."},
+    {"id": "firewall-features", "url": "https://learn.microsoft.com/en-us/azure/firewall/features-by-sku", "title": "Azure Firewall features by SKU", "supports": "Network and FQDN application filtering, stateful behavior, address translation, and Premium TLS inspection and IDPS distinctions."},
+    {"id": "waf-overview", "url": "https://learn.microsoft.com/en-us/azure/web-application-firewall/overview", "title": "Introduction to Azure Web Application Firewall", "supports": "Web-request threat protection and integration with Application Gateway, distinct from ordinary NSG port filtering."},
+    {"id": "routing-reference", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-udr-overview", "title": "Azure virtual network traffic routing", "supports": "Subnet-associated route tables, longest-prefix selection, same-prefix route-source preference, preferred system routes, and service-endpoint exceptions."},
+    {"id": "exam-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "AZ-104 study guide", "supports": "Current secure networking objectives explicitly include NSGs, ASGs, effective rules, Bastion, service endpoints, and private endpoints."}
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect an NSG and ASG policy without paid compute",
+    "purpose": "Practice saving, associating, and reading a policy in disposable network resources. Use the browser NSG evaluator for traffic decisions. This optional lab creates no VM, Bastion, Firewall, storage account, or endpoint, and is never run automatically.",
+    "prerequisites": [
+      "Approval from an authorized subscription owner, suitable network-resource permissions, and a review of current pricing and organizational policies.",
+      "A new dedicated disposable resource group, separate from any existing school or production resources.",
+      "A written copy of the priority-200 web allow and priority-300 database deny from the worked example."
+    ],
+    "costWarning": "Do not assume that everything shown in a networking creation form is free. Bastion, Firewall, VMs, disks, public IPv4 addresses, NAT Gateway, private endpoints, storage, and diagnostic logging can incur charges. This exercise intentionally uses only basic empty network definitions and security-group configuration. Do not enable optional paid services, start Cloud Shell, or create live traffic generators.",
+    "steps": [
+      "In the approved subscription, create and record a uniquely named disposable resource group, such as rg-school-nsg-pilot with your own suffix. Verify that it contains no unrelated resources.",
+      "Create a disposable app-vnet with 10.20.0.0/16, web 10.20.1.0/24, and database 10.20.2.0/24 in one region. Keep default outbound access disabled and skip optional paid services.",
+      "Create asg-web and asg-database in the same region. They remain empty because this configuration-only exercise creates no VM NICs.",
+      "Create nsg-database. Add an inbound Allow at priority 200 from asg-web to asg-database, TCP destination port 1433, source ports Any. Give it a descriptive name and save it.",
+      "Add an inbound Deny at priority 300 from Any to asg-database, TCP destination port 1433, source ports Any. Confirm that the allow appears before this deny and both appear before default rules.",
+      "Associate nsg-database with only the disposable database subnet. Reopen the subnet and the NSG association list to verify that the association was saved.",
+      "Read the default inbound and outbound rules, then use the local course evaluator or paper examples to predict traffic from an asg-web member and a nonmember. Do not claim a live connection test: this lab has no VM, listener, or ASG members.",
+      "Write the additional steps a real approved deployment would require: NIC membership, source outbound checks, target listener and guest firewall, effective-rule inspection, and fresh permitted and denied connection tests. Keep them as a plan rather than creating extra resources."
+    ],
+    "expectedResults": [
+      "The NSG contains the specific allow at 200, database-port deny at 300, and unchanged default rules.",
+      "The database subnet shows the intended NSG association; the empty ASGs exist but do not themselves allow or deny traffic.",
+      "There is no live VM NIC on which to inspect effective VM rules or test connectivity. Saved configuration is evidence of configuration only, not application reachability."
+    ],
+    "cleanup": [
+      "Inspect every resource in the exact recorded disposable group and confirm that all were created for this lab. Do not delete the group if any resource belongs to another workload.",
+      "Delete only the verified disposable group or individually identified lab resources. Never use broad subscription cleanup or remove production NSG associations.",
+      "Confirm that the recorded VNet, NSG, ASGs, and group are gone. Check for accidentally added paid resources under the lab names and review cost records later, allowing for reporting delay."
+    ]
+  }
+}

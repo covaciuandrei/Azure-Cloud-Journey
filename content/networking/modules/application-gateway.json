@@ -1,0 +1,494 @@
+{
+  "schemaVersion": 1,
+  "id": "application-gateway",
+  "title": "Application Gateway: understand the web request",
+  "summary": "Follow a school website request from its hostname to a healthy web server, understand the two TLS connections, and choose application-aware protection without confusing it with network filtering.",
+  "priority": "supporting",
+  "priorityReason": "The AZ-104 study guide effective April 17, 2026 explicitly emphasizes configuring internal or public load balancers, troubleshooting load balancing, and network connectivity. Application Gateway provides supporting context for those objectives and for selecting the right service; it is not a separately named configuration objective in that guide. First master listeners, HTTP routing, probes, and the NSG versus WAF distinction. Treat advanced policy tuning and protocol options as supporting administration knowledge, not an invented exam weighting.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-application-gateway/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Explain what Azure Application Gateway is and the functionality it provides.",
+    "Determine whether Application Gateway meets an organization's requirements."
+  ],
+  "lessons": [
+    {
+      "id": "http-routing-and-tls",
+      "title": "From an HTTP request to a healthy backend",
+      "summary": "Read a web address, connect it to listeners and routing rules, and distinguish TLS termination from encryption on both network legs.",
+      "objectives": [
+        "Identify the hostname, path, query, headers, and response status in a web conversation.",
+        "Connect frontend addresses, listeners, rules, backend pools, backend settings, and probes.",
+        "Explain why HTTPS to the gateway does not automatically mean HTTPS to the server.",
+        "Diagnose a host or probe mismatch without weakening certificate validation."
+      ],
+      "sections": [
+        {
+          "id": "request-before-resource",
+          "title": "Start with what the browser asks",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "When you open a school timetable in a browser, several conversations happen before the page appears. DNS translates a name into an IP address. The browser connects to that address and sends an HTTP request, a structured message asking the server to do something. HTTP is an application protocol: it understands resources such as pages, unlike TCP, which carries an ordered stream of bytes. HTTPS means that HTTP travels inside a connection protected by Transport Layer Security, or TLS. Encryption protects the conversation in transit; it does not decide whether a student is allowed to see a teacher's records."
+            },
+            {
+              "type": "paragraph",
+              "text": "Consider the fictional address https://classroom.example/homework/list?class=12. The scheme is HTTPS, the hostname is classroom.example, the path is /homework/list, and the query is class=12. The browser normally uses destination TCP port 443 for HTTPS. A GET request asks to retrieve a resource; a POST commonly submits information. Headers carry extra information, such as the requested host, the kinds of content the browser accepts, or a session cookie. In HTTP/1.1, the Host header identifies the website. HTTP/2 conveys the authority through a corresponding pseudo-header. Two requests can reach the same IP and port yet ask for different websites."
+            },
+            {
+              "type": "paragraph",
+              "text": "The response contains a status, headers, and often a body containing the page. A 200 response normally means the request succeeded. A 404 says the requested resource was not found, while a 403 means access was refused by an application or an intermediary. These are not interchangeable with a TCP timeout. Keep this distinction in mind: a returned HTTP error proves that some HTTP component answered, but you still need to identify which component. Our example names are documentation names, not domains that we own or have deployed."
+            }
+          ]
+        },
+        {
+          "id": "school-gateway-components",
+          "title": "Give each gateway component one job",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Application Gateway is a managed proxy. In the HTTP configuration taught here, it accepts the client's connection and creates a separate connection to a backend server. Its Layer 7 awareness lets it use HTTP information when choosing that backend. Assume the school App VNet is 10.20.0.0/16. The web subnet is 10.20.1.0/24, containing web VM 10.20.1.4; the database subnet is 10.20.2.0/24, containing DB VM 10.20.2.5. Reserve a separate, dedicated gateway subnet, 10.20.5.0/24, rather than placing the gateway among the web VMs."
+            },
+            {
+              "type": "paragraph",
+              "text": "A frontend address is where clients contact the gateway. It can be public or private, according to the deployment. Here, illustrative public frontend 203.0.113.20 represents an alternative entry design to the Load Balancer lesson, not one public IP simultaneously attached to Load Balancer and Application Gateway. A listener accepts connections for its frontend, port, and protocol, with a hostname condition for a multi-site listener. A request-routing rule connects that listener to a backend pool and backend settings. The pool identifies servers; the settings describe how to contact them, including HTTP or HTTPS, destination port, timeout, and probe. Adding a server to a pool does not install a website on it or create a route to it."
+            },
+            {
+              "type": "diagram",
+              "title": "Two web connections, then a separate database connection",
+              "description": "A browser represented by documentation address 198.51.100.25 sends HTTPS to the gateway's illustrative public frontend 203.0.113.20. This is an alternative to the Load Balancer lesson's entry design, not a public IP simultaneously attached to both services. The gateway is deployed in dedicated subnet 10.20.5.0/24 and opens another HTTPS connection to web VM 10.20.1.4. The web application separately connects to DB VM 10.20.2.5 on TCP 1433. Public addresses are illustrative, not assigned Azure resources.",
+              "nodes": [
+                { "id": "browser", "label": "Browser", "detail": "198.51.100.25", "column": 0, "row": 0 },
+                { "id": "gateway", "label": "Gateway", "detail": "203.0.113.20; subnet 10.20.5.0/24", "column": 1, "row": 0 },
+                { "id": "web-server", "label": "Web VM", "detail": "10.20.1.4; subnet 10.20.1.0/24", "column": 2, "row": 0 },
+                { "id": "database", "label": "DB VM", "detail": "10.20.2.5; subnet 10.20.2.0/24", "column": 2, "row": 1 }
+              ],
+              "edges": [
+                { "from": "browser", "to": "gateway", "label": "HTTPS 443" },
+                { "from": "gateway", "to": "web-server", "label": "New HTTPS 443" },
+                { "from": "web-server", "to": "database", "label": "Separate TCP 1433" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "host-path-and-headers",
+          "title": "Route by the question, not just the address",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose classroom.example and staff.classroom.example both have deliberately configured DNS records pointing to the same frontend. Multi-site listeners can distinguish those hostnames and associate each site with its own rule. Within classroom.example, a path-based rule might send /media/* to media servers and other paths to the main web pool. Its path patterns match the URL path, not the query parameters. Changing class=12 to class=11 does not by itself select another pool. If no path pattern matches, the configured default pool and settings handle the request."
+            },
+            {
+              "type": "paragraph",
+              "text": "Do not confuse a basic listener with a basic routing rule. A basic listener does not perform hostname-based multi-site matching. A basic rule forwards all accepted requests to its configured pool, whereas a path-based rule makes the additional path decision. Header or URL rewriting can change information before forwarding, which is useful when integrating an existing application. A redirect is different: it tells the browser to make another request, for example from HTTP to HTTPS. Neither mechanism grants access to protected student information."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-path-query",
+              "prompt": "The /media/* path rule selects the media pool. A student opens /homework/list?next=/media/video. Which pool is selected if all other requests use the main pool?",
+              "answer": "The main pool.",
+              "explanation": "The path is /homework/list. The text /media/video is inside the query, not the path being matched. Reading the entire address as one undifferentiated string would produce the wrong routing prediction."
+            }
+          ]
+        },
+        {
+          "id": "two-tls-legs",
+          "title": "TLS ends somewhere, even when both legs are encrypted",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "TLS termination means the gateway is the endpoint of the browser's encrypted connection. The listener needs a suitable certificate and access to its private key; the browser checks trust, validity, and the requested name. The gateway can then read the HTTP request to route it and, when configured, inspect it with WAF. If the backend setting uses HTTP on port 80, the next connection is not protected by TLS. A browser padlock describes the browser-to-gateway connection, not every connection deeper inside the school application."
+            },
+            {
+              "type": "paragraph",
+              "text": "With HTTPS backend settings, the gateway creates a new TLS connection to the server. Microsoft calls this end-to-end TLS, but it is two encrypted connections with decryption and processing at the gateway, not one untouched tunnel from browser to VM. The backend needs its own valid certificate and HTTPS listener. Keep certificate-chain, expiry, and hostname validation enabled. A private certificate authority may require a trusted root certificate in the gateway's backend settings. Server Name Indication, or SNI, supplies the intended server name during the TLS handshake; it must be consistent with the backend certificate and configuration."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Separate encryption from routing and authorization",
+              "text": "An HTTPS frontend does not imply an HTTPS backend. A DNS record does not configure a listener. A working TLS handshake does not authenticate a student to the application. For load-balancing questions, identify which component and which connection leg a setting actually changes."
+            }
+          ]
+        },
+        {
+          "id": "probes-not-promises",
+          "title": "A healthy probe answers a limited question",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A health probe periodically sends a request to a backend and evaluates its response. Unhealthy servers stop receiving new application traffic through that pool until they recover. A default HTTP probe generally accepts status codes 200 through 399, but an application may need a custom hostname, path, port, and accepted response. A probe aimed at the wrong host can reach the server yet receive the wrong site's response. A probe requiring student login can fail even though the web process is running. Choose a small health endpoint that reports the readiness you actually need."
+            },
+            {
+              "type": "paragraph",
+              "text": "A successful /health response is not proof that every homework page, database query, or user permission works. Decide whether the health endpoint checks only the web process or also essential dependencies. A gateway reporting no healthy backends can return a gateway error even when the browser-to-gateway certificate is perfect. Check backend health details, backend protocol and port, certificate names, the probe host and path, routes, and security rules before replacing the frontend certificate. Changing several settings together destroys useful evidence about the cause."
+            }
+          ]
+        },
+        {
+          "id": "worked-gateway-ticket",
+          "title": "Worked example: a valid certificate, but no homework page",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Correct the backend identity, not the browser",
+              "scenario": "In this fictional Application Gateway entry design, used instead of the Load Balancer lesson's entry design, classroom.example resolves to illustrative frontend 203.0.113.20. The HTTPS listener certificate is trusted by the test browser. Web VM 10.20.1.4 serves classroom.example on HTTPS 443 with a correctly issued certificate and a /health endpoint returning 200. After a gateway change, requests receive 502 and backend health reports a certificate-name mismatch. Connectivity and NSGs have already been checked.",
+              "steps": [
+                { "action": "Record the failed request's hostname and the gateway's backend-health error.", "why": "The 502 comes from a responding gateway, and the certificate-name error narrows investigation to the backend leg rather than DNS or the student's password." },
+                { "action": "Compare the backend setting and custom probe hostname with the certificate's subject names.", "why": "The backend pool contains an IP, but the certificate identifies classroom.example. A probe using an unrelated hostname can fail identity validation even when the IP and port are reachable." },
+                { "action": "Set the intended backend hostname and probe hostname to classroom.example, retain HTTPS 443, and associate the /health probe with the correct backend setting.", "why": "This aligns the HTTP host, TLS server identity, and probe with the site actually installed on 10.20.1.4. It fixes the mismatch rather than bypassing validation." },
+                { "action": "Wait for fresh probe results, then request /homework/list with an authorized test account.", "why": "Probe recovery establishes backend readiness; a real page request separately checks routing and application authorization." }
+              ],
+              "result": "The probe becomes healthy and the homework page loads. The database at 10.20.2.5 remains a separate dependency of the web application; it was never an HTTP backend pool member. No broad NSG allow rule or certificate-validation exception was needed."
+            }
+          ]
+        },
+        {
+          "id": "operational-fit",
+          "title": "Scale the right thing",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The pool can contain VMs, scale-set instances, App Service endpoints, or reachable on-premises servers. An office server in 172.20.0.0/16 needs deliberately configured connectivity, such as a VPN or ExpressRoute path, plus correct return routing, name resolution when names are used, and security permission. A gateway cannot create that connection merely because its pool accepts an address. Similarly, a server in services VNet 10.40.0.0/16 needs an established network path. Application Gateway autoscaling increases gateway capacity, not the number of web servers or database capacity."
+            },
+            {
+              "type": "paragraph",
+              "text": "Cookie-based session affinity can keep a browser session on the same healthy backend when an older application stores session information locally. It does not preserve that information if the server fails. Shared session storage is an application design decision. Connection draining allows existing requests time to finish when removing a backend for maintenance, within a configured timeout, instead of abruptly stopping it. WebSocket support helps interactive applications maintain a two-way conversation, while HTTP/2 supports efficient client requests; neither is a substitute for scaling or checking application health."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "gateway-host-check",
+          "kind": "single",
+          "prompt": "Understanding: classroom.example and staff.classroom.example resolve to the same frontend IP. Which configuration lets the gateway select different sites?",
+          "choices": [
+            { "id": "multi-site", "text": "Multi-site listeners matched to the hostnames and their routing rules.", "explanation": "The hostname remains part of the HTTP request, so listeners can select different site rules even when the destination address and port match." },
+            { "id": "second-dns", "text": "DNS records alone, with no gateway configuration change.", "explanation": "DNS supplies an address. It does not tell an unconfigured listener which backend should serve each hostname." },
+            { "id": "subnet-rule", "text": "An NSG rule containing the /staff URL path.", "explanation": "NSG rules use network-level fields, not HTTP URL paths or site names." }
+          ],
+          "correctIds": ["multi-site"],
+          "explanation": "Separate the name-to-address decision from the HTTP host-to-backend decision."
+        },
+        {
+          "id": "gateway-tls-check",
+          "kind": "single",
+          "prompt": "Understanding: the frontend is HTTPS 443, but backend settings specify HTTP 80. What can you conclude?",
+          "choices": [
+            { "id": "both-encrypted", "text": "Both connections use TLS because the browser displays HTTPS.", "explanation": "The browser only observes its connection to the gateway. Backend encryption has a separate configuration." },
+            { "id": "frontend-only", "text": "TLS protects the client-to-gateway leg, but the configured backend leg does not use TLS.", "explanation": "Termination decrypts the request at the gateway, and HTTP backend settings forward it without a new TLS connection." },
+            { "id": "one-tunnel", "text": "The gateway cannot inspect the path because HTTPS always remains one tunnel.", "explanation": "The gateway is a TLS endpoint in this setup. It can inspect the decrypted request before forwarding." }
+          ],
+          "correctIds": ["frontend-only"],
+          "explanation": "End-to-end TLS requires HTTPS backend settings and a correctly configured, validated backend identity."
+        },
+        {
+          "id": "gateway-probe-check",
+          "kind": "single",
+          "prompt": "Understanding: /health returns 200, but only one teacher receives 403 on /grades. What is the best next investigation?",
+          "choices": [
+            { "id": "check-origin", "text": "Identify whether the 403 came from WAF or the application, then inspect that component's evidence.", "explanation": "A healthy probe and a user-specific denial are different observations. Logs and the request identity can distinguish security policy from application authorization." },
+            { "id": "disable-probe", "text": "Disable health probes because they guarantee all pages should work.", "explanation": "The guarantee is false. Removing probes hides backend failures and does not address the denial." },
+            { "id": "open-everything", "text": "Allow all inbound TCP ports to the database.", "explanation": "This broad exposure is unsupported by the evidence and unrelated to the identity-specific HTTP response." }
+          ],
+          "correctIds": ["check-origin"],
+          "explanation": "Use the scope of each observation. A readiness endpoint cannot certify every user's access rights."
+        },
+        {
+          "id": "gateway-maintenance-check",
+          "kind": "multiple",
+          "prompt": "Understanding: the school will remove a web VM for maintenance. Select the two accurate statements.",
+          "choices": [
+            { "id": "drain-time", "text": "Connection draining gives existing requests a configured period to finish.", "explanation": "Draining coordinates removal without immediately cutting off eligible in-flight requests; the timeout still limits the wait." },
+            { "id": "affinity-backup", "text": "Session affinity copies local session data to a surviving VM.", "explanation": "Affinity influences backend selection. It is not replication or backup of the application's local state." },
+            { "id": "gateway-capacity", "text": "Gateway autoscaling does not automatically add application VMs.", "explanation": "Gateway instances and backend application capacity are separate resources with separate scaling decisions." },
+            { "id": "probe-installs", "text": "A health probe installs the web application on replacement VMs.", "explanation": "A probe observes a response. Deployment and configuration of replacement servers must happen separately." }
+          ],
+          "correctIds": ["drain-time", "gateway-capacity"],
+          "explanation": "Do not assign application deployment or state-management responsibilities to gateway features."
+        }
+      ],
+      "takeaways": [
+        "Hostname, path, and query are different parts of a web address; path rules do not match query parameters.",
+        "A listener receives traffic, a rule selects its treatment, a pool identifies servers, and backend settings define the connection.",
+        "Frontend HTTPS and backend HTTPS are separate choices and separate TLS sessions.",
+        "Probe health is only as meaningful as the endpoint and matching conditions being tested.",
+        "Backend reachability, application scaling, and session storage remain separate responsibilities."
+      ],
+      "sourceIds": ["app-module", "app-what", "app-how", "app-components", "app-tls", "app-features", "app-infrastructure", "az104-guide"]
+    },
+    {
+      "id": "waf-and-service-choice",
+      "title": "Protect HTTP requests and choose the right service",
+      "summary": "Distinguish WAF from NSGs, choose current v2 capabilities, and compare regional and global traffic services using real requirements.",
+      "objectives": [
+        "Explain why allowing HTTPS at an NSG does not inspect web-request content.",
+        "Distinguish WAF detection, prevention, false positives, and application authorization.",
+        "Compare Application Gateway, Load Balancer, Front Door, and Traffic Manager without treating all global behavior as identical.",
+        "Justify a cost-aware service choice and a narrowly scoped policy correction."
+      ],
+      "sections": [
+        {
+          "id": "network-versus-web",
+          "title": "An open web port is not a safe web request",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A network security group, or NSG, decides whether traffic is allowed using addresses, ports, protocol, and direction. For example, the school might permit HTTPS to its public entry point and allow the gateway subnet to reach web VM 10.20.1.4. That describes which connections may exist. It does not distinguish a normal homework submission from suspicious instructions hidden inside a web form. Both can arrive at the same destination IP on TCP 443. Making an NSG rule more specific cannot turn it into an HTTP content inspector."
+            },
+            {
+              "type": "paragraph",
+              "text": "A web application firewall, or WAF, evaluates web requests against security rules. SQL injection attempts to make an application treat supplied data as database instructions. Cross-site scripting attempts to introduce script content that can run in another user's browser. You do not need to memorize attack strings to understand the boundary: WAF looks at HTTP information that an NSG does not interpret. In the HTTPS proxy setup, Application Gateway terminates TLS so inspection is possible. WAF reduces exposure to known attack patterns, but developers still need safe database access, output handling, patching, and authorization checks."
+            }
+          ]
+        },
+        {
+          "id": "policy-not-magic",
+          "title": "A WAF policy needs an operating plan",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A WAF policy groups managed rules, custom rules, and carefully chosen exclusions. Managed rules provide maintained detection logic; custom rules express requirements specific to the school. A policy can be associated with the gateway, an individual listener, or an appropriate path-based scope. This matters when the staff site and student upload site accept different content. An exclusion should omit only the necessary request attribute from the relevant inspection, not quietly turn protection off for the entire school. Record why an exception exists and what evidence justified it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Detection mode records matches without blocking the request because of those WAF detections. Prevention mode can block according to the policy. With anomaly-scoring managed rules, a match is not automatically a final block; the combined score and configured actions matter. Enable diagnostic logging so you can identify the policy, rule, request, and final action. A false positive is legitimate traffic classified as suspicious. Start tuning with approved test data and a controlled observation period, then verify prevention behavior. Leaving a policy in detection forever does not provide the blocking protection a manager may assume."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-detection",
+              "prompt": "A WAF log records a managed-rule detection, but the teacher's submission reaches the app. Is this necessarily a broken firewall?",
+              "answer": "No. The policy may be in detection mode, or the match may not result in a blocking action.",
+              "explanation": "Read the active policy, mode, and final action rather than treating every match as proof that a request should have been blocked. If prevention was required, the operating configuration still needs correction."
+            }
+          ]
+        },
+        {
+          "id": "current-v2-design",
+          "title": "Use current v2 capabilities deliberately",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Application Gateway v2 currently has three SKUs, or service editions: Basic (preview), Standard_v2, and WAF_v2. This course focuses on Standard_v2 and WAF_v2 as the core production choices, not the only available SKUs. Standard_v2 provides advanced gateway functionality; WAF_v2 adds the web firewall protection used here. These production SKUs support autoscaling, static frontend addresses, and zone redundancy where availability zones are supported. Choose capacity and regional availability consciously. Autoscaling is not instantaneous, and a resilient gateway cannot make a single failing database or a bad application release resilient."
+            },
+            {
+              "type": "paragraph",
+              "text": "Basic is a current preview option for lower-traffic applications with lower availability requirements. Its scale limits are smaller, and the official comparison excludes advanced features such as URL rewriting, Private Link, and TCP/TLS proxying. Check preview registration, current regional availability, and the exact SKU feature table before selecting it; a scenario explicitly using Basic is not automatically invalid. Application Gateway Basic is not the retired Basic Azure Load Balancer. It is also not Application Gateway v1, which retired on April 28, 2026. Similar product labels do not share one retirement policy."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "HTTP(S) design first; TCP/TLS proxy is a preview extension",
+              "text": "Our service comparisons describe the core production HTTP/HTTPS listener design and its Layer 7 routing. Application Gateway also has a separate Layer 4 TCP/TLS proxy capability, labeled Preview in the current official FAQ. Do not conclude that the product can never handle TCP. TCP/TLS listeners do not provide HTTP path routing or WAF inspection, even on WAF_v2; check current preview support before designing around them. Keep the HTTP(S) design primary here, with WebSocket and client HTTP/2 support where useful. Custom error pages change presentation, not the underlying fault."
+            }
+          ]
+        },
+        {
+          "id": "services-by-requirement",
+          "title": "Compare the decision each service makes",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Start service selection with a requirement, not a product name. Does the traffic need HTTP path inspection, or only TCP/UDP distribution? Must users enter through a global web edge, or through a gateway deployed in one region? Does the service forward requests itself, or answer DNS so that the client connects elsewhere? A global service is not automatically better for a small Romanian school with a regional workload. Extra layers create extra cost, configuration, logging, and failure modes, and each layer should solve a stated problem."
+            },
+            {
+              "type": "table",
+              "caption": "Traffic services differ in layer, scope, and decision",
+              "headers": ["Service", "What it decides", "Scope and important limit"],
+              "rows": [
+                ["Application Gateway", "For HTTP(S), inspect the host and path, terminate TLS, select a healthy backend, and optionally apply WAF.", "A regional gateway. It can reach backends elsewhere when connectivity exists, but is not automatically a global edge service."],
+                ["Azure Load Balancer", "Distribute TCP/UDP flows without interpreting HTTP paths or providing WAF.", "Regional configurations and a cross-region topology exist. Cross-region distribution remains Layer 4, not Front Door-style HTTP routing."],
+                ["Azure Front Door", "Proxy HTTP(S) at a global edge, route to origins, and provide options such as caching and WAF.", "Useful for global web delivery and multiregion origin selection. It does not make all application data safe to cache."],
+                ["Traffic Manager", "Choose an endpoint in a DNS answer according to its routing method and endpoint health.", "Global DNS-based selection. It is not in the subsequent application data path and does not terminate the client's TLS."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Load Balancer can carry HTTP because HTTP can travel over TCP, but carrying it is not the same as understanding /homework and /media. Traffic Manager can direct users to web endpoints, but cannot inspect an individual request after DNS has answered. DNS caches and existing connections also affect how quickly clients switch endpoints after a change. Front Door can make proxy-routing decisions for web requests without waiting for the same DNS endpoint-selection cycle. None of these statements means that failover is instantaneous or that an application automatically preserves user sessions across regions."
+            }
+          ]
+        },
+        {
+          "id": "regional-is-not-isolated",
+          "title": "Regional does not mean local backends only",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school could place Application Gateway in App VNet 10.20.0.0/16 and reach a backend in services VNet 10.40.0.0/16 through explicitly configured peering. It could also reach an office backend in 172.20.0.0/16 through a suitable private connection. This expands backend reach, not the gateway's own regional deployment boundary. If the region hosting that entry point fails, remote backends alone do not remove the entry-point dependency. Conversely, Front Door may sit in front of regional gateways when global entry and regional inspection are both justified. That is a designed combination, not a compulsory architecture."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Choose by the required capability",
+              "text": "For an HTTP host/path decision with regional web inspection, consider Application Gateway. For global HTTP delivery, consider Front Door. For DNS endpoint selection, consider Traffic Manager. For TCP/UDP flow distribution, consider Load Balancer, including its documented cross-region option when appropriate. NSGs remain network filtering, not WAF, regardless of how many rules they contain."
+            }
+          ]
+        },
+        {
+          "id": "worked-policy-ticket",
+          "title": "Worked example: a blocked programming assignment",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Fix a confirmed false positive without opening everything",
+              "scenario": "The fictional school uses WAF_v2 before web VM 10.20.1.4. Ordinary homework uploads succeed, but a teacher's approved programming worksheet receives 403. Gateway health is green. A developer suggests disabling every WAF rule and allowing all ports to the VM. The approved test contains no personal student data.",
+              "steps": [
+                { "action": "Record the exact upload path, test time, request identifier, and response, then correlate them with gateway and WAF logs.", "why": "A 403 could originate in WAF or in application authorization. The status alone is not enough to justify any rule change." },
+                { "action": "Confirm a WAF block for the same request and inspect the matched attribute and rule with the application owner.", "why": "The evidence must distinguish a legitimate worksheet triggering a rule from an actually unsafe submission or a permission problem." },
+                { "action": "In the disposable test environment, try a narrowly scoped policy adjustment for that confirmed attribute and rule.", "why": "Disabling unrelated rules would remove protection from other requests. The owner must still validate and safely handle the application's accepted input." },
+                { "action": "Retest the legitimate upload and the school's approved protection tests, then review logs for their final actions.", "why": "One successful upload proves only that the exception worked. The second check helps verify that the broader policy still enforces its intended protection." },
+                { "action": "Document the exception, retain prevention where required, and keep the NSG restricted to necessary paths.", "why": "The issue was HTTP inspection, not a missing arbitrary TCP port. A documented, reviewed exception is maintainable; an unexplained broad bypass is not." }
+              ],
+              "result": "The approved worksheet succeeds with a specific, justified policy correction. The VM is not exposed directly, unrelated WAF checks remain active, and the teacher's application permissions are still enforced by the application."
+            }
+          ]
+        },
+        {
+          "id": "justify-and-limit",
+          "title": "Make a small architecture decision you can defend",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the current school scenario, regional HTTPS host/path routing and centrally managed web filtering justify WAF_v2. If the requirement instead becomes distributing a non-web TCP service, reconsider the design rather than assuming the same path rules apply. If students are spread internationally and the school adds complete regional application deployments, evaluate Front Door and the data consistency implications. If only DNS-based regional endpoint selection is required, Traffic Manager may fit. For a tiny application already served safely by its hosting platform, adding a gateway might not be necessary at all."
+            },
+            {
+              "type": "paragraph",
+              "text": "The original Learn introduction asks you to recognize what the service does, follow its components, and judge when to use it. You have now done that through request tracing and evidence-based decisions rather than product slogans. The administration priority is understanding the boundary of each feature: probes observe, affinity selects, draining manages removal, autoscaling changes gateway capacity, and WAF evaluates web requests. Production design also requires budgets, certificate renewal, logging retention, and tested recovery. These are responsibilities to plan, not resources to deploy automatically while reading a lesson."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "waf-nsg-check",
+          "kind": "single",
+          "prompt": "Understanding: both normal and suspicious form submissions reach TCP 443 from an allowed address. Why is an NSG insufficient to distinguish them?",
+          "choices": [
+            { "id": "payload-boundary", "text": "Its rule matching does not inspect HTTP form content.", "explanation": "The network fields can be identical while the HTTP bodies differ. WAF provides the relevant application-layer inspection." },
+            { "id": "nsg-global", "text": "NSGs only work for traffic crossing Azure regions.", "explanation": "NSGs filter supported traffic at their associated resources, including traffic within a VNet. Regional scope is not the missing capability." },
+            { "id": "tls-auth", "text": "TLS guarantees that all submitted content is safe.", "explanation": "TLS protects transport confidentiality and integrity; an encrypted request can still contain unsafe input." }
+          ],
+          "correctIds": ["payload-boundary"],
+          "explanation": "Network permission and application-request safety are different questions."
+        },
+        {
+          "id": "global-service-check",
+          "kind": "single",
+          "prompt": "Understanding: the school wants a global HTTP proxy with origin selection and optional caching. Which service most directly matches that requirement?",
+          "choices": [
+            { "id": "front-door", "text": "Azure Front Door.", "explanation": "Front Door supplies global HTTP(S) proxy delivery with origin routing and caching options." },
+            { "id": "traffic-manager", "text": "Traffic Manager because it forwards every HTTP request.", "explanation": "Traffic Manager selects endpoints through DNS. The client then sends application traffic to the selected endpoint, not through Traffic Manager." },
+            { "id": "cross-region-lb", "text": "Cross-region Load Balancer because it inspects URL paths.", "explanation": "The cross-region capability is real, but it remains Layer 4 distribution and does not supply HTTP path inspection or caching." }
+          ],
+          "correctIds": ["front-door"],
+          "explanation": "Global scope alone is not enough; the requested application-layer behavior matters."
+        },
+        {
+          "id": "policy-mode-check",
+          "kind": "single",
+          "prompt": "Recall with interpretation: the approved design requires WAF to block matching attacks, but the policy is in detection mode. Which statement is accurate?",
+          "choices": [
+            { "id": "observe-only", "text": "The detections provide evidence for tuning, but this mode does not provide the required blocking.", "explanation": "Detection is useful for observation. Prevention behavior must be deliberately configured and verified against policy actions." },
+            { "id": "block-every-match", "text": "Any recorded rule match proves the request was blocked.", "explanation": "A match and a final action are different. Detection mode and anomaly scoring make this distinction especially important." },
+            { "id": "nsg-replacement", "text": "Switching mode removes the need for NSGs and application authorization.", "explanation": "WAF mode does not replace network access controls or checks deciding what an authenticated user may do." }
+          ],
+          "correctIds": ["observe-only"],
+          "explanation": "Verify the implemented operating mode instead of inferring protection from a product name."
+        },
+        {
+          "id": "scope-and-version-check",
+          "kind": "multiple",
+          "prompt": "Understanding: select the two accurate design statements as of the review date.",
+          "choices": [
+            { "id": "v2-design", "text": "Standard_v2 and WAF_v2 are the course's production focus, while Basic also exists as a v2 preview SKU.", "explanation": "The current official v2 page lists three SKUs. Basic has preview conditions and lower limits; omitting it from the main production examples does not make it nonexistent or retired." },
+            { "id": "regional-dependency", "text": "A gateway reaching office backends still has a regional entry-point dependency.", "explanation": "Remote backend connectivity does not relocate or globally replicate the gateway resource." },
+            { "id": "small-mandatory", "text": "Every small website needs both Front Door and Application Gateway.", "explanation": "A service should meet a stated need. Existing hosting capabilities may be sufficient without two additional paid layers." },
+            { "id": "affinity-replication", "text": "Session affinity guarantees regional recovery of local session data.", "explanation": "Affinity chooses a backend; it does not replicate application state or implement regional disaster recovery." },
+            { "id": "basic-retirement", "text": "Application Gateway Basic must be retired because Basic Load Balancer is retired.", "explanation": "These are different services. Basic Load Balancer retired on September 30, 2025; the Application Gateway v2 SKU table still lists Basic in preview. Evaluate the named service and SKU rather than transferring another product's retirement." }
+          ],
+          "correctIds": ["v2-design", "regional-dependency"],
+          "explanation": "Identify the service, SKU, preview status, and deployment scope separately. Neither a similar product name nor the course's production focus changes the official SKU list."
+        }
+      ],
+      "takeaways": [
+        "NSGs filter connections; WAF inspects HTTP requests; the application still enforces identity and authorization.",
+        "A logged match is not necessarily a blocked request. Check policy scope, mode, and final action.",
+        "Application Gateway v2 includes Basic (preview), Standard_v2, and WAF_v2. Do not confuse Basic preview with retired Application Gateway v1 or Basic Load Balancer.",
+        "Application Gateway is regional even when its reachable backends are not all in that region.",
+        "Front Door proxies global web traffic; Traffic Manager selects DNS endpoints; Load Balancer distributes Layer 4 flows.",
+        "A narrow, evidence-backed exception is safer than disabling protection to make one request succeed."
+      ],
+      "sourceIds": ["app-module", "app-tcp-tls", "app-when", "app-features", "app-faq", "app-waf", "app-v1-retirement", "app-v2-skus", "load-balancing-options", "load-balancer-skus", "nsg-overview", "az104-guide"]
+    }
+  ],
+  "glossary": [
+    { "term": "HTTP request", "definition": "An application message containing a method, a target resource, headers, and sometimes a body." },
+    { "term": "Host", "definition": "The requested website name, distinct from its destination IP address. HTTP/1.1 carries it in the Host header." },
+    { "term": "Path", "definition": "The resource portion of a URL, such as /homework/list, separate from its query parameters." },
+    { "term": "Header", "definition": "A named piece of request or response metadata, such as content type or a cookie." },
+    { "term": "Listener", "definition": "A gateway configuration that accepts connections using a frontend, port, protocol, and, for multi-site matching, hostname." },
+    { "term": "Backend pool", "definition": "The group of server targets to which the gateway can send a request, subject to settings and health." },
+    { "term": "TLS termination", "definition": "Ending an encrypted connection at the gateway so it can process the request. The next connection has its own encryption configuration." },
+    { "term": "End-to-end TLS", "definition": "In this gateway design, TLS on both client-to-gateway and gateway-to-backend connections, with decryption between them at the gateway." },
+    { "term": "SNI", "definition": "Server Name Indication: the TLS handshake's indication of the intended server name, used in certificate and site selection." },
+    { "term": "Health probe", "definition": "A periodic request that checks a configured aspect of backend readiness, not every possible application operation." },
+    { "term": "Session affinity", "definition": "A selection mechanism that tends to keep a browser session on the same backend using a gateway cookie; it does not copy session data." },
+    { "term": "Connection draining", "definition": "A controlled removal period that lets existing requests complete within a configured timeout." },
+    { "term": "WAF", "definition": "Web application firewall: a security control that evaluates HTTP requests for suspicious application-layer patterns." },
+    { "term": "False positive", "definition": "A legitimate request incorrectly identified as suspicious by a security rule." },
+    { "term": "DNS-based selection", "definition": "Choosing an endpoint through a DNS answer, after which the client connects directly to the selected endpoint." }
+  ],
+  "sources": [
+    { "id": "app-module", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-application-gateway/", "title": "Introduction to Azure Application Gateway", "supports": "The two official learning objectives and the introduction, functionality, operation, suitability, assessment, and summary coverage of the source module." },
+    { "id": "app-what", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-application-gateway/2-what-is-azure-application-gateway", "title": "What is Azure Application Gateway?", "supports": "Backend types, load distribution, session affinity, encryption, autoscaling, and connection draining as the module's functional scope." },
+    { "id": "app-how", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-application-gateway/3-how-azure-application-gateway-works", "title": "How Azure Application Gateway works", "supports": "Instructional coverage of frontend addresses, listeners, routing, backend settings, WAF, TLS, probes, and web protocol support; current product references qualify dated implementation details." },
+    { "id": "app-when", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-application-gateway/4-when-to-use-azure-application-gateway", "title": "When to use Azure Application Gateway", "supports": "Suitability for reachable on-premises backends, TLS offload, WAF, and session affinity, and the need to evaluate alternatives rather than require a gateway for every site." },
+    { "id": "app-components", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/application-gateway-components", "title": "Application gateway components", "supports": "Current listener and rule distinctions, path matching excluding query parameters, backend settings, backend reachability, probe identity, client HTTP/2, and separate TCP/TLS proxy support." },
+    { "id": "app-tls", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/ssl-overview", "title": "Overview of TLS termination and end-to-end TLS with Application Gateway", "supports": "Frontend termination versus a second backend TLS session, certificate trust and naming requirements, SNI, and v2 trusted-root behavior." },
+    { "id": "app-features", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/features", "title": "Azure Application Gateway features", "supports": "V2 autoscaling, static frontend addressing, zone redundancy, session affinity, draining, redirects, rewrites, custom errors, and WebSocket support." },
+    { "id": "app-infrastructure", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/configuration-infrastructure", "title": "Application Gateway infrastructure configuration", "supports": "The gateway needs a dedicated subnet and deployment-appropriate network security and routing configuration." },
+    { "id": "app-waf", "url": "https://learn.microsoft.com/en-us/azure/web-application-firewall/ag/ag-overview", "title": "What is Azure Web Application Firewall on Azure Application Gateway?", "supports": "Web threat inspection, WAF policy associations, managed and custom rules, exclusions, detection versus prevention, diagnostic logs, and anomaly scoring." },
+    { "id": "app-v1-retirement", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/v1-retirement", "title": "Migrate from Application Gateway V1 to V2", "supports": "Application Gateway v1 retired April 28, 2026 and should not be the basis of a new deployment." },
+    { "id": "app-v2-skus", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/overview-v2", "title": "What is Azure Application Gateway v2?", "supports": "The official SKU types section lists Basic (preview), Standard_v2, and WAF_v2. Its Basic versus Standard_v2 table documents lower Basic scale limits and unavailable advanced features, including URL rewriting, Private Link, and TCP/TLS proxying. The page also documents preview registration, production positioning, regional restrictions, and availability-zone dependencies." },
+    { "id": "app-tcp-tls", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/tcp-tls-proxy-overview", "title": "Application Gateway TCP/TLS proxy overview", "supports": "Application Gateway has a separate Layer 4 terminating TCP/TLS proxy in addition to its HTTP(S) Layer 7 design. Its limitations explicitly exclude WAF inspection on TCP/TLS listeners, even on a WAF_v2 gateway." },
+    { "id": "app-faq", "url": "https://learn.microsoft.com/en-us/azure/application-gateway/application-gateway-faq", "title": "Frequently asked questions about Application Gateway", "supports": "The Exchange Server backend answer labels the TLS/TCP Layer 4 proxy as Preview. The Layer 4 configuration section distinguishes its listeners and settings from HTTP(S), recommends the Layer 7 design for HTTP(S) features, and states that WAF does not work for Layer 4 usage." },
+    { "id": "load-balancing-options", "url": "https://learn.microsoft.com/en-us/azure/architecture/guide/technology-choices/load-balancing-overview", "title": "Load balancing options", "supports": "Regional Application Gateway, global HTTP proxy Front Door, DNS-based Traffic Manager, regional and cross-region Layer 4 Load Balancer, and the distinction between remote backend reach and a global entry service." },
+    { "id": "load-balancer-skus", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/skus", "title": "Azure Load Balancer SKUs", "supports": "Basic Load Balancer retired on September 30, 2025. This separate service's retirement must not be applied to the Application Gateway Basic preview SKU." },
+    { "id": "nsg-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Azure network security groups overview", "supports": "NSGs evaluate network-level fields and state, not the contents of HTTP requests." },
+    { "id": "az104-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "Study guide for Exam AZ-104", "supports": "Objectives effective April 17, 2026 name load balancing and connectivity troubleshooting without a separate Application Gateway configuration bullet, supporting the stated teaching priority." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: trace a disposable gateway configuration",
+    "purpose": "Connect a real portal configuration to the two TLS legs without automatically deploying resources. All lesson questions and worked examples can be completed without an Azure subscription.",
+    "prerequisites": [
+      "Use only your own or an instructor-approved disposable training resource group containing a v2 gateway and a working demo backend. If none exists, skip this lab rather than deploy solely to complete the course.",
+      "Have permission to read the gateway, backend health, and diagnostic logs. Any changes require the owner's separate authorization.",
+      "Have a harmless demo hostname and correctly trusted test certificates already configured. classroom.example and 203.0.113.20 are fictional, so use the recorded names and addresses of the training environment.",
+      "Know which resources belong exclusively to the exercise and record that inventory before beginning."
+    ],
+    "costWarning": "This inspection does not create resources, but an existing gateway can incur fixed and capacity charges while deployed. Backend VMs, disks, public IPs, and log ingestion or retention can also incur charges. Review the training environment's budget and ownership before starting; a quiet gateway is not a promise of zero cost.",
+    "steps": [
+      "In the portal, open only the approved training gateway and record its SKU, region, frontend, and dedicated subnet.",
+      "Trace one HTTPS listener to its request-routing rule, backend pool, and backend settings. Write down the client port and backend port separately.",
+      "Inspect a configured path rule and its default target. Predict the destination of one matching path and one nonmatching path before opening either page.",
+      "Inspect backend protocol, intended hostname, certificate-validation settings, and custom probe. Do not disable validation to avoid a warning.",
+      "Read Backend health and record the observed status and timestamp. Compare the probe path with the actual page being tested.",
+      "Use the approved demo account to request the two paths, then compare the observations with your predictions. Do not submit attack payloads or student data.",
+      "If WAF is present, read the associated policy mode and scope and inspect an existing sanitized log. Distinguish a match from the recorded final action.",
+      "Close the exercise with a small written explanation of what the browser proves, what the probe proves, and which evidence would be needed for an authorization failure."
+    ],
+    "expectedResults": [
+      "You can identify two independently configured connection legs and explain whether each uses TLS.",
+      "The observed path destinations agree with the rule and default-pool configuration, or you can name the exact discrepancy.",
+      "You can distinguish a WAF decision, backend health result, and application response without changing an unrelated NSG."
+    ],
+    "cleanup": [
+      "This read-only lab should leave no new resources or configuration changes. Verify that no deployment, diagnostic setting, or policy edit was accidentally saved.",
+      "If you separately created a disposable environment for this exercise, stop testing, review its resource-group contents against your inventory, and delete only that dedicated group after confirming it contains nothing shared. Otherwise leave the instructor's resources unchanged.",
+      "Check separately owned log destinations and public IPs for leftovers. Do not delete shared workspaces, certificates, VNets, or Network Watcher resources.",
+      "Confirm the disposable resources are absent and review later cost records for retained disks, logs, or other resources; stopping a VM alone is not complete cleanup."
+    ]
+  }
+}

@@ -1,0 +1,659 @@
+{
+  "schemaVersion": 1,
+  "id": "load-balancer",
+  "title": "Load Balancer: one address, several ready servers",
+  "summary": "Follow real connection details through a Standard Load Balancer, understand probes and NAT, and diagnose availability without confusing Layer 4 forwarding with HTTP routing or a firewall.",
+  "priority": "core",
+  "priorityReason": "The current AZ-104 guide explicitly includes configuring internal or public load balancers and troubleshooting load balancing. Flow tracing, probes, and outbound connectivity are core administration skills; specialised NVA HA-port designs are supporting context.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-load-balancer/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Learn what Azure Load Balancer is and the functionality it provides.",
+    "Determine whether Load Balancer meets the needs of your organisation."
+  ],
+  "lessons": [
+    {
+      "id": "layer-four-load-balancing",
+      "title": "Understand what gets balanced",
+      "summary": "Distinguish a client-facing address from backend addresses, trace a transport connection, and select Layer 4 load balancing only when it matches the requirement.",
+      "objectives": [
+        "Explain the frontend, backend pool, rule, and probe without assuming individual VM public IPs.",
+        "Trace a TCP flow and describe five-tuple distribution and session affinity.",
+        "Choose public or internal Standard Load Balancer and distinguish HTTP-aware alternatives."
+      ],
+      "sections": [
+        {
+          "id": "lb-why-several-servers",
+          "title": "Add another server without asking everyone to change address",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Imagine that the school's results application becomes busy when grades are published. Giving one server more memory can help, but another approach is to run the application on several servers and share incoming connections. A load balancer gives clients one contact address and selects an available server behind it. It does not make a slow database faster, copy student records, or install the application. Each backend must already be capable of doing the work it receives."
+            },
+            {
+              "type": "paragraph",
+              "text": "Our App VNet is 10.20.0.0/16. Two web VMs, 10.20.1.4 and 10.20.1.5, occupy web subnet 10.20.1.0/24. Database VM 10.20.2.5 remains in database subnet 10.20.2.0/24; it is not added to the web pool. A pool should contain suitable implementations of the same service, not every VM in the network. We use regional Standard Load Balancer for all new application examples. Basic Load Balancer retired on September 30, 2025, so old free-Basic tutorials are not deployment recommendations."
+            }
+          ]
+        },
+        {
+          "id": "lb-four-components",
+          "title": "Separate the contact address from the machines",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The frontend is the IP address clients contact. A backend pool identifies the VM network interfaces or other supported backend addresses that can receive flows. A load-balancing rule connects a frontend address, protocol, and port to a backend pool and port. A health probe checks whether each backend meets your chosen readiness test. Creating only a frontend IP does not create an application path. You must connect these pieces and allow the relevant traffic through network and guest security."
+            },
+            {
+              "type": "table",
+              "caption": "A concrete non-floating TCP example",
+              "headers": ["Component", "School setting", "What it means"],
+              "rows": [
+                ["Frontend", "203.0.113.20", "Documentation-only stand-in for an allocated Standard public IPv4 address."],
+                ["Backend pool", "10.20.1.4 and 10.20.1.5", "NIC-based membership; neither VM needs its own public IP."],
+                ["Rule", "TCP frontend 443 to backend 8443", "Select a backend for the connection and translate the destination."],
+                ["Probe", "HTTP port 8081, path /health", "The separately configured readiness listener must return HTTP 200."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "The worked examples use documentation ranges for client, frontend, and remote-server public addresses; those are not real endpoints to deploy or contact. The later probe source 168.63.129.16 is different: it is a real Azure platform address. In a deployment Azure allocates the frontend public IP resource. Assume both example web servers already terminate TLS on port 8443 with a certificate suitable for the fictional configured name classroom.example. The load balancer does not buy the domain or install its certificate. A separately configured DNS record could point the name at the frontend, but name resolution and load balancing remain distinct."
+            }
+          ]
+        },
+        {
+          "id": "lb-l4-connection",
+          "title": "Layer 4 means connections, not page contents",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A port number identifies a transport endpoint on a machine, such as a web listener on TCP 443. Layer 4 refers to this transport layer: Azure Load Balancer makes forwarding decisions using IP addresses, ports, and TCP or UDP. It is a pass-through service, not an HTTP reverse proxy. It does not read a URL and decide that /teachers belongs on one server while /students belongs on another. Sending encrypted HTTPS through a TCP rule does not make the load balancer decrypt it."
+            },
+            {
+              "type": "example",
+              "title": "One client connection from start to reply",
+              "scenario": "Client 198.51.100.25 opens TCP source port 53000 to frontend 203.0.113.20:443. Both backends are healthy, Floating IP is disabled, and there is no intermediate source NAT. Suppose the hash selects 10.20.1.5.",
+              "steps": [
+                {"action": "Match destination 203.0.113.20:443 and protocol TCP to the load-balancing rule.", "why": "A UDP packet or another frontend port would not match this particular rule."},
+                {"action": "Deliver the flow to 10.20.1.5:8443 while preserving client source 198.51.100.25:53000.", "why": "For this non-floating inbound design, destination translation selects the backend. Backend security and logs see the original client source, not the probe source."},
+                {"action": "Let the web server perform the TLS handshake and serve the application.", "why": "The TLS endpoint is the VM service. Layer 4 forwarding does not supply the certificate or validate the student's login."},
+                {"action": "Return the response so the client sees 203.0.113.20:443 as its peer.", "why": "Azure applies the corresponding reverse translation for the established inbound flow. The client does not need a route to 10.20.1.5."}
+              ],
+              "result": "The client has one transport conversation with the frontend address, while one selected private VM handles it. Other healthy VMs do not each receive a copy of every packet."
+            },
+            {
+              "type": "diagram",
+              "title": "One frontend, two possible private backends",
+              "description": "A client connects to the public frontend on TCP 443. A matching rule selects either web VM on private port 8443 for that flow. The arrows to the two backends are alternatives, not packet duplication, and neither backend has an individual public IP.",
+              "nodes": [
+                {"id": "lb-client", "label": "Client", "detail": "198.51.100.25:53000; example address", "column": 0, "row": 1},
+                {"id": "lb-frontend", "label": "Standard frontend", "detail": "203.0.113.20:443; example public IP", "column": 1, "row": 1},
+                {"id": "lb-web-one", "label": "Web VM one", "detail": "10.20.1.4:8443; private NIC", "column": 2, "row": 0},
+                {"id": "lb-web-two", "label": "Web VM two", "detail": "10.20.1.5:8443; private NIC", "column": 2, "row": 2}
+              ],
+              "edges": [
+                {"from": "lb-client", "to": "lb-frontend", "label": "TCP connection"},
+                {"from": "lb-frontend", "to": "lb-web-one", "label": "Possible selected backend"},
+                {"from": "lb-frontend", "to": "lb-web-two", "label": "Selected in this example"}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "lb-hash-and-affinity",
+          "title": "Why refresh does not promise another server",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The default distribution uses a five-tuple hash: source IP, source port, destination IP, destination port, and protocol. A hash turns that set of values into a backend selection among eligible instances. Packets within the transport flow stay together. It is not a promise to alternate servers for each HTTP request or to divide bytes exactly in half. A browser can reuse an existing TCP connection for several requests, so repeated refreshes can keep showing the same backend even when both servers work."
+            },
+            {
+              "type": "paragraph",
+              "text": "Session persistence changes which values participate. Client IP uses source and destination IP addresses; Client IP and protocol adds the transport protocol. These modes can keep new connections from a client on the same backend while the relevant pool remains stable. They do not store application sessions or guarantee permanence after backend changes. Many students behind one school internet gateway can share one visible source IP, so client-IP affinity may concentrate their traffic. Shared session storage is often safer than assuming one server will always receive a student's next connection."
+            },
+            {
+              "type": "prediction",
+              "id": "lb-new-source-port",
+              "prompt": "The same client opens a second TCP connection to 203.0.113.20:443, now from source port 53001. With default distribution, must it use 10.20.1.5 again?",
+              "answer": "No. It may use either healthy backend, and it may also happen to select 10.20.1.5 again.",
+              "explanation": "Changing a member of the five-tuple allows a different hash result. It does not guarantee alternation. Keeping the same client IP is not the same as enabling client-IP session persistence."
+            }
+          ]
+        },
+        {
+          "id": "lb-public-or-internal",
+          "title": "Choose who can reach the frontend",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A public load balancer uses a public frontend for internet-facing connections. An internal load balancer uses a private frontend, for example an available address 10.20.1.10 reserved for that frontend. An office client in 172.20.0.0/16 can reach it only with an appropriate VPN or ExpressRoute path and security permissions. Internal does not mean 'only this subnet'; connected networks can use it when routing allows. It also does not provide implicit internet outbound access to the backend VMs."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a multi-tier application, a public frontend can serve the web tier while a separate internal frontend distributes private calls to equivalent processing servers. Keep roles explicit. The example database at 10.20.2.5 is a single database server, not an automatically replicated cluster just because a load balancer exists. Load Balancer can accommodate added or removed pool members, including scale-set instances, but does not itself decide to purchase more VMs when CPU rises. Configure compute scaling and application state management separately."
+            }
+          ]
+        },
+        {
+          "id": "lb-service-choice",
+          "title": "Choose the service for the decision you need",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Standard Load Balancer fits low-latency TCP or UDP distribution across suitable VMs. For HTTP hostname or path routing, TLS termination at the gateway, or a web application firewall, consider Application Gateway with the appropriate configuration. Azure Front Door serves global HTTP application delivery scenarios. Traffic Manager directs clients through DNS and has DNS caching considerations. A lightly used single VM may not need a load balancer at all, although adding one frontend does not remove that VM's single point of failure. Requirements, not product names, should drive the choice."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "TCP 443 is not HTTP awareness",
+              "text": "A Load Balancer TCP 443 rule can carry HTTPS, but cannot select a backend by URL path, terminate TLS for you, or provide a WAF. An HTTP health probe checks readiness; it does not convert the traffic-forwarding service into a Layer 7 gateway. NSGs filter network flows, not malicious HTTP request bodies."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "lb-check-layer",
+          "kind": "single",
+          "prompt": "The school must send /teachers to one pool and /students to another, with TLS termination at the gateway. Which design fits directly?",
+          "choices": [
+            {"id": "lb-layer-seven", "text": "An HTTP-aware Application Gateway design.", "explanation": "It can inspect HTTP routing information and terminate TLS when configured to do so."},
+            {"id": "lb-tcp-only", "text": "A Standard Load Balancer TCP 443 rule alone.", "explanation": "The rule sees transport properties, not URL paths inside the application conversation."},
+            {"id": "lb-probe-switch", "text": "A Standard Load Balancer with its probe changed to HTTP.", "explanation": "Probe protocol changes readiness checking, not the layer used to forward client traffic."}
+          ],
+          "correctIds": ["lb-layer-seven"],
+          "explanation": "Match the decision to the layer where the required information exists."
+        },
+        {
+          "id": "lb-check-private-backends",
+          "kind": "single",
+          "prompt": "Which addresses are needed for two web VMs behind a public Standard Load Balancer in the stated design?",
+          "choices": [
+            {"id": "lb-public-front-only", "text": "A public frontend and private backend NIC addresses.", "explanation": "The load balancer translates matching inbound flows to the private backends. Individual VM public IPs are not required."},
+            {"id": "lb-public-each", "text": "A public frontend and a public IP on every backend VM.", "explanation": "Those extra public addresses are not required for load-balanced inbound traffic and add unnecessary exposure choices."},
+            {"id": "lb-public-none", "text": "Only private addresses, with no public frontend.", "explanation": "That would describe an internal frontend, not the direct internet-facing scenario."}
+          ],
+          "correctIds": ["lb-public-front-only"],
+          "explanation": "The frontend is the public contact point; backend membership does not imply public addressing."
+        },
+        {
+          "id": "lb-check-flow",
+          "kind": "single",
+          "prompt": "Ten browser requests reuse one TCP connection. Why might all ten reach 10.20.1.4?",
+          "choices": [
+            {"id": "lb-same-flow", "text": "They remain in one transport flow selected by the load balancer.", "explanation": "Default distribution keeps a flow together rather than alternating individual HTTP requests."},
+            {"id": "lb-broken-pool", "text": "The second backend must be broken.", "explanation": "This observation alone cannot establish backend failure; connection reuse is sufficient to explain it."},
+            {"id": "lb-round-robin", "text": "Load Balancer alternates only after exactly ten requests.", "explanation": "There is no such per-request counter in five-tuple distribution."}
+          ],
+          "correctIds": ["lb-same-flow"],
+          "explanation": "Generate independent connections and inspect probe health before diagnosing uneven distribution."
+        },
+        {
+          "id": "lb-check-affinity",
+          "kind": "multiple",
+          "prompt": "Which two consequences of client-IP session persistence should the school consider?",
+          "choices": [
+            {"id": "lb-shared-egress", "text": "Students sharing one public source IP can concentrate on one backend.", "explanation": "The affinity calculation cannot distinguish users merely because they have different accounts behind that shared IP."},
+            {"id": "lb-pool-change", "text": "Changing pool membership can change where new connections go.", "explanation": "The distribution is recalculated; affinity is not a permanent backend assignment."},
+            {"id": "lb-session-copy", "text": "The load balancer copies each student's login session to all VMs.", "explanation": "Application session replication is not supplied by Layer 4 affinity."},
+            {"id": "lb-waf-added", "text": "Affinity enables inspection of malicious HTTP bodies.", "explanation": "Session persistence does not add a web application firewall."}
+          ],
+          "correctIds": ["lb-shared-egress", "lb-pool-change"],
+          "explanation": "Affinity changes distribution inputs, not application state or security capabilities."
+        }
+      ],
+      "takeaways": [
+        "Use Standard for the new application deployments taught here, not retired Basic Load Balancer.",
+        "Frontend, backend pool, rule, and probe are distinct pieces of the configuration.",
+        "Default distribution works per five-tuple flow, not by alternating HTTP requests.",
+        "Private backends do not need individual public IPs for public load-balanced traffic.",
+        "HTTP routing, TLS termination, and WAF requirements belong to an appropriate Layer 7 design."
+      ],
+      "sourceIds": ["lb-what-unit", "lb-how-unit", "lb-when-unit", "lb-overview", "lb-distribution", "lb-exam"]
+    },
+    {
+      "id": "rules-probes-and-nat",
+      "title": "Make rules, probes, and NAT agree",
+      "summary": "Separate application flows from readiness checks, distinguish inbound port forwarding from load balancing, and explicitly plan outbound SNAT.",
+      "objectives": [
+        "Align a rule, backend listener, probe, and security rules.",
+        "Use inbound NAT v2 terminology accurately without treating NAT as load balancing.",
+        "Explain inbound replies versus new outbound connections and calculate a conservative SNAT port allocation."
+      ],
+      "sections": [
+        {
+          "id": "lb-rule-listener",
+          "title": "A mapping is not a listening program",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A load-balancing rule tells Azure how to deliver traffic, but does not start a service on the VM. For TCP frontend 443 to backend 8443, the web application must listen on the backend's reachable address and port 8443. A process listening only on localhost is not enough. Keep the example non-floating so ordinary destination translation is easy to see. Choose the correct backend pool and connect the intended health probe to the rule. A beautifully named probe unused by the rule protects nothing."
+            },
+            {
+              "type": "paragraph",
+              "text": "Standard Load Balancer is closed to unsolicited inbound traffic unless the network security configuration permits it. For the public example, allow the intended client sources to the backend application port in applicable NSGs and the guest firewall. Inbound NSG evaluation uses the translated backend destination. Thus a frontend 443 to backend 8443 rule generally needs an allow rule for backend TCP 8443, not just 443. Both subnet and NIC NSGs must permit the flow when both are present. The original client source is distinct from the load balancer's probe source."
+            }
+          ]
+        },
+        {
+          "id": "lb-probe-meaning",
+          "title": "Ask a useful readiness question",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A health probe is a separate connection generated by Azure. A TCP probe checks whether a TCP listener responds; it does not log into the application. An HTTP or HTTPS probe requests a configured path and expects HTTP 200. A redirect, login challenge, or 500 response is not a successful health response. Our HTTP probe on port 8081 at /health must therefore be served by an intentionally configured listener that reflects whether this web instance should receive new users. The probe port need not equal frontend 443 or application port 8443."
+            },
+            {
+              "type": "paragraph",
+              "text": "IPv4 load balancer probes originate from 168.63.129.16, represented by the AzureLoadBalancer service tag in NSGs. The default probe allowance can be overridden by a higher-priority deny. Guest firewalls must also allow the required probe traffic. Do not replace every application's client-source allow rule with that service tag: real user packets still have user source addresses. A permanently healthy probe on an unrelated management service can hide a broken application, while an unnecessarily fragile dependency check can remove all web servers together."
+            },
+            {
+              "type": "paragraph",
+              "text": "Configure intervals and thresholds deliberately rather than memorising one universal default. Current documentation distinguishes portal and other deployment defaults. TCP thresholds can require consecutive failures; an explicit HTTP non-200 response marks the endpoint unhealthy without waiting for that many identical HTTP responses. For HTTP probes, the configured threshold concerns unanswered timeouts. Exact detection time also depends on when the failure occurs relative to the next probe. A five-second interval is not a promise that every outage is detected at exactly five seconds."
+            },
+            {
+              "type": "prediction",
+              "id": "lb-probe-auth",
+              "prompt": "The HTTP /health endpoint responds 302 to a sign-in page. The application port accepts TCP. Will the configured HTTP health probe treat the redirect as healthy?",
+              "answer": "No. It needs HTTP 200, not a redirect.",
+              "explanation": "A reachable TCP port and a valid HTTP response are not sufficient for this probe type. Give the probe a restricted, appropriate readiness endpoint that does not require an interactive login, without exposing sensitive information."
+            }
+          ]
+        },
+        {
+          "id": "lb-probe-worked-example",
+          "title": "Compare application and probe paths",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "The server works locally but receives no new users",
+              "scenario": "Web VM 10.20.1.4 serves TLS on 8443. Its rule uses HTTP /health on 8081, but the guest firewall permits only 8443. Web VM 10.20.1.5 correctly permits both required flows.",
+              "steps": [
+                {"action": "Identify the application packet: client 198.51.100.25:53000 to frontend 203.0.113.20:443, translated to backend port 8443.", "why": "This is the data flow the student wants to use, with the student's source address."},
+                {"action": "Identify the separate probe packet: source 168.63.129.16 to 10.20.1.4:8081.", "why": "The probe does not arrive at frontend 443 and is not satisfied by an unrelated listener on 8443."},
+                {"action": "Inspect the probe listener, HTTP response, NSG allowances, and guest firewall on 10.20.1.4.", "why": "The stated guest firewall blocks the configured readiness check, so this backend becomes ineligible for new flows even though the application itself can run."},
+                {"action": "Permit the required probe source to 8081 and confirm a 200 response, then observe health recovery and new connections.", "why": "This fixes the actual failing path without opening every port or weakening application authentication."}
+              ],
+              "result": "Both VMs can become eligible after successful health checks. Probe health still does not prove that every student can authenticate or that every page works."
+            }
+          ]
+        },
+        {
+          "id": "lb-inbound-nat",
+          "title": "Port forwarding chooses a particular machine",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Network address translation, or NAT, changes address or port information as traffic passes through a service. An inbound NAT rule exposes a frontend port mapped to a particular backend endpoint. Unlike a load-balancing rule, it is not selecting any healthy machine for the application, and it does not need a health probe. A typical use is carefully restricted administrative access. Prefer a private management path or Bastion where appropriate; a different public port number is not a substitute for authentication and source restrictions."
+            },
+            {
+              "type": "paragraph",
+              "text": "For Standard deployments targeting several VMs or a scale set, use inbound NAT rules v2. A v2 rule references the backend pool and preallocates frontend ports using a starting port and maximum machine count. With start 50000 and capacity four, the range is 50000 through 50003, not through 50004. Suppose the retrieved mapping shows 50000 to 10.20.1.4:22 and 50001 to 10.20.1.5:22. Connecting to the second mapping targets VM two specifically. Always inspect actual mappings rather than assuming address order determines port order."
+            },
+            {
+              "type": "paragraph",
+              "text": "When the pool scales, v2 preserves mappings for remaining VMs and assigns mappings to new members from the available range. Insufficient reserved ports can block scale-out, so four reserved mappings do not support a fifth simultaneous backend. Current documentation recommends v2 for multiple machines but still supports v1 single-VM rules. The announced retirement concerns VM scale-set Inbound NAT Pools, a v1 feature: new pool creation ends November 15, 2026, and retirement is September 30, 2027. Do not misreport this as retirement of every v1 NAT rule."
+            }
+          ]
+        },
+        {
+          "id": "lb-outbound-explicit",
+          "title": "A reply is not a new internet connection",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The response to an established inbound load-balanced request follows that flow's reverse translation. It does not need a separate outbound rule just to reply. A new connection initiated by a web VM to download an update is different. Source NAT, or SNAT, gives that private-source connection a usable public source address and port, then maps replies back. An internal load balancer supplies no implicit internet egress. A route with next hop Internet also supplies no public source translation by itself."
+            },
+            {
+              "type": "paragraph",
+              "text": "Plan explicit outbound connectivity. Current portal-created subnets are private by default, and the new-VNet API default applies to versions released after March 31, 2026; existing VNets are not automatically changed. NAT Gateway is the recommended scalable outbound-only option. A public Standard Load Balancer can instead use an outbound rule specifying a frontend, backend pool, protocol, and SNAT allocation. When sharing a frontend with inbound rules, disable those rules' implicit outbound SNAT before using the explicit outbound rule. Use NIC-based pool membership here; IP-address-based pools have documented default-outbound caveats."
+            },
+            {
+              "type": "paragraph",
+              "text": "For internet-directed new flows from a subnet with NAT Gateway, that gateway takes precedence over load balancer outbound SNAT. This does not mean it overrides a UDR sending the traffic to an NVA; route selection still happens. Conversely, an inbound NAT rule alone does not define general outbound SNAT. Decide which resource should own egress and document its public IPs for allowlists. Avoid a setup where an application happens to download packages today but depends on an implicit outbound behaviour that nobody planned."
+            }
+          ]
+        },
+        {
+          "id": "lb-snat-numbers",
+          "title": "Count ports without promising unlimited connections",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Budget 2,048 SNAT ports per web VM",
+              "scenario": "Assume two NIC-based backends, one public Standard frontend used by an explicit TCP outbound rule, no NAT Gateway, no VM public IPs, and an Internet next hop. Choose 2,048 ports per instance.",
+              "steps": [
+                {"action": "Calculate 2 x 2,048 = 4,096 allocated ports.", "why": "A frontend public IP supplies up to 64,000 SNAT ports. This modest allocation leaves room for reservations; sharing inbound rules also consumes port blocks."},
+                {"action": "Check that 2,048 is divisible by eight: 2,048 / 8 = 256.", "why": "Manual Load Balancer SNAT allocations use multiples of eight. The budget must also fit the actual frontend and rule configuration."},
+                {"action": "Trace a new outbound connection from 10.20.1.4:54000 to documentation destination 192.0.2.80:443.", "why": "The VM is the initiating client in this conversation, unlike the earlier inbound school-app request."},
+                {"action": "Illustrate translation to 203.0.113.20:61000, with the remote reply mapped back to 10.20.1.4:54000.", "why": "The translated port is illustrative, not guaranteed. Azure needs a distinct mapping to distinguish simultaneous connections to the same remote endpoint."},
+                {"action": "Compare 3,000 simultaneous TCP connections to that same remote IP and port with a 2,048-port instance budget.", "why": "That workload exceeds the allocation under these assumptions. Reuse application connections, review port metrics, and increase or redesign explicit egress capacity."}
+              ],
+              "result": "The arithmetic checks allocation feasibility, not a universal connection limit. TCP ports can be reused across different remote tuples, while held or idle mappings and other flows consume capacity."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Name the traffic direction precisely",
+              "text": "A load-balancing rule distributes inbound flows; an inbound NAT rule forwards a chosen frontend port; an outbound rule supplies explicit SNAT for new backend-initiated flows. A health probe decides readiness. None of these alone is a WAF, a VM public IP assignment, or a complete firewall policy."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "lb-check-probe-port",
+          "kind": "single",
+          "prompt": "The rule maps TCP 443 to 8443 and probes HTTP 8081. Which configuration can make the backend healthy?",
+          "choices": [
+            {"id": "lb-probe-listener", "text": "A reachable 8081 listener returning HTTP 200 on the configured path.", "explanation": "The health check uses its own configured protocol, port, and path."},
+            {"id": "lb-probe-front", "text": "Only an NSG rule allowing client traffic to frontend port 443.", "explanation": "It does not establish the backend's separate 8081 readiness path and may not allow translated application port 8443 either."},
+            {"id": "lb-probe-login", "text": "A 302 redirect from /health to the login page.", "explanation": "HTTP health probes require 200; a redirect is not a successful readiness response."}
+          ],
+          "correctIds": ["lb-probe-listener"],
+          "explanation": "Match the check actually configured, not the port number associated with the website's public URL."
+        },
+        {
+          "id": "lb-check-nat-range",
+          "kind": "single",
+          "prompt": "An inbound NAT v2 rule reserves frontend ports from 50000 for four backend machines. What is the inclusive range?",
+          "choices": [
+            {"id": "lb-range-four", "text": "50000 through 50003", "explanation": "Inclusive counting gives 50003 - 50000 + 1 = 4 ports."},
+            {"id": "lb-range-five", "text": "50000 through 50004", "explanation": "That contains five ports, not the four reserved in the question."},
+            {"id": "lb-range-any", "text": "Every TCP port, because v2 uses a backend pool", "explanation": "A pool reference does not turn inbound NAT into an HA-ports rule."}
+          ],
+          "correctIds": ["lb-range-four"],
+          "explanation": "Inspect actual per-VM mappings and leave enough reserved capacity for intended scale-out."
+        },
+        {
+          "id": "lb-check-outbound",
+          "kind": "multiple",
+          "prompt": "Which two statements distinguish the inbound school request from a VM downloading an update?",
+          "choices": [
+            {"id": "lb-inbound-reply", "text": "A reply on the established inbound flow uses that flow's reverse translation.", "explanation": "It is not a new backend-initiated conversation requiring its own outbound rule."},
+            {"id": "lb-new-outbound", "text": "A private-subnet VM needs an explicit outbound method for a new ordinary internet connection.", "explanation": "A public frontend elsewhere in the configuration does not by itself establish the intended egress method."},
+            {"id": "lb-internal-egress", "text": "An internal load balancer automatically supplies public SNAT.", "explanation": "Its private frontend does not create public outbound connectivity."},
+            {"id": "lb-route-is-snat", "text": "An Internet route allocates a public source IP.", "explanation": "Routing direction and source translation are different requirements."}
+          ],
+          "correctIds": ["lb-inbound-reply", "lb-new-outbound"],
+          "explanation": "First identify who initiated the flow, then identify its configured translation and route."
+        },
+        {
+          "id": "lb-check-snat-budget",
+          "kind": "single",
+          "prompt": "One VM has 2,048 allocated SNAT ports and attempts 3,000 simultaneous TCP connections to the same remote IP and port. What should you expect under the lesson's assumptions?",
+          "choices": [
+            {"id": "lb-port-pressure", "text": "Port exhaustion can prevent some new connections.", "explanation": "Active connections to that same destination tuple require distinct translated source tuples, exceeding the stated budget."},
+            {"id": "lb-unlimited-port", "text": "One SNAT port can distinguish all 3,000 identical-destination connections.", "explanation": "Those simultaneous TCP flows cannot all share the same translated source tuple to the same destination tuple."},
+            {"id": "lb-probe-repair", "text": "Changing the health probe to HTTPS increases the SNAT budget.", "explanation": "Probe protocol does not allocate outbound source ports."}
+          ],
+          "correctIds": ["lb-port-pressure"],
+          "explanation": "Investigate application connection reuse and explicit egress capacity, not unrelated probe settings."
+        }
+      ],
+      "takeaways": [
+        "The backend listener, translated application port, and security rules must agree.",
+        "Probe traffic is separate from client traffic, and HTTP readiness requires status 200.",
+        "Inbound NAT v2 manages per-instance port mappings; it is not a healthy-backend selection rule.",
+        "Do not confuse the NAT Pools retirement with supported single-VM NAT v1 rules.",
+        "Plan explicit outbound connectivity and measure SNAT capacity rather than relying on defaults."
+      ],
+      "sourceIds": ["lb-how-unit", "lb-probes", "lb-nat", "lb-outbound-rules", "lb-snat", "lb-private-outbound", "lb-nsg", "lb-exam"]
+    },
+    {
+      "id": "availability-and-troubleshooting",
+      "title": "Keep the service available and find the failing layer",
+      "summary": "Combine backend capacity, zone placement, useful probes, and a precise troubleshooting sequence. Treat HA ports as a qualified NVA design, not an automatic failover guarantee.",
+      "objectives": [
+        "Explain what Standard Load Balancer can and cannot preserve during a backend failure.",
+        "Calculate remaining application capacity after an instance fails.",
+        "Diagnose frontend, rule, probe, backend security, routing, and outbound problems separately.",
+        "State the topology assumptions behind HA ports and Floating IP."
+      ],
+      "sections": [
+        {
+          "id": "lb-availability-layers",
+          "title": "A reachable address still needs somewhere useful to send traffic",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "High availability means keeping the service useful when something fails, not merely keeping its IP address allocated. The load balancer can direct new flows away from an unhealthy backend, but cannot supply capacity that no healthy server has. It does not replicate the database or copy an in-memory login session from a failed VM. Plan the frontend, web servers, shared state, and database as separate availability concerns. The school application still has a database dependency even when two web servers sit behind one stable frontend."
+            },
+            {
+              "type": "paragraph",
+              "text": "An availability zone is a physically separate group of datacenters within an Azure region. A zone-redundant frontend uses infrastructure across zones, while a zonal frontend has a specific zone placement. For a public frontend, the public IP's zone configuration matters; for an internal frontend, configure its zone support. Distribute backend VMs across zones too. Two VMs in one failed zone cannot serve traffic just because the frontend is zone-redundant. Check region and VM-size support rather than assuming every region offers the same placement options."
+            }
+          ]
+        },
+        {
+          "id": "lb-failure-semantics",
+          "title": "New flows and existing connections behave differently",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "When a backend's probe fails, Standard Load Balancer stops assigning new connections to that unhealthy endpoint. A probe-down signal does not automatically migrate an established TCP connection to another VM. Existing TCP flows can continue while the backend still serves them, until connection closure or timeout. If the VM actually crashes, its application cannot keep replying, regardless of the load balancer's flow handling. Clients need suitable retries, and applications need to avoid duplicating important actions when a timed-out request is retried."
+            },
+            {
+              "type": "paragraph",
+              "text": "Do not generalise TCP behaviour to UDP. UDP does not establish a TCP-style connection; the load balancer still tracks a flow for forwarding. Current documentation describes existing UDP flows moving to another healthy instance when one instance probes down, and terminating when all instances probe down. When every backend is unhealthy, no new flows are sent to the pool. In the documented multi-instance Standard case, existing TCP flows can remain if the backends can still serve them. This is not a promise of uninterrupted service during a machine or zone failure."
+            },
+            {
+              "type": "prediction",
+              "id": "lb-zone-prediction",
+              "prompt": "A zone-redundant frontend points to two web VMs, both in zone 1. Zone 1 loses both VMs. Can the frontend serve the application from zone 2 by itself?",
+              "answer": "No. The frontend may remain available, but it has no healthy application backend.",
+              "explanation": "Frontend redundancy does not create replacement compute or replicate application data. Spread capable backends across failure domains and plan enough surviving capacity."
+            }
+          ]
+        },
+        {
+          "id": "lb-capacity-worked-example",
+          "title": "Calculate the capacity after a failure",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Two healthy servers do not guarantee one can carry the whole school",
+              "scenario": "A controlled application test measured 120 requests per second as each web VM's sustainable capacity. Demand is 180 requests per second. Assume independent requests, adequate database capacity, and sufficiently even distribution for this planning calculation, not an exact Load Balancer guarantee.",
+              "steps": [
+                {"action": "Calculate normal combined capacity: 2 x 120 = 240 requests per second.", "why": "Demand 180 is below that measured total, leaving 60 requests per second of aggregate headroom."},
+                {"action": "Estimate normal per-VM demand as 180 / 2 = 90 requests per second.", "why": "This is a planning average. A few large or persistent connections can make real per-VM work less even."},
+                {"action": "Remove one VM and recalculate capacity as 120 requests per second.", "why": "A health probe can remove the failed VM from new-flow selection, but cannot increase the surviving VM's measured capacity."},
+                {"action": "Compare remaining capacity with demand: 180 - 120 = 60 requests per second above capacity.", "why": "Without extra capacity, demand reduction, or a suitable scale response, queues and failures can still grow."},
+                {"action": "Plan three comparable VMs across suitable zones if surviving one VM loss at this demand is required.", "why": "After one fails, 2 x 120 = 240 remains. Test the whole application because its database or shared storage may impose another bottleneck."}
+              ],
+              "result": "Successful probe failover is only one part of availability. Capacity, state handling, and dependencies determine whether students still receive useful responses."
+            }
+          ]
+        },
+        {
+          "id": "lb-ha-ports",
+          "title": "HA ports need a complete appliance design",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An HA-ports rule is useful when an internal Standard Load Balancer must distribute many transport ports, especially to NVAs. Configure protocol All with frontend and backend ports zero; zero here means the special HA-ports selection, not an application listening on ordinary port zero. The rule covers all TCP and UDP ports. Current product documentation also supports ICMP with an internal Standard HA-ports rule, but that does not make ordinary TCP rules or outbound SNAT support every protocol. Health probes must represent the appliance's ability to handle the required transit traffic."
+            },
+            {
+              "type": "paragraph",
+              "text": "For example, a UDR could use internal frontend 10.20.3.10 as its appliance next hop, with NVAs 10.20.3.4 and 10.20.3.5 behind it. Both appliances still need NIC and guest forwarding, appropriate inspection policy, and onward and return routes. Assume one internal load balancer, one frontend, one backend pool, and one NIC with one IP configuration per NVA for the simplest documented flow-symmetry case. Both directions must traverse the supported design. Do not claim symmetry across independent public and internal load balancers or multiple independently selecting pools."
+            },
+            {
+              "type": "paragraph",
+              "text": "Floating IP changes the address mapping seen by the backend and requires corresponding guest or appliance configuration. For a directly addressed frontend service, that commonly includes accepting the frontend IP through a configured loopback. It is not a switch that copies firewall connection state between NVAs. A single non-floating HA-ports configuration is supported with restrictions on additional rules and internal load balancers. Multiple HA frontends for the same pool require Floating IP on their rules. Follow the documented topology and appliance vendor guidance instead of assuming Floating IP is always required or always harmless."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "An HA rule is not an availability guarantee",
+              "text": "HA ports are an internal Standard Load Balancer feature for supported topologies. They do not automatically configure UDRs, enable NVA forwarding, synchronise state, or create symmetric paths across unrelated load balancers. For an ordinary web pool, start with the specific required application ports rather than an unnecessary HA-ports design."
+            }
+          ]
+        },
+        {
+          "id": "lb-layered-troubleshooting",
+          "title": "Troubleshoot the exact failed connection",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Write down one failing flow before changing anything: client 198.51.100.25:53000, frontend 203.0.113.20:443, TCP, selected backend 10.20.1.5:8443 if known. Verify the client reached the intended frontend and that its protocol and port match a rule. Then verify membership of the backend pool, probe health, the backend listener, and security for the translated application port. If the probe is green but NSGs allow only backend 443, a listener on 8443 can still be unreachable to users. Probe success is not an application access test."
+            },
+            {
+              "type": "paragraph",
+              "text": "Investigate return routing too. A newly added default UDR to a firewall can change how public-client replies leave the backend subnet, causing an unsupported or asymmetric path. Inspect effective routes for the relevant NIC and the complete appliance design. If private-IP tests work but a configured name fails, inspect DNS separately. If only backend-initiated public connections fail, inspect explicit outbound configuration and SNAT ports rather than rebuilding the inbound rule. Retest with a new connection after a change; existing stateful connections can preserve old behaviour."
+            },
+            {
+              "type": "paragraph",
+              "text": "A sensible fault-isolation order is frontend and rule, pool membership, probe, endpoint security and listener, then return path and dependencies. Keep tests narrow: one backend, one protocol, one destination port. For example, a TCP test to 8443 from an authorised internal client helps isolate the VM's service from the public frontend path. It does not prove every public source is permitted. Repeatedly opening unrelated ports can hide the original cause and leave unnecessary exposure after the incident."
+            }
+          ]
+        },
+        {
+          "id": "lb-monitoring-evidence",
+          "title": "Use metrics that answer the right question",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Health Probe Status shows how the configured readiness checks see the backends. Data Path Availability describes the platform path to backend hosts; it does not log in as a student or test a database query. Inspect both rather than treating either as a universal application-health light. Split probe metrics by backend when possible because a pool-wide average can hide one failed VM. Metrics can take time to appear, especially after creation or configuration changes, so missing samples are not automatically proof of an outage."
+            },
+            {
+              "type": "paragraph",
+              "text": "For outbound incidents, compare Used SNAT Ports with Allocated SNAT Ports and inspect successful versus failed SNAT connections for the relevant backend and protocol. An inbound website can work while its server exhausts outbound ports to a shared external API. For traffic volume, bytes need not be evenly split because distribution is flow-based. Combine metrics with guest logs, application errors, and carefully scoped packet evidence. Record the observed failure and the successful retest so the next administrator knows which layer was actually repaired."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "lb-check-capacity",
+          "kind": "single",
+          "prompt": "Two VMs each sustain 120 requests per second. Demand is 180. One VM fails. What does probe-based failover alone accomplish?",
+          "choices": [
+            {"id": "lb-capacity-reduced", "text": "It sends new flows to the survivor, but demand exceeds its capacity by 60 requests per second.", "explanation": "The remaining capacity is 120, and 180 - 120 = 60. Selecting the survivor does not increase its capacity."},
+            {"id": "lb-capacity-doubled", "text": "It doubles the survivor's capacity automatically.", "explanation": "The load balancer does not add CPU or compute instances as part of a probe decision."},
+            {"id": "lb-capacity-migrate", "text": "It moves every existing connection and in-memory session to the survivor.", "explanation": "Application state and established TCP sessions are not transparently transferred to another VM."}
+          ],
+          "correctIds": ["lb-capacity-reduced"],
+          "explanation": "Design for useful capacity after a failure, not only successful detection of that failure."
+        },
+        {
+          "id": "lb-check-green-probe",
+          "kind": "single",
+          "prompt": "HTTP 8081 probes are healthy, but users cannot connect through frontend 443 mapped to backend 8443. The guest listens on 8443. What is a focused next check?",
+          "choices": [
+            {"id": "lb-check-translated-port", "text": "Whether applicable NSGs and the guest firewall permit the client flow to backend TCP 8443.", "explanation": "Probe readiness and user access use different ports and sources in this design."},
+            {"id": "lb-check-ignore-client", "text": "Ignore user reports because a green probe proves the website works.", "explanation": "The probe checks only its configured readiness endpoint, not the entire client path."},
+            {"id": "lb-check-add-public", "text": "Assign public IPs to both backend NICs before checking security.", "explanation": "Individual public IPs are not required and do not directly address the stated port mismatch."}
+          ],
+          "correctIds": ["lb-check-translated-port"],
+          "explanation": "Follow the translated flow rather than assuming frontend and backend ports are identical."
+        },
+        {
+          "id": "lb-check-ha-assumptions",
+          "kind": "multiple",
+          "prompt": "Which two conditions belong in a responsible HA-ports NVA design?",
+          "choices": [
+            {"id": "lb-ha-supported", "text": "Use an internal Standard Load Balancer and a documented frontend, pool, and NIC topology.", "explanation": "HA ports and flow-symmetry guarantees have explicit scope and topology constraints."},
+            {"id": "lb-ha-forwarding", "text": "Configure appliance forwarding, security, probes, and routes in both directions.", "explanation": "The load-balancing rule does not configure the rest of the transit path."},
+            {"id": "lb-ha-two-independent", "text": "Assume independent public and internal load balancers always select the same NVA.", "explanation": "Independent selections across load-balancer components do not guarantee symmetry."},
+            {"id": "lb-ha-state-copy", "text": "Rely on Floating IP to copy firewall session state between VMs.", "explanation": "Floating IP changes address mapping and guest requirements, not appliance state replication."}
+          ],
+          "correctIds": ["lb-ha-supported", "lb-ha-forwarding"],
+          "explanation": "High availability comes from a supported end-to-end design, not from the feature name alone."
+        },
+        {
+          "id": "lb-check-metrics",
+          "kind": "single",
+          "prompt": "The school website accepts inbound users, but backend connections to one public API intermittently fail. Which evidence most directly tests SNAT exhaustion?",
+          "choices": [
+            {"id": "lb-metric-ports", "text": "Used and allocated SNAT ports plus failed outbound SNAT connections, filtered to the backend.", "explanation": "These metrics relate to the capacity and success of backend-initiated public flows."},
+            {"id": "lb-metric-probe-only", "text": "Only the HTTP readiness probe on 8081.", "explanation": "That endpoint can remain healthy while the backend runs out of outbound translation capacity."},
+            {"id": "lb-metric-dns-records", "text": "The number of records in the public DNS zone.", "explanation": "Record count does not measure source-port allocation or outbound connection failures."}
+          ],
+          "correctIds": ["lb-metric-ports"],
+          "explanation": "Match the diagnostic signal to the failing traffic direction and resource."
+        }
+      ],
+      "takeaways": [
+        "Frontend redundancy, backend placement, surviving capacity, and application state are separate availability requirements.",
+        "Probe failure changes new-flow selection, not automatic migration of existing TCP sessions.",
+        "HA ports and Floating IP require explicit topology and guest assumptions.",
+        "Trace the translated backend port, original client source, and return route when probes are healthy but users fail.",
+        "Use probe, data-path, and SNAT metrics for the different questions they actually answer."
+      ],
+      "sourceIds": ["lb-probes", "lb-reliability", "lb-ha-ports", "lb-floating", "lb-diagnostics", "lb-nsg", "lb-snat", "lb-exam"]
+    }
+  ],
+  "glossary": [
+    {"term": "Frontend", "definition": "The load balancer IP configuration clients contact, using a public or private address."},
+    {"term": "Backend pool", "definition": "The configured set of suitable VM interfaces or supported backend addresses eligible to receive flows."},
+    {"term": "Load-balancing rule", "definition": "A mapping from frontend protocol and port to a backend pool and port, normally using a health probe."},
+    {"term": "Health probe", "definition": "An independent readiness test used to determine which backend endpoints receive new flows."},
+    {"term": "Layer 4", "definition": "The transport layer, where TCP or UDP ports and IP-addressed flows matter rather than HTTP URLs."},
+    {"term": "Five-tuple", "definition": "Source IP, source port, destination IP, destination port, and protocol, used by default flow distribution."},
+    {"term": "Session persistence", "definition": "Distribution based on client IP, optionally with protocol, rather than all five default flow properties; not application session replication."},
+    {"term": "Inbound NAT", "definition": "Port forwarding from a frontend endpoint to a designated backend endpoint, without a load-balancing health-probe requirement."},
+    {"term": "SNAT", "definition": "Source network address translation, which gives backend-initiated private-source traffic a translated source for public connectivity."},
+    {"term": "Outbound rule", "definition": "An explicit Standard public Load Balancer configuration for backend SNAT using selected public frontends."},
+    {"term": "NAT Gateway", "definition": "A managed subnet outbound-connectivity service, distinct from inbound NAT rules on Load Balancer."},
+    {"term": "SNAT exhaustion", "definition": "A lack of available translation ports for new outbound flows under the current allocation and connection use."},
+    {"term": "HA ports", "definition": "An internal Standard Load Balancer rule configuration for all TCP and UDP ports, with additional documented protocol and topology conditions."},
+    {"term": "Floating IP", "definition": "A rule option that changes backend address mapping and requires a compatible guest or appliance configuration."},
+    {"term": "Zone redundancy", "definition": "Using infrastructure across availability zones to reduce reliance on one zone; backend placement must be designed separately."},
+    {"term": "WAF", "definition": "A web application firewall that inspects web requests for application-layer threats; not a feature supplied by a Standard Load Balancer rule."}
+  ],
+  "sources": [
+    {"id": "lb-module", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-load-balancer/", "title": "Learn: Introduction to Azure Load Balancer", "supports": "Official objectives and the unit sequence, from service purpose through mechanisms and scenario selection."},
+    {"id": "lb-what-unit", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-load-balancer/2-what-is-azure-load-balancer", "title": "Learn: What is Azure Load Balancer?", "supports": "Public and internal frontend concepts, backend VMs, scaling motivation, and multi-tier uses."},
+    {"id": "lb-how-unit", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-load-balancer/3-how-azure-load-balancer-works", "title": "Learn: How Azure Load Balancer works", "supports": "Coverage of frontend, rules, backend pools, probes, session persistence, inbound NAT, outbound rules, and HA ports; current product pages refine defaults and caveats."},
+    {"id": "lb-when-unit", "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-load-balancer/4-when-to-use-azure-load-balancer", "title": "Learn: When to use Azure Load Balancer", "supports": "L4 scenario selection and distinctions from Application Gateway, Front Door, Traffic Manager, and applications not requiring a load balancer."},
+    {"id": "lb-overview", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-overview", "title": "What is Azure Load Balancer?", "supports": "Current Standard capabilities, Basic retirement on September 30, 2025, public versus internal connectivity, and secure-by-default inbound configuration."},
+    {"id": "lb-distribution", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/distribution-mode-concepts", "title": "Azure Load Balancer distribution modes", "supports": "Five-tuple hashing, two- and three-tuple affinity, skew with shared source addresses, and changed distribution after pool membership changes."},
+    {"id": "lb-probes", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-custom-probe-overview", "title": "Azure Load Balancer health probes", "supports": "TCP and HTTP/HTTPS checks, HTTP 200 requirement, explicit-response threshold behaviour, probe sources, separate probe ports, and TCP versus UDP probe-down behaviour."},
+    {"id": "lb-nat", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/inbound-nat-rules", "title": "Inbound NAT rules", "supports": "V2 pool-based port mappings and scale behaviour, continued single-VM v1 support, and the specific 2026 and 2027 NAT Pools retirement milestones."},
+    {"id": "lb-outbound-rules", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/outbound-rules", "title": "Outbound rules for Azure Load Balancer", "supports": "Explicit public Standard SNAT, disabling implicit SNAT when sharing inbound frontends, NIC-based pool guidance, allocation multiples of eight, and outbound-rule limits."},
+    {"id": "lb-snat", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-outbound-connections", "title": "Use SNAT for outbound connections", "supports": "Explicit outbound methods, NAT Gateway precedence for applicable flows, up to 64,000 ports per frontend, inbound port reservations, and destination-dependent port reuse."},
+    {"id": "lb-private-outbound", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/default-outbound-access", "title": "Default outbound access in Azure", "supports": "Private-subnet defaults and their API-version and existing-VNet scope, plus IP-based backend pool caveats."},
+    {"id": "lb-ha-ports", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-ha-ports-overview", "title": "High availability ports overview", "supports": "Internal Standard scope, All and zero-port settings, supported Floating IP configurations, current ICMP support, and flow-symmetry topology limits."},
+    {"id": "lb-floating", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-floating-ip", "title": "Load Balancer Floating IP configuration", "supports": "Address-mapping changes, guest configuration requirements, and distinctions from ordinary non-floating forwarding."},
+    {"id": "lb-reliability", "url": "https://learn.microsoft.com/en-us/azure/reliability/reliability-load-balancer", "title": "Reliability in Azure Load Balancer", "supports": "Independent frontend and backend zone design, application-state responsibility, transient-fault handling, and zone-failure behaviour."},
+    {"id": "lb-diagnostics", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-standard-diagnostics", "title": "Standard Load Balancer diagnostics", "supports": "Health Probe Status versus Data Path Availability, metric interpretation, and used, allocated, and failed SNAT connection evidence."},
+    {"id": "lb-nsg", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Network security groups overview", "supports": "Post-translation inbound destination filtering, original client source identity, default probe allowances, and stateful connection behaviour."},
+    {"id": "lb-portal", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/quickstart-load-balancer-standard-public-portal", "title": "Create a public Standard Load Balancer in the portal", "supports": "Manual frontend, pool, rule, probe, VM, IIS, and cleanup workflow; the authored lab uses deliberate NIC-based membership and explicit egress."},
+    {"id": "lb-exam", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "AZ-104 study guide", "supports": "Current objectives to configure internal or public load balancers, troubleshoot load balancing, and interpret monitoring evidence."}
+  ],
+  "lab": {
+    "title": "Optional manual lab: observe two backends and one failed probe",
+    "purpose": "Build a disposable Standard public load balancer and observe new connections moving away from a deliberately stopped backend service. Browser-only trace and arithmetic exercises remain the default; no resource is created automatically.",
+    "prerequisites": [
+      "Explicit approval to use a training subscription and one new isolated resource group, with permissions to create and later delete its resources.",
+      "A checked regional price estimate for two small supported VMs, managed disks, Standard Load Balancer, public IPs, Bastion, and optional NAT Gateway.",
+      "A management path such as a budgeted Bastion deployment, plus basic Windows Server administration for a graphical IIS installation.",
+      "A known current client public source address for a narrowly scoped HTTP test allowance, and no production data, credentials, or real student records in test pages."
+    ],
+    "costWarning": "Standard Load Balancer rules and processed data, VM runtime, disks, public IPs, Bastion, NAT Gateway, and applicable data transfer can incur charges. Idle Bastion or NAT Gateway resources can still bill, and stopping VMs does not remove disks or the load balancer. No fixed price or free-credit coverage is assumed. Estimate costs for your region and delete the isolated resources promptly.",
+    "steps": [
+      "First perform the five-tuple, NAT port-range, and post-failure capacity exercises on paper or in the browser. If you do not want a paid lab, stop without opening a deployment workflow.",
+      "If proceeding manually, create a new uniquely named group such as rg-school-lb-lab-<your-suffix>. Record all resources. Create an isolated VNet 10.20.0.0/16 and web subnet 10.20.1.0/24. Do not modify the routing lesson's resources or any existing school VNet.",
+      "Create two small supported Windows Server VMs with private NIC addresses 10.20.1.4 and 10.20.1.5 and no individual public IPs. Where supported and affordable, place them in different zones. Keep all disks, NICs, and NSGs in the lab group.",
+      "Provide an approved private management route. For the Bastion option, use a dedicated AzureBastionSubnet such as 10.20.4.0/26 and lab-only Bastion resources following current portal requirements. Configure explicit outbound connectivity, such as a budgeted NAT Gateway on the web subnet, for required installation or update traffic. Do not assume private-subnet default egress.",
+      "Using each VM's graphical Server Manager, add the Web Server IIS role and its management tools. In IIS Manager, verify a site listening on TCP 80 at the VM's reachable address. Create a harmless static health.html returning 200 and a distinct index.html identifying VM one or VM two. Use no passwords or personal data; this optional lab intentionally tests plain HTTP rather than certificate setup.",
+      "Create a regional Standard public Load Balancer with an allocated Standard public IPv4 frontend, preferably zone-redundant in a supported region. Record the actual allocated address; do not enter documentation address 203.0.113.20 as though it belonged to you.",
+      "Create a NIC-based backend pool containing the primary IP configurations of the two lab VMs. Add an HTTP probe on port 80 with path /health.html and a deliberate interval, for example five seconds. Add a TCP load-balancing rule from frontend 80 to backend 80 using that probe, session persistence None, and Floating IP disabled.",
+      "If the chosen egress method is NAT Gateway, leave implicit outbound SNAT disabled on the inbound rule and do not add a competing outbound-rule experiment. Permit only the intended test client source to backend TCP 80 in applicable NSGs and guest firewalls, and allow the required AzureLoadBalancer probe traffic. Keep SSH and RDP off unrestricted public access.",
+      "Confirm both probe endpoints are healthy, then browse to http://<actual-frontend-ip>/index.html from the permitted client. Start several independent connections if you want to sample distribution; one refreshed or reused browser connection need not alternate between VMs.",
+      "Using IIS Manager on only VM two, stop its site. Observe its failed probe and test new frontend connections until they reach VM one. Do not interpret this as migration of existing TCP connections. Restart VM two's site, confirm /health.html returns 200, and observe recovery.",
+      "Review per-backend Health Probe Status and Data Path Availability in the portal, allowing for metric delay. Record the healthy and failed states, the backend addresses, and the rule and probe ports. Finish with the cleanup checklist rather than leaving the environment running."
+    ],
+    "expectedResults": [
+      "Both private VMs can serve the public frontend without individual VM public IP addresses.",
+      "The configured probe reports readiness independently for each backend, and new connections avoid VM two after its service becomes unhealthy.",
+      "Restarting the stopped site restores eligibility after successful health checks; exact browser alternation is not required.",
+      "The lab's deliberate HTTP 80 rule and probe are simpler than the separate 443, 8443, and 8081 teaching example, and should not be confused with a production TLS design."
+    ],
+    "cleanup": [
+      "Inspect the exact lab resource group and resource inventory before deletion. Confirm it contains only disposable resources created for this exercise, then manually delete that group, not an existing shared group.",
+      "Verify that the load balancer, frontend public IP, both VMs, disks, NICs, NSGs, VNet, and any lab-only Bastion or NAT Gateway and their public IPs are removed. Check individually for lab resources intentionally created outside the group.",
+      "Remove any temporary client access allowances or local lab bookmarks you added. Confirm deletion completion and later review Cost Management for delayed charges; a stopped web service is not cleanup."
+    ]
+  }
+}

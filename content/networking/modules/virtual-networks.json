@@ -1,0 +1,742 @@
+{
+  "schemaVersion": 1,
+  "id": "virtual-networks",
+  "title": "Virtual networks: understand the address before building the network",
+  "summary": "Follow a fictional Romanian school's application from an individual packet to an Azure address plan. Calculate subnet capacity, separate naming from connectivity, and make deliberate private, public, and outbound access decisions.",
+  "priority": "core",
+  "priorityReason": "Addressing and subnet reasoning support nearly every later networking task. The current AZ-104 guide explicitly includes virtual networks, subnets, public IP addresses, peering, and connectivity troubleshooting. Core describes teaching priority, not a prediction of question frequency.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Explain what an Azure virtual network provides and identify its main components.",
+    "Explain why subnets are useful and plan valid, nonoverlapping subnet address ranges.",
+    "Choose private or public IP addressing for a resource's communication requirements.",
+    "Create a virtual network and configure IP address allocation and association."
+  ],
+  "lessons": [
+    {
+      "id": "packets-and-addresses",
+      "title": "What actually travels between two computers?",
+      "summary": "Build a practical vocabulary for packets, IP addresses, ports, interfaces, routes, and DNS, using a school timetable application.",
+      "objectives": [
+        "Describe the source, destination, protocol, and ports of a connection.",
+        "Read an IPv4 address as four numbers representing 32 bits.",
+        "Distinguish a private address, a public address, and a DNS name.",
+        "Explain why having an address or a route does not guarantee a successful application request."
+      ],
+      "sections": [
+        {
+          "id": "a-school-request",
+          "title": "Start with something the school needs",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Imagine a Romanian school building a timetable website. A student asks to see Tuesday's classes. The web server receives that request, asks a database for the timetable, and returns a page. A server is a computer program, or the computer running it, that answers requests. A client is the program making a particular request. The web server is therefore a server to the student's browser but a client when it contacts the database. These words describe roles, not permanent categories of machines."
+            },
+            {
+              "type": "paragraph",
+              "text": "We will call the fictional public website classroom.example. We do not own or deploy that domain. Inside Azure, the web virtual machine has address 10.20.1.4 and the database virtual machine has address 10.20.2.5. A virtual machine, or VM, runs an operating system on virtualized hardware. Virtualized means software presents the machine with computing equipment while the cloud provider manages the underlying physical servers. Our example uses separate VMs so that we can reason clearly about which computer starts each connection."
+            }
+          ]
+        },
+        {
+          "id": "packets-and-ports",
+          "title": "A request needs more than a destination address",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Network data travels in pieces called packets. A packet carries data plus control information, including a source IP address and a destination IP address. IP means Internet Protocol, the rules used to address and move packets between networks. A large web page normally involves many packets. The network does not need to understand a timetable to carry them. It needs enough addressing information to deliver each piece toward the correct destination."
+            },
+            {
+              "type": "paragraph",
+              "text": "A port is a number used by a transport protocol to distinguish conversations and services on a computer. TCP, Transmission Control Protocol, supports an ordered, reliable stream by tracking delivery and retransmitting missing data. UDP, User Datagram Protocol, sends independent messages without TCP's delivery and ordering machinery. HTTPS is encrypted web communication, normally using TCP destination port 443. In our database example, assume SQL Server is configured to listen on TCP port 1433. Listening means the server program is ready to accept requests on that port."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose the web VM chooses temporary source port 51000. Its database connection is TCP from 10.20.1.4:51000 to 10.20.2.5:1433. The colon separates an address from a port in this notation. The reply reverses those endpoints. Port 1433 is not part of the database's IP address, and the client does not normally use 1433 as its source port. This distinction will matter when writing firewall rules: usually you restrict the destination service port, not the client's temporary source port."
+            }
+          ]
+        },
+        {
+          "id": "four-numbers",
+          "title": "Read an IPv4 address without guessing",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "IPv4 is version 4 of IP. An IPv4 address contains 32 bits. A bit has two possible values, zero and one. We usually display those bits as four decimal numbers separated by dots, such as 10.20.1.4. Each number represents eight bits and is called an octet. Eight bits give 2 to the power of 8, or 256, possible combinations. Because counting begins at zero, each octet ranges from 0 through 255. An address containing 300 is not a valid IPv4 address."
+            },
+            {
+              "type": "paragraph",
+              "text": "The dots make the address easier to read, but they do not automatically identify the network boundary. Whether two addresses belong to the same subnet depends on an additional value called the network prefix. A subnet is a smaller address range within a network. We will calculate prefixes in the next lesson. For now, the school deliberately places 10.20.1.4 in web subnet 10.20.1.0/24 and 10.20.2.5 in database subnet 10.20.2.0/24. The /24 notation describes the size and boundary of each range, not a port."
+            }
+          ]
+        },
+        {
+          "id": "private-versus-public",
+          "title": "Private means an addressing scope, not automatic trust",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Private IPv4 ranges are set aside for internal networks. Different schools can reuse them because the public internet does not route them as globally unique destinations. Our school chooses 10.20.0.0/16 for its application network, 10.40.0.0/16 for a future services network, and 172.20.0.0/16 for its physical office network. Those ranges must remain distinguishable when we connect the networks. If both office and cloud use the same range, a destination address may no longer identify which network we mean."
+            },
+            {
+              "type": "table",
+              "caption": "The three commonly used private IPv4 ranges",
+              "headers": ["Private range", "First address", "Last address"],
+              "rows": [
+                ["10.0.0.0/8", "10.0.0.0", "10.255.255.255"],
+                ["172.16.0.0/12", "172.16.0.0", "172.31.255.255"],
+                ["192.168.0.0/16", "192.168.0.0", "192.168.255.255"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Notice that not every address beginning with 172 is private: 172.20.0.1 is inside the listed range, while 172.40.0.1 is outside it. A public IP address is intended to be globally addressable, but public does not mean every port is open. Azure network rules and the application still control access. Likewise, a private address does not prove that its owner is trustworthy or that data is encrypted. A compromised web VM already inside the network is one reason to protect the database separately."
+            }
+          ]
+        },
+        {
+          "id": "interfaces-and-networks",
+          "title": "Place the address on an interface inside a subnet",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A network interface, usually shortened to NIC, connects a VM to a network. In Azure, the NIC is also a resource with an IP configuration. Its private address comes from its subnet. The subnet belongs to a virtual network, or VNet, which is a logically isolated network in Azure. Address space means the ranges assigned to that VNet. A VNet occupies one Azure region, a geographic deployment area, and can span that region's availability zones, which are separate groups of datacenter infrastructure."
+            },
+            {
+              "type": "paragraph",
+              "text": "The school uses one application VNet with two subnets because the web and database machines have different access requirements. Subnets organize addresses and provide places to apply policies. Merely placing the machines in different subnets does not block traffic. Azure provides routes between subnets in the same VNet by default. A route is an instruction describing where traffic for a destination range should go next. A network security group, introduced properly in the next module, is a collection of rules that permits or denies traffic."
+            },
+            {
+              "type": "diagram",
+              "title": "One database request inside the application VNet",
+              "description": "The web VM at 10.20.1.4, in subnet 10.20.1.0/24, sends a TCP request to database VM 10.20.2.5 on port 1433, in subnet 10.20.2.0/24. Azure's default VNet routing carries the request between the subnets inside 10.20.0.0/16. The return arrow represents the database reply. Both arrows assume network rules, guest firewalls, and the listening service permit the connection.",
+              "nodes": [
+                {"id": "web-vm", "label": "Web VM", "detail": "10.20.1.4 in 10.20.1.0/24", "column": 0, "row": 1},
+                {"id": "vnet-route", "label": "VNet routing", "detail": "App VNet 10.20.0.0/16", "column": 1, "row": 1},
+                {"id": "database-vm", "label": "Database VM", "detail": "10.20.2.5 in 10.20.2.0/24", "column": 2, "row": 1}
+              ],
+              "edges": [
+                {"from": "web-vm", "to": "vnet-route", "label": "TCP to 1433"},
+                {"from": "vnet-route", "to": "database-vm", "label": "Route to DB"},
+                {"from": "database-vm", "to": "web-vm", "label": "Reply to 51000"}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "names-and-connections",
+          "title": "Finding an address and reaching it are separate jobs",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "DNS, the Domain Name System, translates names into records, often records containing IP addresses. An A record maps a name to an IPv4 address. Assume the school has explicitly configured an A record for db.classroom.internal pointing to 10.20.2.5 and arranged for the web VM's DNS resolver to find it. A resolver is the component that answers or looks up DNS questions. This name does not exist automatically just because we mention it. DNS returns the destination; it neither creates a route nor grants database login permission."
+            },
+            {
+              "type": "paragraph",
+              "text": "The application VNet initially needs no office connection: a cloud-only network is a valid design. Later, peering can connect it to the separate services VNet. To connect the office, a site-to-site VPN can carry traffic through an encrypted tunnel between the office's VPN device and an Azure VPN gateway. Point-to-site VPN connects an individual computer instead. ExpressRoute is a private provider connection to Microsoft, rather than an internet VPN. These are deliberate connectivity choices, not consequences of both networks having private addresses."
+            }
+          ]
+        },
+        {
+          "id": "trace-the-request",
+          "title": "Worked example: separate the causes of failure",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "The web page opens, but the timetable does not",
+              "scenario": "Assume the browser can already reach the fictional website through a correctly configured public entry point. The web VM must query SQL Server at 10.20.2.5:1433. Both VMs are in the application VNet, with default routes and no custom network denies.",
+              "steps": [
+                {"action": "Resolve db.classroom.internal from the web VM's point of view and expect 10.20.2.5.", "why": "A failed or incorrect lookup explains why the program chooses no destination or the wrong destination. The browser's working DNS does not prove the web VM's private lookup works."},
+                {"action": "Identify the connection as TCP from 10.20.1.4:51000 to 10.20.2.5:1433.", "why": "Writing both endpoints prevents confusing a temporary client port with the database listening port."},
+                {"action": "Check that the destination is in 10.20.0.0/16 and use the default VNet route.", "why": "Different subnets inside this VNet do not require peering or a public address."},
+                {"action": "Check network rules, the database VM's operating-system firewall, and whether SQL Server listens on 1433.", "why": "A path can exist while a filter blocks the packets or no program accepts them. The operating-system firewall is separate from Azure's network filters."},
+                {"action": "If a connection succeeds but login fails, examine the application's database identity and permissions.", "why": "Authentication verifies who is connecting; authorization decides what that identity may do. Neither is granted by network reachability."}
+              ],
+              "result": "The administrator has a chain of testable claims instead of one vague claim that the network is broken. Fix the first unsupported claim, then repeat the request."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-dns-without-access",
+              "prompt": "DNS correctly returns 10.20.2.5, but the database firewall blocks TCP 1433. Will changing the DNS record to the same address fix the timetable?",
+              "answer": "No. Name resolution is already returning the intended destination.",
+              "explanation": "The failure is later in the connection path. Rewriting a correct record cannot change firewall permissions or start the database listener."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Address, route, permission, and application are different evidence",
+              "text": "For connectivity questions, do not treat a successful DNS lookup as proof of a working application. Same-VNet subnet connectivity normally has system routes already. Check the relevant filters and destination service before proposing peering, public IPs, or a larger subnet."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "packet-port-understanding",
+          "kind": "single",
+          "prompt": "Understanding: the web VM opens TCP from 10.20.1.4:51000 to 10.20.2.5:1433. Which field identifies the database's listening service?",
+          "choices": [
+            {"id": "destination-service", "text": "Destination port 1433", "explanation": "The destination port tells the database computer which TCP listener should receive this connection."},
+            {"id": "temporary-source", "text": "Source port 51000", "explanation": "This identifies the client's side of this conversation, not the database's listening service."},
+            {"id": "network-prefix", "text": "The /24 suffix of the database subnet", "explanation": "A network prefix describes an address range. It is not a TCP port or an application listener."}
+          ],
+          "correctIds": ["destination-service"],
+          "explanation": "Read the connection from the initiator toward the service: client temporary port to server listening port."
+        },
+        {
+          "id": "private-range-recall",
+          "kind": "single",
+          "prompt": "Recall: which address belongs to the private 172.16.0.0/12 range?",
+          "choices": [
+            {"id": "inside-office", "text": "172.20.8.9", "explanation": "The second octet, 20, falls between 16 and 31 inclusive."},
+            {"id": "outside-high", "text": "172.40.8.9", "explanation": "40 is above the private range's upper second-octet boundary of 31."},
+            {"id": "outside-low", "text": "172.15.8.9", "explanation": "15 is below the private range's lower second-octet boundary of 16."}
+          ],
+          "correctIds": ["inside-office"],
+          "explanation": "A familiar first octet is insufficient. Compare the address with the complete private range."
+        },
+        {
+          "id": "same-vnet-reasoning",
+          "kind": "single",
+          "prompt": "Understanding: the two school VMs are in different subnets of 10.20.0.0/16. Routes are unchanged, but a connection fails. Which claim is justified?",
+          "choices": [
+            {"id": "inspect-other-layers", "text": "A default route between the subnets exists, so filters and the service still need investigation.", "explanation": "Azure provides same-VNet routing. Security rules and the application's state are separate requirements."},
+            {"id": "peer-subnets", "text": "The two subnets must be peered.", "explanation": "Peering connects separate virtual networks, not subnets already inside one VNet."},
+            {"id": "publish-database", "text": "The database requires a public IP address.", "explanation": "The web VM can use the database's private address. Public exposure is unnecessary for this connection."}
+          ],
+          "correctIds": ["inspect-other-layers"],
+          "explanation": "Use the topology in the question. Do not solve a same-VNet problem by adding an unrelated internet entry point."
+        },
+        {
+          "id": "dns-evidence",
+          "kind": "multiple",
+          "prompt": "Understanding: which TWO statements follow from a successful lookup of the configured db.classroom.internal record?",
+          "choices": [
+            {"id": "name-found", "text": "The queried resolver returned a record for that name.", "explanation": "That is the direct evidence a successful lookup supplies."},
+            {"id": "destination-known", "text": "The application can use the returned IPv4 address as its intended destination.", "explanation": "An A record supplies an IPv4 destination, although the application still needs connectivity and permission."},
+            {"id": "login-granted", "text": "The web application's database identity has been authorized.", "explanation": "DNS does not check database identities or grant permissions."},
+            {"id": "route-installed", "text": "DNS installed a route between the web and database networks.", "explanation": "Name resolution and route configuration are separate mechanisms."}
+          ],
+          "correctIds": ["name-found", "destination-known"],
+          "explanation": "A lookup answers a naming question. It does not answer the routing, filtering, or application authorization questions."
+        }
+      ],
+      "takeaways": [
+        "An IP address identifies a network endpoint; a transport port distinguishes the service or conversation.",
+        "IPv4 contains 32 bits displayed as four octets between 0 and 255.",
+        "Private addressing avoids direct public routing but does not establish trust or encryption.",
+        "Azure routes between subnets of the same VNet by default; separate VNets need configured connectivity.",
+        "Diagnose naming, paths, filters, listeners, and application permissions separately."
+      ],
+      "sourceIds": ["learn-vnet", "learn-plan", "learn-addressing", "vnet-overview", "vnet-faq", "dns-resolution", "nsg-reference", "exam-guide"]
+    },
+    {
+      "id": "cidr-and-subnets",
+      "title": "Calculate subnet ranges instead of memorizing them",
+      "summary": "Work from 32 bits to aligned address blocks, Azure reservations, and a school capacity plan that leaves room for growth.",
+      "objectives": [
+        "Calculate total IPv4 addresses from a CIDR prefix.",
+        "Calculate the first and last addresses of /24, /25, and /26 blocks.",
+        "Subtract Azure's five reservations without confusing available addresses with a guaranteed VM count.",
+        "Detect misaligned, overlapping, and out-of-VNet subnet proposals."
+      ],
+      "sections": [
+        {
+          "id": "bits-to-ranges",
+          "title": "A prefix fixes the beginning of the address",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "CIDR stands for Classless Inter-Domain Routing. For address planning, CIDR notation gives a starting network address and a slash followed by the number of fixed network bits. In 10.20.1.0/24, the first 24 of the 32 IPv4 bits identify the network. The remaining 32 - 24 = 8 bits can vary within that block. We call these host bits. Each host bit doubles the number of combinations, so this block contains 2 to the power of 8 = 256 addresses. It does not contain 24 addresses."
+            },
+            {
+              "type": "paragraph",
+              "text": "You do not need to convert every address into binary, but one conversion makes the rule less mysterious. The eight positions in an octet have values 128, 64, 32, 16, 8, 4, 2, and 1. Selecting the 4 position and leaving the rest zero represents decimal 4. Selecting every position gives 128 + 64 + 32 + 16 + 8 + 4 + 2 + 1 = 255. A subnet mask is another way to show the fixed bits. For /24, its decimal form is 255.255.255.0."
+            }
+          ]
+        },
+        {
+          "id": "read-the-school-block",
+          "title": "Expand the school's ranges",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The application's 10.20.0.0/16 address space fixes the first two octets, because two octets contain 16 bits. Its third and fourth octets vary from 0 to 255, giving 256 multiplied by 256 = 65,536 addresses, from 10.20.0.0 through 10.20.255.255. That is the VNet's address space, not one automatically created subnet. We choose smaller subnet blocks within it. The school does not immediately need thousands of machines; the larger plan gives separate future networks room without renumbering existing ones."
+            },
+            {
+              "type": "paragraph",
+              "text": "The web subnet 10.20.1.0/24 fixes the first three octets. Its final octet ranges from 0 through 255. The database subnet 10.20.2.0/24 has the same size but a different third octet, so the two ranges do not overlap. Both fit inside 10.20.0.0/16. The proposed subnet 10.40.1.0/24 does not fit: its second octet is 40 rather than 20. It could belong to the services VNet 10.40.0.0/16, but not to the application VNet's existing address space."
+            },
+            {
+              "type": "table",
+              "caption": "More fixed bits leave fewer variable bits",
+              "headers": ["Prefix", "Host bits", "Total addresses", "After five Azure reservations"],
+              "rows": [
+                ["/24", "32 - 24 = 8", "256", "251"],
+                ["/25", "32 - 25 = 7", "128", "123"],
+                ["/26", "32 - 26 = 6", "64", "59"],
+                ["/27", "32 - 27 = 5", "32", "27"],
+                ["/28", "32 - 28 = 4", "16", "11"],
+                ["/29", "32 - 29 = 3", "8", "3"]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "azure-reservations",
+          "title": "Five addresses are not yours to allocate",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For a normal Azure IPv4 subnet, Azure reserves the first four addresses and the final address. In the web /24, 10.20.1.0 identifies the network, 10.20.1.1 is reserved for the gateway, and 10.20.1.2 and 10.20.1.3 are reserved for Azure's DNS mapping. The final address, 10.20.1.255, is reserved as the broadcast address. Broadcast means sending to all devices on a network segment; Azure VNets do not support broadcast even though that last address remains reserved. Do not assign any of these five to a VM."
+            },
+            {
+              "type": "paragraph",
+              "text": "The remaining range is 10.20.1.4 through 10.20.1.254, inclusive. Check the count: 254 - 4 + 1 = 251. The plus one matters because both endpoints are included. This is 251 potentially assignable addresses before other allocations, not a promise of 251 VMs. A NIC can have multiple IP configurations, and private endpoints or other services can consume subnet addresses. Service-specific capacity requirements also matter. Apply the five-address subtraction separately to each subnet, not once to the entire VNet."
+            }
+          ]
+        },
+        {
+          "id": "split-a-block",
+          "title": "Cut a /24 into two /25 blocks",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Use an unused planning range, 10.20.3.0/24, so we do not pretend to resize the occupied web subnet. Changing /24 to /25 fixes one additional bit. Seven host bits remain, giving 128 addresses in each child block. The first child begins at 10.20.3.0 and ends at 10.20.3.127. The second begins at 10.20.3.128 and ends at 10.20.3.255. The blocks are adjacent, meaning one follows the other with no gap, but they share no address."
+            },
+            {
+              "type": "paragraph",
+              "text": "The first /25 reserves .0, .1, .2, .3, and .127, leaving .4 through .126. The second reserves .128, .129, .130, .131, and .255, leaving .132 through .254. Each has 128 - 5 = 123 addresses before other allocations. Together they provide 246, not 251, because there are now two sets of reservations. Splitting creates useful policy boundaries, but it spends a few more addresses. A larger prefix number means a smaller block: more bits are fixed and fewer can vary."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-upper-half",
+              "prompt": "In 10.20.3.128/25, is 10.20.3.130 available for a VM simply because its final octet is greater than 3?",
+              "answer": "No. It is the third address in this subnet and is reserved.",
+              "explanation": "Reservations are relative to the subnet's starting address. The first four addresses here are .128 through .131, not .0 through .3."
+            }
+          ]
+        },
+        {
+          "id": "alignment-and-overlap",
+          "title": "A block must start at its own boundary",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Alignment means starting a subnet where its variable host bits are all zero. For /25 within a /24, valid starts are multiples of 128: .0 and .128. A proposed 10.20.3.64/25 is not a separate aligned /25 starting at .64. That address lies inside the .0 through .127 block. A tool may reject a non-network address or normalize it to the containing network. Either way, do not treat the typed address as proof that a new range begins there."
+            },
+            {
+              "type": "paragraph",
+              "text": "For /26, six host bits give 64-address blocks. Valid starts in 10.20.3.0/24 are .0, .64, .128, and .192. The corresponding ends are .63, .127, .191, and .255. To test overlap, write the first and last address of both ranges and look for a shared interval. For example, 10.20.3.0/25 overlaps 10.20.3.64/26 because both include .64 through .127. Different text after the slash does not make two ranges independent."
+            },
+            {
+              "type": "interactive",
+              "tool": "subnet",
+              "introduction": "Use this local IPv4/CIDR explorer without Azure. Inspect 10.20.3.0/24, then /25 and /26 blocks. Before each result, write the total addresses and expected first and last address. Compare the containing network for 10.20.3.64/25 with your alignment calculation. Finally inspect 10.20.3.128/25 and explain why .130 is reserved while .132 is potentially assignable. The tool checks arithmetic, not whether a real subnet already contains resources."
+            }
+          ]
+        },
+        {
+          "id": "size-for-purpose",
+          "title": "Choose a size from a requirement",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose a future school service needs 28 private addresses at launch. A /27 looks close because it contains 32 addresses, but 32 - 5 = 27 leaves one too few before any additional service consumption. A /26 has 64 - 5 = 59 potentially assignable addresses and meets that basic requirement. Then consider growth, replacement machines running alongside old ones, and any service's own minimum subnet size. Choosing the smallest mathematical fit without considering operations can create an avoidable migration later."
+            },
+            {
+              "type": "paragraph",
+              "text": "Subnets also express purpose. Keep the database separate from public-facing components so that one clear policy can apply to the database group. Some Azure services require a dedicated subnet, meaning their own subnet rather than one shared with ordinary VMs. VPN Gateway is one example. A network virtual appliance is a VM doing a network job such as firewall inspection; planning separate workload and appliance subnets helps avoid confusing traffic paths. Do not occupy every spare range merely because the portal permits it."
+            }
+          ]
+        },
+        {
+          "id": "subnet-worked-plan",
+          "title": "Worked example: reserve two future service subnets",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Two groups need 40 and 50 addresses",
+              "scenario": "The school retains web 10.20.1.0/24 and database 10.20.2.0/24. Within unused 10.20.3.0/24, a reporting group needs 40 addresses and a testing group needs 50. Assume ordinary IPv4 subnets and no extra service-specific reservations.",
+              "steps": [
+                {"action": "Compare /27 and /26 capacity for both groups.", "why": "A /27 offers only 27 addresses after Azure reservations. A /26 offers 59, enough for either requirement before other allocations."},
+                {"action": "Choose reporting subnet 10.20.3.0/26.", "why": "Its aligned block runs from .0 through .63. Reserved .0 through .3 and .63 leave .4 through .62: 62 - 4 + 1 = 59 addresses."},
+                {"action": "Choose testing subnet 10.20.3.64/26.", "why": "Its next aligned block runs from .64 through .127. Reserved .64 through .67 and .127 leave .68 through .126: also 59 addresses."},
+                {"action": "Compare both ranges with every existing subnet and the parent /16.", "why": "They fit inside 10.20.0.0/16, do not overlap each other, and do not overlap either existing /24."},
+                {"action": "Leave 10.20.3.128/25 unallocated and document the remaining headroom.", "why": "Reporting has 19 addresses beyond its requirement, testing has 9, and the unused upper half can support a later requirement without changing these boundaries."}
+              ],
+              "result": "The address plan meets both stated requirements and leaves deliberate growth space. It does not claim that the planned subnets or VMs have been deployed."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Count, subtract, align, then compare",
+              "text": "A question may give a VM count, a prefix, or a proposed IP. First calculate 2^(32 - prefix), then subtract five for a normal Azure IPv4 subnet. Check the actual block boundary and existing allocations. A correct capacity calculation does not rescue an overlapping or out-of-range subnet."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "cidr-capacity",
+          "kind": "single",
+          "prompt": "Understanding: an empty ordinary Azure IPv4 /26 subnet has how many potentially assignable addresses before other resource allocations?",
+          "choices": [
+            {"id": "capacity-fifty-nine", "text": "59", "explanation": "32 - 26 = 6 host bits gives 64 addresses. Azure reserves five, leaving 59."},
+            {"id": "capacity-sixty-two", "text": "62", "explanation": "This subtracts only two addresses. Azure reserves five, not just a network and broadcast address."},
+            {"id": "capacity-twenty-six", "text": "26", "explanation": "26 is the count of fixed network bits, not the number of addresses."}
+          ],
+          "correctIds": ["capacity-fifty-nine"],
+          "explanation": "Use the variable bits to count combinations, then apply the platform's reservations."
+        },
+        {
+          "id": "upper-half-reservations",
+          "kind": "single",
+          "prompt": "Understanding: which is the first potentially assignable address in 10.20.3.128/25?",
+          "choices": [
+            {"id": "first-upper-valid", "text": "10.20.3.132", "explanation": "The first four addresses are .128, .129, .130, and .131, so .132 is the first remaining address."},
+            {"id": "first-upper-network", "text": "10.20.3.128", "explanation": "This is the network address, the first of Azure's reserved addresses."},
+            {"id": "first-wrong-block", "text": "10.20.3.4", "explanation": "This belongs to the lower /25, outside the specified .128 through .255 block."}
+          ],
+          "correctIds": ["first-upper-valid"],
+          "explanation": "Begin counting reservations from this subnet's network address, not from zero in every final octet."
+        },
+        {
+          "id": "nonoverlap-choice",
+          "kind": "single",
+          "prompt": "Understanding: reporting already uses 10.20.3.0/26. Which proposed subnet is aligned, fits 10.20.0.0/16, and does not overlap reporting?",
+          "choices": [
+            {"id": "adjacent-valid", "text": "10.20.3.64/26", "explanation": "It spans .64 through .127, immediately after reporting's .0 through .63."},
+            {"id": "covering-overlap", "text": "10.20.3.0/25", "explanation": "It spans .0 through .127 and contains the whole reporting subnet, so it overlaps."},
+            {"id": "wrong-vnet", "text": "10.40.3.64/26", "explanation": "It is aligned and does not overlap reporting, but is outside the application's 10.20.0.0/16 address space."}
+          ],
+          "correctIds": ["adjacent-valid"],
+          "explanation": "All three conditions matter. Check containment and overlap as well as alignment."
+        },
+        {
+          "id": "split-consequences",
+          "kind": "multiple",
+          "prompt": "Understanding: replacing one empty /24 in a plan with two /25 subnets has which TWO consequences?",
+          "choices": [
+            {"id": "half-blocks", "text": "Each new subnet contains 128 total addresses.", "explanation": "A /25 leaves seven host bits, giving 2^7 = 128 combinations."},
+            {"id": "extra-reservations", "text": "There are ten reserved addresses across the two subnets.", "explanation": "Each subnet has five reservations, so the total is 5 + 5 = 10."},
+            {"id": "same-assignable", "text": "The combined potentially assignable count remains 251.", "explanation": "The two /25 subnets provide 123 + 123 = 246, because reservations apply twice."},
+            {"id": "automatic-isolation", "text": "Azure automatically blocks traffic between the two subnets.", "explanation": "Subnetting divides addresses. Default same-VNet routing still connects the subnets unless other controls change the behavior."}
+          ],
+          "correctIds": ["half-blocks", "extra-reservations"],
+          "explanation": "Splitting creates smaller ranges and additional reservations, not an automatic traffic deny policy."
+        }
+      ],
+      "takeaways": [
+        "Total IPv4 addresses equal 2^(32 - prefix); a larger prefix number means a smaller block.",
+        "Azure reserves the first four and last address of each normal IPv4 subnet.",
+        "A /24 has 256 total addresses and 251 before other allocations, not 24 addresses or a guaranteed 251 VMs.",
+        "Check alignment, containment, and nonoverlap before allocating a subnet.",
+        "Leave space for service requirements, replacement capacity, and future growth."
+      ],
+      "sourceIds": ["learn-subnets", "learn-create", "vnet-faq", "private-ip", "exam-guide"]
+    },
+    {
+      "id": "build-an-azure-network",
+      "title": "Turn the school plan into deliberate Azure settings",
+      "summary": "Understand the portal and template settings, private and public IP allocation, DNS decisions, network connections, and explicit outbound access without deploying anything automatically.",
+      "objectives": [
+        "Translate the school address plan into VNet, subnet, and NIC settings.",
+        "Distinguish Azure private address allocation from DHCP inside a VM.",
+        "Choose and associate a current public IP resource only where needed.",
+        "Explain DNS links, peering boundaries, and explicit outbound connectivity.",
+        "Check a deployment's observed settings rather than relying on historical defaults."
+      ],
+      "sections": [
+        {
+          "id": "from-plan-to-resources",
+          "title": "Know what you are creating",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An Azure subscription is a billing and access-management boundary. A resource group is a named collection used to manage related resources. Neither is a network boundary: placing two VMs in the same resource group does not connect their VNets. For a future manual deployment, choose an approved subscription, a dedicated disposable resource group, and one region. Then create app-vnet with address space 10.20.0.0/16 and explicitly define web 10.20.1.0/24 and database 10.20.2.0/24. Review any automatically proposed subnet before accepting it."
+            },
+            {
+              "type": "paragraph",
+              "text": "In the portal, the virtual network creation form collects the subscription, resource group, name, region, address spaces, and subnet settings. Reviewing a form is not the same as creating a resource. Read the final review and cost information before any manual Create action. Keep optional paid additions, such as a NAT gateway, Bastion, or a managed firewall, out of an address-only practice exercise. They solve separate requirements and are not prerequisites for defining two ordinary subnets."
+            }
+          ]
+        },
+        {
+          "id": "private-allocation",
+          "title": "Choose an address in Azure, not a conflicting address inside Windows",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A NIC's IP configuration specifies its subnet and private allocation method. Dynamic allocation asks Azure to choose an available, unreserved address. Do not predict that Azure must choose the numerically next free address: current product documentation does not guarantee sequential allocation. Static allocation lets you select an available, unreserved address from that subnet. To make this course's example reproducible, explicitly choose static 10.20.1.4 for the web NIC and static 10.20.2.5 for the database NIC, after checking availability."
+            },
+            {
+              "type": "paragraph",
+              "text": "DHCP, Dynamic Host Configuration Protocol, delivers network configuration to an operating system. For an ordinary single-address Azure VM, leave the guest operating system using DHCP even when the Azure NIC allocation is Static. Azure then delivers the selected address to the guest. Static in the Azure resource and automatic configuration inside the guest are compatible. Manually typing a different address inside the VM can break connectivity because Azure's view and the guest's view no longer agree."
+            },
+            {
+              "type": "paragraph",
+              "text": "A dynamic private address is not normally replaced at each reboot. Its allocation is associated with the NIC and can remain through VM stops and starts. Deleting the NIC, moving it to another subnet, or deliberately changing allocation settings can change the address. Static is useful when another component must depend on a known address, such as a DNS server, an explicit DNS record, or an IP-based rule. It does not reserve that address after the NIC is deleted or excuse checking for conflicts."
+            }
+          ]
+        },
+        {
+          "id": "public-address-choice",
+          "title": "Create public addresses for entry points, not every machine",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An Azure public IP is a separate resource. For a new conventional VM or Standard Load Balancer design, select a compatible Standard public IP, not the retired Basic public IP SKU. SKU means a product's feature tier or version. Basic public IPs retired on September 30, 2025. Standard public IP allocation is static: Azure assigns the address when the resource is created and retains it until that public IP resource is deleted. Static does not mean you can type any public address you like."
+            },
+            {
+              "type": "paragraph",
+              "text": "When creating the resource, examine IP version, SKU, tier, region, and availability-zone settings. IPv6 is the newer, 128-bit addressing system; this pilot's calculations remain IPv4. Match the public IP's supported SKU and regional or global tier to the consuming service. A global-tier public IP belongs to cross-region load-balancing scenarios, not an arbitrary VM connection. Zone-redundant means resilient to a single availability-zone failure where supported; it does not mean the application is replicated across regions. Standard v2 public IPs currently have narrower service compatibility, so do not choose them merely because the number is higher."
+            },
+            {
+              "type": "table",
+              "caption": "Associate the address with the right configuration",
+              "headers": ["Requirement", "Association", "What it does not imply"],
+              "rows": [
+                ["One VM needs a public endpoint", "A compatible public IP on its NIC IP configuration", "No automatic permission through NSGs or the guest firewall"],
+                ["Several VMs share a public entry point", "A public IP on a public load balancer's frontend", "No requirement for a public IP on every backend VM"],
+                ["Private application entry point", "A private frontend on an internal load balancer or supported Application Gateway configuration", "No automatic outbound internet access"],
+                ["Private VM communication", "A private address on each VM NIC", "No public IP needed between the school web and database VMs"]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A frontend is the address clients connect to; a backend is a resource that handles the forwarded work. Load balancing distributes connections across backends. Gateway services, Azure Firewall, and public, dedicated Bastion deployments also use service-specific public IP configurations rather than assigning the address to every protected VM. That Bastion example is not a requirement for the shared Developer SKU or Premium's private-only deployment option. Standard public IPs use a secure-by-default inbound model. For a VM, the appropriate associated NSG must allow the intended inbound traffic, and the operating-system firewall and application must also accept it. The school database needs no public entry point."
+            }
+          ]
+        },
+        {
+          "id": "dns-deliberately",
+          "title": "Configure the name you actually intend to use",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure-provided DNS offers basic name resolution, including VM names within the same VNet, but it does not invent the custom name db.classroom.internal. A DNS zone is a managed collection of records for a domain. For this example, assume an Azure Private DNS zone named classroom.internal, a manually created db A record with value 10.20.2.5, and a completed virtual network link to app-vnet. The link makes the zone available to that VNet through the relevant Azure DNS resolution path; it is not a packet-forwarding connection."
+            },
+            {
+              "type": "paragraph",
+              "text": "Autoregistration is an optional link setting that automatically creates records for VM names. A VNet can use only one private zone as its registration zone, but can be linked to multiple zones for resolution. Autoregistration is not required for our manually maintained db record. If the VNet uses a custom DNS server, clients ask that server instead. It must be reachable and have records or appropriate forwarding, meaning rules for sending DNS questions to another resolver. A private-zone link alone does not reconfigure a custom DNS server."
+            },
+            {
+              "type": "paragraph",
+              "text": "Public DNS is a separate task. Creating an Azure public zone called classroom.example would not purchase a domain or prove ownership. A real domain owner would delegate it at the registrar, the organization managing the domain registration, by setting the domain's NS, or name-server, records to the assigned Azure name servers. We perform no registration here. An optional Azure-managed public IP DNS label is also not ownership of a custom domain. Keep public website naming separate from the private database record."
+            }
+          ]
+        },
+        {
+          "id": "connect-only-when-required",
+          "title": "Connect networks without confusing them with subnets",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "If school reporting services later live in services-vnet, 10.40.0.0/16, the two VNets need connectivity such as peering. For ordinary full-VNet peering, first verify nonoverlapping address spaces, create both directional peering relationships with the required permissions, and check that both show Connected. Peering can cross subscriptions, regions, and Microsoft Entra tenants. A tenant is an organization's identity directory. Crossing those boundaries requires appropriate access on both sides; knowing another VNet's name is not permission to connect it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Ordinary peering is not transitive: if app peers with services and services peers with a third VNet, app does not automatically gain a route through services to the third network. Likewise, office connectivity needs a configured VPN or ExpressRoute design, routes, and filters. You can resize the address space of a peered Resource Manager VNet and synchronize the peers without deleting the peering. That does not mean an occupied subnet can be arbitrarily shrunk. Check resource constraints and synchronize after address-space changes."
+            }
+          ]
+        },
+        {
+          "id": "explicit-outbound",
+          "title": "A route to the internet is not an outbound service",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Outbound means a resource starts a connection toward something else. Egress is another word for traffic leaving a network. The school web VM may need to download operating-system updates even though no user connects directly to that VM. A private address alone cannot identify the VM as a globally routable internet source. Source network address translation, or SNAT, replaces the private source address with a suitable public address and tracks replies. A route says where to send traffic; it does not itself perform that translation."
+            },
+            {
+              "type": "paragraph",
+              "text": "Current Microsoft guidance states that the portal defaults to private subnets, and the API default changes for new VNets using the API released after March 31, 2026. API means the programmatic interface through which tools configure Azure. Earlier API versions retain earlier defaults, and existing VNets are not automatically changed. Here, private subnet specifically means default outbound access is disabled. It does not mean all private traffic is denied, nor does it prevent deliberately configured outbound connectivity."
+            },
+            {
+              "type": "paragraph",
+              "text": "Plan an explicit outbound method where general internet access is required: a NAT gateway associated with the subnet, configured outbound rules on a Standard public load balancer, a suitable public IP on the VM NIC, or a correctly routed firewall design that provides outbound translation. A NAT gateway supplies outbound translation without opening unsolicited inbound connections. AllowInternetOutbound in an NSG only permits traffic at that filter; it does not provide NAT. Azure service endpoints and some service-specific paths have different behavior, so test the actual destination rather than declaring every public service unreachable."
+            }
+          ]
+        },
+        {
+          "id": "portal-and-template",
+          "title": "The same plan can be expressed as data",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A template is a file describing desired resources and settings. Azure Resource Manager, or ARM, accepts deployment templates; Bicep is a language that produces ARM templates. This is infrastructure as code: storing and reviewing infrastructure definitions like other source files. The following original ARM example describes only the school's VNet and subnets. Read it, do not deploy it as part of this course. It deliberately sets outbound behavior instead of relying on the selected API version's default."
+            },
+            {
+              "type": "code",
+              "language": "json",
+              "code": "{\n  \"$schema\": \"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#\",\n  \"contentVersion\": \"1.0.0.0\",\n  \"resources\": [\n    {\n      \"type\": \"Microsoft.Network/virtualNetworks\",\n      \"apiVersion\": \"2023-11-01\",\n      \"name\": \"app-vnet\",\n      \"location\": \"[resourceGroup().location]\",\n      \"properties\": {\n        \"addressSpace\": { \"addressPrefixes\": [\"10.20.0.0/16\"] },\n        \"subnets\": [\n          {\n            \"name\": \"web\",\n            \"properties\": {\n              \"addressPrefix\": \"10.20.1.0/24\",\n              \"defaultOutboundAccess\": false\n            }\n          },\n          {\n            \"name\": \"database\",\n            \"properties\": {\n              \"addressPrefix\": \"10.20.2.0/24\",\n              \"defaultOutboundAccess\": false\n            }\n          }\n        ]\n      }\n    }\n  ]\n}",
+              "explanation": "The outer resource is the VNet; each subnet is an entry inside its subnets collection. The location expression uses the target resource group's location. false explicitly disables default outbound access on both subnets. This documented API version supports that property, but it does not create VMs, NICs, DNS records, NSGs, peering, or an outbound gateway. No deployment command is supplied or executed."
+            }
+          ]
+        },
+        {
+          "id": "verify-school-plan",
+          "title": "Worked example: explain an update failure without publishing the database",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Private communication works, updates do not",
+              "scenario": "Assume the school's VNet, subnets, NIC addresses, and database DNS record have been configured exactly as described. The database connection works. Both subnets have default outbound access disabled, no explicit outbound method exists, and a general internet update download fails.",
+              "steps": [
+                {"action": "Verify the NICs show 10.20.1.4 and 10.20.2.5 in the correct subnets.", "why": "Observed configuration is stronger evidence than a saved design document, especially after editing a portal form."},
+                {"action": "Confirm private DNS returns 10.20.2.5 and the database connection succeeds.", "why": "This isolates the failing requirement to external access rather than proving the entire VNet is faulty."},
+                {"action": "Inspect subnet outbound settings and the absence of an explicit outbound method.", "why": "A default internet route and an NSG allow rule cannot supply the missing source translation."},
+                {"action": "Plan an approved outbound method for only the subnets that need it.", "why": "A NAT gateway or controlled firewall path can meet an update requirement without attaching a public inbound address to the database VM."},
+                {"action": "After any separately approved implementation, repeat the real update request and check its observed source and policy.", "why": "A successful private database request or DNS lookup is not a substitute for testing the actual outbound dependency."}
+              ],
+              "result": "The administrator preserves private database access and addresses the missing outbound requirement. Nothing in this example creates or changes Azure resources."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-static-dhcp",
+              "prompt": "The database NIC is Static at 10.20.2.5 in Azure, while the VM operating system uses DHCP. Must you change the guest to manual addressing?",
+              "answer": "No. This is the normal arrangement for this ordinary single-address VM.",
+              "explanation": "Azure's allocation setting chooses the address; DHCP delivers the configuration to the guest. Changing the guest independently risks a mismatch rather than making the address more static."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Interpret the resource and the stated scenario",
+              "text": "Dynamic private allocation is not the same as historical dynamic public IP allocation. Standard public IPs are static, yet inbound access still requires permission. A private subnet's outbound setting is not an NSG deny. Prefer current product behavior over an older screenshot, but do not assume every existing VNet was retroactively changed."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "nic-versus-guest",
+          "kind": "single",
+          "prompt": "Understanding: the school needs the database to keep the planned private address 10.20.2.5. Which configuration is appropriate for this ordinary single-address VM?",
+          "choices": [
+            {"id": "azure-static-dhcp", "text": "Select available 10.20.2.5 as Static on the Azure NIC and leave guest DHCP enabled.", "explanation": "Azure controls the allocation and delivers that chosen address through DHCP."},
+            {"id": "guest-only-static", "text": "Leave Azure at an unrelated address and type 10.20.2.5 inside the guest.", "explanation": "A mismatch between Azure and the guest can break connectivity. The allocation must be correct in Azure."},
+            {"id": "dynamic-next-guarantee", "text": "Choose Dynamic and rely on Azure always selecting .5 next.", "explanation": "Dynamic allocation does not guarantee a particular sequential address. Select Static when the specific address matters."}
+          ],
+          "correctIds": ["azure-static-dhcp"],
+          "explanation": "The allocation method and the mechanism delivering guest configuration are different layers."
+        },
+        {
+          "id": "public-address-properties",
+          "kind": "single",
+          "prompt": "Recall: which statement is correct for a conventional new Standard public IP resource?",
+          "choices": [
+            {"id": "static-azure-selected", "text": "Azure allocates a static public address; network permission is still required.", "explanation": "Standard uses static allocation, with an Azure-selected address and secure-by-default inbound behavior."},
+            {"id": "pick-any-public", "text": "Static lets the administrator choose any internet address.", "explanation": "Azure allocates from its available public pool; Static describes allocation stability, not ownership of arbitrary addresses."},
+            {"id": "basic-new-default", "text": "Use Basic public IP for new designs because it remains the standard low-cost default.", "explanation": "Basic public IP retired in September 2025. Old examples are not a reason to choose it for a new design."}
+          ],
+          "correctIds": ["static-azure-selected"],
+          "explanation": "Keep address allocation, compatibility, and access permission separate when reading a public IP question."
+        },
+        {
+          "id": "outbound-missing-piece",
+          "kind": "single",
+          "prompt": "Understanding: a private subnet has an internet route and an NSG allowing outbound HTTPS, but no public IP, NAT gateway, public load-balancer outbound rule, or firewall egress path. What is missing for general internet downloads?",
+          "choices": [
+            {"id": "explicit-outbound-needed", "text": "An explicit outbound connectivity method", "explanation": "The route and filter permission do not provide the public source translation needed by this scenario."},
+            {"id": "larger-subnet-needed", "text": "A /16 subnet instead of a /24", "explanation": "Increasing address capacity does not create an outbound translation service."},
+            {"id": "db-public-dns-needed", "text": "A public DNS record for the database VM", "explanation": "Publishing a database name does not enable the web VM's outbound update connection and may expose unnecessary information."}
+          ],
+          "correctIds": ["explicit-outbound-needed"],
+          "explanation": "The missing component must meet the failing requirement, not merely change another networking setting."
+        },
+        {
+          "id": "dns-and-peering-boundaries",
+          "kind": "multiple",
+          "prompt": "Understanding: which TWO statements should the administrator include in the network handover?",
+          "choices": [
+            {"id": "private-dns-assumptions", "text": "The custom database name requires its configured record and a working resolution path.", "explanation": "A VNet alone does not create db.classroom.internal. Record, link, and resolver configuration are explicit assumptions."},
+            {"id": "peering-not-transitive", "text": "Peering app to services does not automatically connect app through services to every other VNet.", "explanation": "Ordinary peering is nontransitive; further connectivity requires its own design."},
+            {"id": "zone-buys-domain", "text": "Creating a public DNS zone purchases and delegates the domain.", "explanation": "Registration and delegation are separate. The owner must configure the registrar's name-server delegation."},
+            {"id": "always-recreate-peering", "text": "Any VNet address-space change requires deleting its peering first.", "explanation": "Supported Resource Manager VNet address-space changes can be synchronized with peers without deleting peering."}
+          ],
+          "correctIds": ["private-dns-assumptions", "peering-not-transitive"],
+          "explanation": "Document what was actually configured. Names and extra paths do not appear simply because a network resource exists."
+        }
+      ],
+      "takeaways": [
+        "Choose VNet and subnet ranges before creating NICs, and verify actual allocations afterward.",
+        "Configure a specific private address on the Azure NIC while normally retaining DHCP inside the guest.",
+        "Use compatible current public IP resources only for required public entry or outbound designs.",
+        "Private DNS links support resolution; peering and gateways support connectivity.",
+        "Plan explicit outbound access and inspect subnet settings instead of relying on old implicit defaults.",
+        "Templates describe resources, but a successful deployment alone would not prove application connectivity."
+      ],
+      "sourceIds": ["learn-create", "learn-public-create", "learn-public-associate", "private-ip", "public-ip", "explicit-outbound", "dns-resolution", "dns-links", "public-dns", "peering-overview", "peering-manage", "exam-guide"]
+    }
+  ],
+  "glossary": [
+    {"term": "Packet", "definition": "A piece of network data with control information such as source and destination addresses."},
+    {"term": "IPv4", "definition": "The IP version using 32-bit addresses, commonly written as four decimal octets."},
+    {"term": "Octet", "definition": "Eight bits, represented in an IPv4 address by a number from 0 to 255."},
+    {"term": "CIDR prefix", "definition": "A slash and bit count identifying the fixed network part of an address range, such as /24."},
+    {"term": "Subnet", "definition": "A defined address range within a VNet, used to allocate addresses and apply network settings."},
+    {"term": "VNet", "definition": "An Azure virtual network: a logically isolated, regional network with configured address spaces and subnets."},
+    {"term": "NIC", "definition": "Network interface: a VM's network connection, represented by an Azure resource with IP configurations."},
+    {"term": "Port", "definition": "A transport-protocol number distinguishing a service or a side of a conversation on a computer."},
+    {"term": "DNS", "definition": "The Domain Name System, which resolves names to records such as IPv4 A records."},
+    {"term": "DHCP", "definition": "A protocol that delivers network configuration to an operating system, including an address chosen by Azure."},
+    {"term": "Route", "definition": "An instruction selecting where traffic for a destination range should go next."},
+    {"term": "SNAT", "definition": "Source network address translation: changing a connection's source address and tracking the reply mapping."},
+    {"term": "Peering", "definition": "Configured private connectivity between virtual networks over Microsoft's network; ordinary peering is not transitive."},
+    {"term": "Private subnet", "definition": "In Azure's outbound-access setting, a subnet with default outbound access disabled, not a subnet that forbids all communication."},
+    {"term": "SKU", "definition": "A named product tier or version that determines supported features and compatibility."},
+    {"term": "ARM template", "definition": "A JSON description of desired Azure resources submitted to Azure Resource Manager during an explicitly initiated deployment."}
+  ],
+  "sources": [
+    {"id": "learn-vnet", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/", "title": "Configure virtual networks", "supports": "Official module objectives and unit scope: VNet components, subnets, private and public addressing, creation, and association."},
+    {"id": "learn-plan", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/2-plan-virtual-networks", "title": "Plan virtual networks", "supports": "Cloud-only, hybrid, and site-to-site scenarios; address planning, segmentation, and DNS settings."},
+    {"id": "learn-subnets", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/3-create-subnets", "title": "Create subnets", "supports": "Subnet containment, nonoverlap, five Azure IPv4 reservations, and planning for dedicated service or appliance subnets."},
+    {"id": "learn-create", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/4-create-virtual-networks", "title": "Create virtual networks", "supports": "Portal creation inputs, address-space planning, and subnet definitions."},
+    {"id": "learn-addressing", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/5-plan-addressing", "title": "Plan IP addressing", "supports": "Private versus public addressing use cases and reasons to choose stable addresses."},
+    {"id": "learn-public-create", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/6-create-public-ip-addressing", "title": "Create public IP addressing", "supports": "Public IP creation fields and load-balancer SKU and tier compatibility; current product documentation governs retirement and availability details."},
+    {"id": "learn-public-associate", "url": "https://learn.microsoft.com/en-us/training/modules/configure-virtual-networks/7-associate-public-ip-addresses", "title": "Associate public IP addresses", "supports": "Public IP association points for NICs, frontends, gateways, and Bastion."},
+    {"id": "vnet-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-overview", "title": "What is Azure Virtual Network?", "supports": "VNet purposes, regional and zonal scope, hybrid connection types, private service integration, and charging boundaries. The dedicated outbound-access article takes precedence over older default-outbound wording."},
+    {"id": "vnet-faq", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-faq", "title": "Azure Virtual Network FAQ", "supports": "Private IPv4 ranges, subnet reservations, unsupported broadcast, region boundaries, and risks of mismatched guest IP configuration."},
+    {"id": "private-ip", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/private-ip-addresses", "title": "Private IP addresses in Azure", "supports": "NIC allocation methods, allocation lifecycle, non-guaranteed sequential dynamic assignment, and private frontend associations."},
+    {"id": "public-ip", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/public-ip-addresses", "title": "Public IP addresses in Azure", "supports": "Basic public IP retirement, Standard static allocation, secure-by-default inbound behavior, zone and tier choices, and current Standard v2 compatibility limits."},
+    {"id": "explicit-outbound", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/default-outbound-access", "title": "Default outbound access in Azure", "supports": "Private-subnet portal default, API-version-qualified March 2026 change, unchanged existing VNets, explicit outbound options, service-specific exceptions, and ARM defaultOutboundAccess configuration."},
+    {"id": "dns-resolution", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-name-resolution-for-vms-and-role-instances", "title": "Name resolution for resources in Azure virtual networks", "supports": "Azure-provided resolution scope and custom DNS or forwarding choices for private and hybrid names."},
+    {"id": "dns-links", "url": "https://learn.microsoft.com/en-us/azure/dns/private-dns-virtual-network-links", "title": "Virtual network links for private DNS zones", "supports": "Resolution links, optional VM autoregistration, and one registration zone per VNet."},
+    {"id": "public-dns", "url": "https://learn.microsoft.com/en-us/azure/dns/dns-delegate-domain-azure-dns", "title": "Host your domain in Azure DNS", "supports": "Public zone creation is separate from domain ownership and requires name-server delegation at the registrar for a real registered domain."},
+    {"id": "peering-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview", "title": "Azure Virtual Network peering", "supports": "Private peering connectivity across regions and subscriptions, peering traffic charges, and supported VNet address-space resize followed by peer synchronization."},
+    {"id": "peering-manage", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-manage-peering", "title": "Create, change, or delete virtual network peering", "supports": "Directional peerings, permissions across tenants and subscriptions, Connected status, and forwarding settings not creating routes or appliances."},
+    {"id": "nsg-reference", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Azure network security groups overview", "supports": "Traffic identification by addresses, ports, and protocol; filtering is distinct from routing and service authentication."},
+    {"id": "exam-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "AZ-104 study guide", "supports": "Current virtual networking objectives as of April 17, 2026, including VNets, subnets, peering, public IP configuration, and troubleshooting."}
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect the school address plan without VMs",
+    "purpose": "Practice creating and inspecting only disposable network definitions and unattached NICs. All required learning can instead be completed with the local explorer, worked examples, and checkpoints. Nothing runs automatically.",
+    "prerequisites": [
+      "An adult or authorized subscription owner has approved this optional exercise and reviewed current pricing and organizational policy.",
+      "Permission to create a new dedicated resource group and basic network resources in an approved subscription and region.",
+      "A written plan containing app-vnet 10.20.0.0/16, web 10.20.1.0/24, database 10.20.2.0/24, and services-vnet 10.40.0.0/16."
+    ],
+    "costWarning": "A VNet alone has no service charge, but do not interpret this exercise as a blanket free-Azure promise. VMs, disks, public IPv4 addresses, NAT Gateway, VPN Gateway, Bastion, Firewall, DNS zones, logging, and some traffic paths can incur charges. This lab deliberately avoids those additions. Optional peering can incur transfer charges if traffic later crosses it. Review the resource list and pricing before every manual creation.",
+    "steps": [
+      "In the portal, confirm the approved subscription and create a uniquely named disposable resource group, such as rg-school-vnet-pilot with your own unique suffix. Record its exact name and verify that it starts empty.",
+      "Create app-vnet in the approved region with 10.20.0.0/16. Replace any proposed default subnet with web 10.20.1.0/24 and database 10.20.2.0/24. Keep default outbound access disabled. Do not enable paid gateway, firewall, Bastion, or DDoS plan additions.",
+      "Open the subnet list and compare both prefixes with your written ranges. Confirm there is no overlap and no unexpected extra subnet.",
+      "Create an unattached web NIC in the web subnet, with no public IP, and select Static 10.20.1.4 if available. Create a second unattached database NIC in the database subnet with Static 10.20.2.5 if available. Stop and investigate if those supposedly unused addresses are unavailable; do not edit another resource.",
+      "Inspect each NIC's IP configuration. Record its VNet, subnet, allocation method, and address. No VM exists, so do not expect ping or application connection tests to work.",
+      "Create services-vnet with 10.40.0.0/16 and an empty services subnet 10.40.1.0/24, with default outbound access disabled and no paid additions. Compare its range with the application and office plans.",
+      "Optionally, only with approval, create both peering directions between these two disposable VNets and inspect Connected status. Leave gateway transit and forwarded-traffic options disabled because this lab has neither gateway nor forwarding appliance."
+    ],
+    "expectedResults": [
+      "The two application subnets appear with the planned /24 prefixes and each NIC displays the explicitly selected private address.",
+      "No public IP, VM, disk, NAT gateway, Bastion, VPN gateway, or Firewall resource was created by these steps.",
+      "If optional peering was created, both directions show Connected; that status alone does not prove a listening application or DNS record exists."
+    ],
+    "cleanup": [
+      "Open the exact recorded resource group and inspect every contained resource. Confirm all items belong only to this lab. If unrelated resources are present, do not delete the group.",
+      "Delete only the recorded disposable group after verifying its contents, or remove just the individually identified lab resources if group deletion is unsafe. Never delete an existing shared or production group.",
+      "Confirm the group or named lab resources are gone. Check that no lab NIC, peering, public IP, gateway, VM, disk, or DNS resource remains under the recorded names. Review Cost Management later because usage records may arrive with a delay."
+    ]
+  }
+}

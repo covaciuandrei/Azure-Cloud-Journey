@@ -1,0 +1,129 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedInStudyUser() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function ownAccount(uid) {
+      return signedInStudyUser() && request.auth.uid == uid;
+    }
+
+    match /studyMetadata/az104Topics {
+      allow get: if signedInStudyUser();
+    }
+
+    match /studyMetadata/az104Bank {
+      allow get: if signedInStudyUser();
+    }
+    match /studyMetadata/az104Learning {
+      allow get: if signedInStudyUser();
+    }
+    match /studyReleases/{releaseId}/catalogs/az104 {
+      allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$');
+    }
+    match /studyReleases/{releaseId}/questions/{questionId} {
+      allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
+        && questionId.matches('^q_[a-f0-9]{64}$');
+    }
+    match /studyExplanations/{releaseId}/questions/{questionId} {
+      allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
+        && questionId.matches('^q_[a-f0-9]{64}$');
+    }
+
+    function cleanStudyImport(importId, releaseId) {
+      return importId == 'import_96c1ceb6c7e36dce153640fa9604a6761e0ad7bae0f8012bf00ef49198c81001'
+        && releaseId == 'r_61ae993f4534c2d7b370d43a31ccc51c025bac080f0459df307f4d3ecaa7f296';
+    }
+
+    function validAttempt(attempt, status) {
+      return attempt is map
+        && attempt.keys().hasAll(['schemaVersion', 'id', 'releaseId', 'mode', 'size', 'questionIds',
+          'optionOrders', 'responses', 'currentIndex', 'startedAt', 'deadline', 'finishedAt', 'status', 'score'])
+        && attempt.keys().hasOnly(['schemaVersion', 'id', 'releaseId', 'dataSource', 'mode', 'size', 'questionIds',
+          'optionOrders', 'responses', 'currentIndex', 'startedAt', 'deadline', 'finishedAt', 'status', 'score'])
+        && attempt.schemaVersion == 1
+        && attempt.id is string && attempt.id.size() > 0 && attempt.id.size() <= 128
+        && attempt.id.matches('^[A-Za-z0-9_-]+$')
+        && attempt.releaseId.matches('^r_[a-f0-9]{64}$')
+        && (!('dataSource' in attempt) || attempt.dataSource in ['firebase', 'snapshot'])
+        && attempt.status == status
+        && ((attempt.mode == 'exam' && attempt.size == 40 && attempt.deadline == attempt.startedAt + 3600000)
+          || (attempt.mode == 'free' && attempt.size in [10, 20, 30, 40] && attempt.deadline == null))
+        && attempt.startedAt is int && attempt.startedAt >= 0
+        && attempt.currentIndex is int && attempt.currentIndex >= 0 && attempt.currentIndex < attempt.size
+        && attempt.questionIds is list && attempt.questionIds.size() == attempt.size
+        && attempt.questionIds.toSet().size() == attempt.size
+        && attempt.optionOrders is map && attempt.optionOrders.keys().toSet() == attempt.questionIds.toSet()
+        && attempt.responses is map && attempt.responses.keys().toSet() == attempt.questionIds.toSet()
+        && ((status == 'active' && attempt.finishedAt == null && attempt.score == null)
+          || (status == 'completed' && attempt.finishedAt is int && attempt.finishedAt >= attempt.startedAt
+            && attempt.score is map));
+    }
+
+    match /importRuns/{importId}/firestoreOnly/{releaseId} {
+      match /catalogs/az104 {
+        allow get: if signedInStudyUser() && cleanStudyImport(importId, releaseId);
+      }
+      match /questions/{questionId} {
+        allow get: if signedInStudyUser() && cleanStudyImport(importId, releaseId);
+      }
+      match /answers/{questionId} {
+        allow get: if signedInStudyUser() && cleanStudyImport(importId, releaseId);
+      }
+      match /comments/{commentId} {
+        allow get: if signedInStudyUser() && cleanStudyImport(importId, releaseId);
+        allow list: if signedInStudyUser() && cleanStudyImport(importId, releaseId)
+          && request.query.limit != null && request.query.limit <= 100;
+      }
+    }
+
+    match /users/{uid}/state/active {
+      allow get: if ownAccount(uid);
+      allow create, update: if ownAccount(uid)
+        && request.resource.data.keys().hasOnly(['schemaVersion', 'revision', 'attempt', 'updatedAt'])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.revision is string
+        && request.resource.data.revision.matches('^[A-Za-z0-9_-]{1,128}$')
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.attempt == null || validAttempt(request.resource.data.attempt, 'active'));
+    }
+
+    match /users/{uid}/history/{attemptId} {
+      allow get: if ownAccount(uid);
+      allow list: if ownAccount(uid) && request.query.limit != null && request.query.limit <= 20;
+      allow create, update: if ownAccount(uid)
+        && request.resource.data.keys().hasOnly(['schemaVersion', 'attempt', 'finishedAt', 'updatedAt'])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.attempt.id == attemptId
+        && request.resource.data.finishedAt == request.resource.data.attempt.finishedAt
+        && validAttempt(request.resource.data.attempt, 'completed');
+    }
+
+    function publishedQuestion(questionId) {
+      return get(/databases/$(database)/documents/questions/$(questionId)).data.published == true;
+    }
+
+    match /questions/{questionId} {
+      allow read: if resource.data.published == true;
+
+      match /comments/{commentId} {
+        allow read: if publishedQuestion(questionId);
+      }
+    }
+
+    match /answerKeys/{questionId} {
+      allow read: if resource.data.published == true;
+    }
+
+    match /catalogs/az104 {
+      allow read: if resource.data.published == true;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

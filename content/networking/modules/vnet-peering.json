@@ -1,0 +1,665 @@
+{
+  "schemaVersion": 1,
+  "id": "vnet-peering",
+  "title": "Virtual network peering: direct paths and deliberate transit",
+  "summary": "Connect separate Azure networks, verify both peering directions, update address spaces safely, and reason about shared gateways and routed hub-and-spoke traffic.",
+  "priority": "core",
+  "priorityReason": "The current AZ-104 guide explicitly includes creating and configuring VNet peering, user-defined routes, and troubleshooting connectivity. These are everyday administration tasks. Gateway transit and service chaining explain why a Connected peering is not sufficient evidence for every requested path; this priority is not an exam-frequency prediction.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Identify use cases, product features, requirements, and limitations of Azure Virtual Network peering.",
+    "Create regional or global peering connections and verify their status and connectivity.",
+    "Configure Azure VPN Gateway transit so a peered network can use a shared gateway.",
+    "Extend connectivity through a hub-and-spoke design with user-defined routes and service chaining."
+  ],
+  "lessons": [
+    {
+      "id": "connect-vnets-with-peering",
+      "title": "Connect two VNets and prove the intended path",
+      "summary": "Build the mental model for bidirectional peering, permissions, automatic routes, cross-region operation, and current resize-and-sync behavior.",
+      "objectives": [
+        "Distinguish cross-subnet routing inside one VNet from peering separate VNets.",
+        "Check address overlap, region and cloud boundaries, and permissions at both ends.",
+        "Explain the two directional peering resources and verify Connected status.",
+        "Inspect effective routes, security, and DNS separately.",
+        "Plan a supported address-space change followed by synchronization."
+      ],
+      "sections": [
+        {
+          "id": "start-with-the-existing-network",
+          "title": "What the school already has",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A virtual network, or VNet, is a private network resource in Azure. A subnet divides its address space into smaller ranges. Our school VNet is 10.20.0.0/16, with web subnet 10.20.1.0/24 and database subnet 10.20.2.0/24. The web VM is 10.20.1.4 and the database VM is 10.20.2.5. Azure provides routes between subnets of the same VNet by default. You do not create VNet peering between these two subnets. Security rules, guest firewalls, or a stopped database can still prevent their application traffic."
+            },
+            {
+              "type": "paragraph",
+              "text": "A route describes which network path to use for a destination range. The /16 notation means that the first 16 bits identify the network part of an IPv4 address. Here, 10.20.0.0/16 contains addresses from 10.20.0.0 through 10.20.255.255. A /24 fixes more bits and describes a smaller range. Now introduce a separate services VNet, 10.40.0.0/16, with a services VM at 10.40.1.4 in subnet 10.40.1.0/24. Its addresses do not overlap the school's range, but separation also means there is no automatic direct path between these VNets."
+            },
+            {
+              "type": "paragraph",
+              "text": "Peering adds a direct private connection between the two VNets over Microsoft's backbone. The VMs use private addresses; no public IP or VPN gateway is required just for this direct peering path. Creating peering does not merge the VNet resources, their subscriptions, or their administrators. The school can keep application ownership separate from the team running shared services. Peering also does not combine their DNS namespaces or give a student permission to log into a service."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Resource Manager, abbreviated ARM, is Azure's current resource deployment and management model. These examples use Resource Manager VNets. Creating their peering does not require taking the existing VMs offline, although changing permitted network paths still deserves review. Older documentation also describes peering between a Resource Manager VNet and a legacy classic VNet, not between two classic VNets. That legacy compatibility does not make classic deployments the right choice for a new school lab."
+            }
+          ]
+        },
+        {
+          "id": "regions-clouds-and-cost",
+          "title": "Regional and global are location choices",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Regional peering connects VNets in the same Azure region. Global peering connects VNets in different regions, for example school VNet in West Europe and services VNet in North Europe. Both keep this private traffic on the Microsoft backbone. Same-region peering has network latency comparable to communication within a VNet, and VM size still limits available network bandwidth. Cross-region distance adds latency, so do not promise that a database in another region will respond as quickly as one nearby. No extra peering gateway is needed to obtain the direct route."
+            },
+            {
+              "type": "paragraph",
+              "text": "A region is a deployment location; an Azure cloud is a larger operational boundary such as Azure public cloud, Azure Government, or Azure operated by 21Vianet. Current management documentation permits global peering between supported regions within those clouds, including Government regions, but not between different clouds. Older training statements denying all cross-region Government peering are not the current rule. Confirm availability in the cloud you actually use rather than treating a tenant change as equivalent to crossing a cloud boundary."
+            },
+            {
+              "type": "paragraph",
+              "text": "Peering is not a free-data shortcut. Ingress means data entering a peering endpoint and egress means data leaving it; relevant transfer charges apply and regional and global rates can differ. Large backups or chatty database applications can therefore affect both cost and latency. Traffic uses private infrastructure, but peering is not an application encryption setting. Continue to use TLS or the service's appropriate protection for sensitive data instead of assuming the word private replaces application security."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Read legacy load-balancer limitations in context",
+              "text": "Legacy Basic Load Balancer frontends are not reachable through global peering in the supported peering model. Standard Load Balancer supports regional and global peering scenarios. Basic Load Balancer and Basic public IP were retired on September 30, 2025; do not deploy them for this new ARM-native lab. Retirement is not proof that every old resource immediately stopped running, and it says nothing about unrelated products that also have a Basic SKU."
+            }
+          ]
+        },
+        {
+          "id": "preflight-addresses-and-permissions",
+          "title": "Check addresses and authority before clicking Add",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Ordinary full-VNet peering requires nonoverlapping VNet address spaces. Comparing only the currently used VM subnets is insufficient. If services VNet were 10.20.0.0/16, it would overlap school VNet even if its only deployed VM used 10.20.50.4. The network could not unambiguously identify which VNet owns destinations in that common range. Check every configured range and planned additions. Also keep office network 172.20.0.0/16 distinct when designing later hybrid connectivity; peering does not resolve an office address conflict for you."
+            },
+            {
+              "type": "paragraph",
+              "text": "A subscription is an Azure billing and management boundary. A resource group organizes resources inside it. A Microsoft Entra tenant is an identity directory containing accounts and related identity configuration. Peering can cross subscriptions and tenants when the required permissions are in place. Role-based access control, or RBAC, determines which account can manage each VNet. Network Contributor at the appropriate VNet scopes is a documented option; a custom role can grant the specific required peering operations. Knowing the remote VNet's resource ID is not a substitute for authorization."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a cross-tenant portal workflow, the administrators can invite the relevant user as a guest in the opposite tenant, have that invitation accepted, and assign the necessary role on the target VNet. They then authenticate in the correct directory and subscription for each side. This can be one authorized operator or cooperating operators with separated responsibilities. Limit permissions to the necessary scope rather than granting subscription Owner just to simplify the exercise. The resulting network link does not automatically grant access to the remote tenant's applications or databases."
+            },
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                "Record both complete VNet resource IDs, subscription and tenant ownership, regions, and all address ranges.",
+                "Check nonoverlap against the direct peer and planned routed networks, including the office.",
+                "Confirm the operator or cooperating operators can create and inspect the required peering resources at both ends.",
+                "Define the actual source, destination, protocol, and port to permit. This lesson assumes ordinary full-VNet peering between Resource Manager VNets, not the separate selective subnet-peering feature."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "two-resources-one-relationship",
+          "title": "Both directions must be configured",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A completed Resource Manager peering relationship has two directional configuration resources: school-to-services under school VNet and services-to-school under services VNet. The first resource alone can show Initiated. After the reciprocal configuration is established, both should show Connected. The portal can create both sides in one workflow if your permissions allow it, but that convenience does not remove the second resource. Azure CLI and Azure PowerShell can manage these resources too; this lesson uses the portal for configuration. Check both sides instead of treating a successful first creation request as proof of completed connectivity."
+            },
+            {
+              "type": "paragraph",
+              "text": "For ordinary communication between VMs in these two networks, allow virtual-network access in both directions. Gateway-sharing options can remain disabled because no gateway is needed for this scenario. Receiving forwarded traffic is a different option: it concerns packets relayed from elsewhere by a device in the peer, not ordinary traffic originating in that peer. Enabling it neither installs a router nor creates routes. Always read the VNet names in current portal labels; local and remote are relative to the VNet whose configuration you are viewing."
+            },
+            {
+              "type": "diagram",
+              "title": "Two peering configurations, not a new middlebox",
+              "description": "The school and services VNets retain separate address spaces. One directed edge represents the school-to-services peering configuration and the other represents the reciprocal configuration. With both Connected and access enabled, Azure routes eligible private traffic directly. These edges are configuration relationships, not DNS links, firewall rules, or a VPN tunnel.",
+              "nodes": [
+                { "id": "school-vnet", "label": "School VNet", "detail": "10.20.0.0/16; web 10.20.1.4; DB 10.20.2.5", "column": 0, "row": 1 },
+                { "id": "services-vnet", "label": "Services VNet", "detail": "10.40.0.0/16; services VM 10.40.1.4", "column": 2, "row": 1 }
+              ],
+              "edges": [
+                { "from": "school-vnet", "to": "services-vnet", "label": "school-to-services: Connected" },
+                { "from": "services-vnet", "to": "school-vnet", "label": "services-to-school: Connected" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "worked-direct-service-path",
+          "title": "Prove a direct service path step by step",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Web VM calls an explicitly configured shared service",
+              "scenario": "Assume the services VM at 10.40.1.4 has a healthy HTTPS service listening on TCP 443. The source is school web VM 10.20.1.4. There is initially no peering, VPN, or alternative route between the VNets. No DNS record for this service has been assumed, so the first test uses the destination IP.",
+              "steps": [
+                { "action": "Confirm that 10.20.0.0/16 and 10.40.0.0/16 do not overlap and capture a failed pre-peering TCP test.", "why": "The ranges describe different destinations. The baseline demonstrates the initial isolation, provided the listener and local security configuration have already been checked." },
+                { "action": "In school VNet's Peerings page, create school-to-services and the reciprocal services-to-school configuration using the correct remote resource.", "why": "The relationship needs configuration under both VNets. Selecting the wrong same-named VNet in another subscription would connect the wrong resources or fail authorization." },
+                { "action": "Enable virtual-network access both ways, leave unneeded gateway options off, and verify both entries are Connected.", "why": "This establishes the intended direct peering relationship without introducing unrelated transit behavior." },
+                { "action": "Inspect the web NIC's effective routes for 10.40.0.0/16 with next hop Virtual network peering. Inspect the services NIC for the return route to 10.20.0.0/16.", "why": "Azure normally creates these system routes automatically for ordinary full-VNet peering. Effective routes show the combination actually relevant to a NIC, including any conflicting user routes." },
+                { "action": "Verify source outbound rules and destination subnet and NIC inbound rules permit TCP 443 from 10.20.1.4, and verify the guest firewall and listener.", "why": "A route decides the path, not whether the traffic is allowed. A deny at a relevant security layer can still stop the connection." },
+                { "action": "Repeat the TCP test, then separately test HTTPS by its intended hostname only after its DNS record, resolver path, and certificate are configured.", "why": "A successful TCP connection isolates transport reachability. It does not prove DNS, certificate validation, HTTP behavior, or application authorization." }
+              ],
+              "result": "Under the stated assumptions, the private IP test changes from failure to success and both NICs have the relevant peering routes. If it still fails, the recorded status, routes, and security checks identify the next investigation rather than assuming peering is sufficient."
+            },
+            {
+              "type": "code",
+              "language": "powershell",
+              "code": "Test-NetConnection -ComputerName 10.40.1.4 -Port 443 -InformationLevel Detailed",
+              "explanation": "Optional diagnostic from Windows PowerShell inside the authorized source VM, not from an unrelated laptop or an unconnected Cloud Shell. Microsoft code-sample search was consulted for this pattern. Under the example's listener and permission assumptions, TcpTestSucceeded should be True. A false PingSucceeded value alone is not proof of TCP failure because ICMP echo can be blocked separately. This command does not provision or configure Azure resources."
+            }
+          ]
+        },
+        {
+          "id": "separate-routes-security-and-dns",
+          "title": "Connected is only one piece of evidence",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An effective route is the route visible to the VM after Azure combines system routes with configured routing information. A peering route covers the peer's address space, not just one service port. A network security group, or NSG, supplies allow and deny rules for traffic. Default VirtualNetwork rules can include peered networks when access is enabled, so do not assume the two address spaces remain fully isolated after peering. If both subnet and NIC NSGs apply, the relevant inbound path must be permitted by both. Use deliberate narrow rules for the required application."
+            },
+            {
+              "type": "paragraph",
+              "text": "DNS is another separate layer. Suppose the services VM needs db.classroom.internal at 10.20.2.5. Explicitly create the private zone classroom.internal, add manual A record db = 10.20.2.5, and link that zone to both VNets for clients using Azure-provided DNS. Wait for the links to complete. If clients use custom DNS, configure its resolution or forwarding path instead. None of this is done by peering, and a working private answer can exist before the application route works."
+            },
+            {
+              "type": "paragraph",
+              "text": "When a test fails, inspect both Connected states, access settings, and both NICs' effective routes before checking the exact security rule and guest listener. Azure Network Watcher Connection troubleshoot can test the intended source, destination, and TCP port and report routing or filtering problems. Run the test from the actual source context. A generic ping or a test from a public shell may exercise a different protocol or no private route at all. Record actual results rather than describing an untested configuration as working."
+            }
+          ]
+        },
+        {
+          "id": "resize-and-sync-current-behavior",
+          "title": "Grow a peered VNet without deleting its peering",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Current Azure supports changing the address space of peered Resource Manager VNets without tearing down the peering or interrupting traffic on the currently peered address space. Supported changes include adding ranges, changing an existing range's prefix, and removing an eligible empty range. Both IPv4 and IPv6 changes are supported, including cross-tenant scenarios. This is an address-space feature, not permission to shrink across occupied subnets or silently renumber running VMs. The documented feature excludes a VNet being updated while peered with a classic VNet."
+            },
+            {
+              "type": "example",
+              "title": "Add a new services range and refresh every peer",
+              "scenario": "services VNet keeps 10.40.0.0/16 and needs another range, 10.41.0.0/16, for future workloads. School VNet is its existing peer. Assume the new range does not overlap any peer or connected office network, and no classic VNet is involved.",
+              "steps": [
+                { "action": "Inventory all peer and connected-network ranges, then add 10.41.0.0/16 to services VNet's address space and save.", "why": "A free-looking range in one subscription could already be used in another network. Validation must consider the whole intended topology." },
+                { "action": "Use the documented peering Sync operation for every affected remote peer after the change, authenticating to the other tenant if required.", "why": "Peers must refresh their knowledge of the changed remote address space. One peer being synchronized is not evidence that all other peers were updated." },
+                { "action": "Verify school VNet's peering information now includes remote range 10.41.0.0/16 and inspect a running school VM's effective routes.", "why": "The new destination should have the appropriate peering route. This does not add 10.41.0.0/16 to school VNet's own local address space." },
+                { "action": "Only then create any planned subnet and workload in the new range, review security and custom routes, and test the new path separately from an existing 10.40.1.4 path.", "why": "Synchronization updates peering information. It does not create a subnet, start an application, revise manual DNS records, or permit new traffic in custom security rules." }
+              ],
+              "result": "The old services range remains intact and every peer learns the additional remote range. For removal, first ensure the range is unused and remove dependent subnets as required, then synchronize again. Do not remove a range containing active resources."
+            },
+            {
+              "type": "prediction",
+              "id": "peering-new-range-prediction",
+              "prompt": "The services administrator adds 10.41.0.0/16. The existing 10.40.1.4 service still works, but the school peer has not synchronized. Does the old service's success prove that a new 10.41.1.4 service will be reachable?",
+              "answer": "No. The old address space can keep working while the peer still lacks the updated remote range.",
+              "explanation": "Run the supported synchronization process for each peer and inspect the new effective route. Then verify the new subnet, service, and security configuration. Success for an old destination is not a test of the new prefix."
+            }
+          ]
+        },
+        {
+          "id": "peering-exam-separations",
+          "title": "Recognize what the question is actually asking",
+          "blocks": [
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Do not carry an old resize rule into a current scenario",
+              "text": "The Learn uses unit still includes older delete-and-recreate address-change guidance. Current product documentation supports resize followed by synchronization for the stated supported topology. Do not generalize that to moving a VNet between resource groups or subscriptions, which has different peering restrictions. Also distinguish Initiated from Connected, regional from global, and a network relationship from DNS or application authorization."
+            },
+            {
+              "type": "paragraph",
+              "text": "A useful final check is to describe the result precisely: two correctly authorized peering resources are Connected; the destination and return prefixes are present; the intended protocol is permitted; the service answers; and its name resolves only if DNS was configured. Each statement has its own observable evidence. This approach is more reliable than memorizing a phrase such as the VNets become one network, because they remain separate resources with separate controls even when packets can cross directly."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "peering-versus-local-subnets",
+          "kind": "single",
+          "prompt": "Web VM 10.20.1.4 and database VM 10.20.2.5 are in different subnets of school VNet 10.20.0.0/16. What is true before adding another VNet?",
+          "choices": [
+            { "id": "local-routes-already-exist", "text": "Azure already provides cross-subnet routes; security and the service can still block traffic.", "explanation": "Different subnets inside one VNet do not require VNet peering. Routing, security rules, and the application remain separate layers." },
+            { "id": "peer-the-subnets", "text": "Create ordinary VNet peering between the web and database subnets.", "explanation": "The lesson's ordinary peering relationship connects distinct VNet resources, not two subnets of this existing VNet." },
+            { "id": "add-public-ip-to-db", "text": "Give the database a public IP so the web VM can reach its other subnet.", "explanation": "Public exposure is not needed for private cross-subnet traffic and would not address a blocking security rule or stopped service." }
+          ],
+          "correctIds": ["local-routes-already-exist"],
+          "explanation": "Start by identifying the actual network boundary before choosing a connectivity service."
+        },
+        {
+          "id": "reciprocal-peering-evidence",
+          "kind": "single",
+          "prompt": "school-to-services shows Initiated after one directional resource was created. Which evidence is still required for an established peering relationship?",
+          "choices": [
+            { "id": "both-connected", "text": "The reciprocal configuration exists and both directions show Connected.", "explanation": "Both Resource Manager VNets need a peering configuration; Initiated alone is not a completed relationship." },
+            { "id": "dns-record-exists", "text": "A public DNS record names the services VM.", "explanation": "A DNS record does not create or complete a private peering relationship." },
+            { "id": "same-region-required", "text": "Both VNets must first move into the same region.", "explanation": "Global peering supports different supported regions within a cloud; the missing reciprocal configuration is the immediate issue." }
+          ],
+          "correctIds": ["both-connected"],
+          "explanation": "Check the relationship at both ends before treating status as evidence of an established path."
+        },
+        {
+          "id": "cross-tenant-preflight",
+          "kind": "multiple",
+          "prompt": "The school and services VNets belong to different subscriptions and Entra tenants within Azure public cloud. Select the two correct planning statements.",
+          "choices": [
+            { "id": "scoped-authorization", "text": "Arrange the required permissions and directory authentication for both VNet scopes.", "explanation": "Cross-tenant peering is supported, but the operators still need authorization for the relevant operations at each end." },
+            { "id": "whole-address-nonoverlap", "text": "Check every configured VNet address range, not just the two VM addresses.", "explanation": "Ordinary full-VNet peering requires nonoverlapping address spaces even if the overlapping portion currently has no VM." },
+            { "id": "resource-id-grants-access", "text": "Possessing the remote resource ID automatically grants the required role.", "explanation": "A resource ID identifies the object. It is not a credential or role assignment." },
+            { "id": "tenant-is-cloud-boundary", "text": "A different tenant means the VNets are in different Azure clouds and cannot peer.", "explanation": "Tenant identity boundaries are distinct from sovereign cloud boundaries. The stated VNets are in the same Azure public cloud." }
+          ],
+          "correctIds": ["scoped-authorization", "whole-address-nonoverlap"],
+          "explanation": "Separate identity permissions, address planning, and cloud placement instead of using one as a substitute for another."
+        },
+        {
+          "id": "supported-resize-procedure",
+          "kind": "single",
+          "prompt": "A supported ARM-only services VNet adds nonoverlapping range 10.41.0.0/16. What is the current next step for its existing peers?",
+          "choices": [
+            { "id": "sync-each-peer", "text": "Synchronize each affected peer and verify the updated remote ranges and effective routes.", "explanation": "Current Azure supports address-space updates without deleting these peerings, but peer information must be synchronized." },
+            { "id": "always-delete-peering", "text": "Always delete every peering before any address-space update.", "explanation": "That repeats older guidance and unnecessarily disrupts a supported resize-and-sync scenario." },
+            { "id": "copy-range-locally", "text": "Add 10.41.0.0/16 to school VNet's local address space too.", "explanation": "The range belongs to services VNet. Adding it locally would create an overlap instead of updating knowledge of the remote destination." }
+          ],
+          "correctIds": ["sync-each-peer"],
+          "explanation": "Synchronize knowledge of the remote address space; do not duplicate ownership of the same range."
+        }
+      ],
+      "takeaways": [
+        "Cross-subnet routing within one VNet is different from peering two separate VNets.",
+        "Ordinary full-VNet peering needs nonoverlapping address spaces and authorized configuration at both ends.",
+        "Regional and global peering use private backbone paths; neither creates DNS records or application permissions.",
+        "Both directional peering resources must reach Connected, and the actual traffic still needs routes, security permission, and a listener.",
+        "Current supported address-space updates use resize plus synchronization, not automatic deletion and recreation.",
+        "Cross-tenant, cross-subscription, cross-region, and cross-cloud describe different boundaries."
+      ],
+      "sourceIds": ["peering-unit-uses", "peering-unit-create", "peering-overview", "peering-management", "peering-cross-tenant", "peering-resize", "peering-private-dns", "peering-basic-lb-retirement", "peering-basic-ip-retirement", "peering-connection-troubleshoot", "peering-test-command", "peering-exam-guide"]
+    },
+    {
+      "id": "hub-spoke-and-gateway-transit",
+      "title": "Nontransitive peering, shared gateways, and service chains",
+      "summary": "Trace complete outbound and return paths instead of assuming a hub automatically forwards traffic between all its peers.",
+      "objectives": [
+        "Predict reachability in a hub-and-spoke topology with no transit configuration.",
+        "Place gateway-transit and use-remote-gateway settings on the correct sides.",
+        "Explain route propagation and office return-route requirements.",
+        "Design a two-way NVA service chain using user-defined routes.",
+        "Apply longest-prefix reasoning without assuming a default route overrides peering."
+      ],
+      "sections": [
+        {
+          "id": "a-hub-is-not-automatic-transit",
+          "title": "Connected to the same hub does not mean connected to each other",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A topology describes which networks and devices are connected. In a hub-and-spoke topology, a central hub VNet hosts shared infrastructure and other VNets, the spokes, peer with it. Use services VNet 10.40.0.0/16 as the hub and school VNet 10.20.0.0/16 as one spoke. To examine a three-VNet case, add a fictional library VNet 10.60.0.0/16 as another spoke. Explicitly assume school-to-services and library-to-services peering pairs are Connected with network access enabled. There is no school-to-library peering."
+            },
+            {
+              "type": "paragraph",
+              "text": "Peering is nontransitive. The school can have a direct path to services, and services can have a direct path to the library, without the school gaining a path through services to the library. Two relationships do not compose into a third relationship. The hub is a VNet resource, not an automatically installed forwarding machine. Simply checking Allow forwarded traffic does not supply the missing routes or forwarding device. You must choose an explicit direct peering or an intentionally routed transit design."
+            },
+            {
+              "type": "diagram",
+              "title": "Two complete peerings, no implicit school-to-library path",
+              "description": "School VNet and library VNet each have a complete reciprocal peering with services VNet. The four directed edges represent those configuration relationships. There is no edge directly between school and library, and there is no router or gateway transit configured in this diagram. The visual path through the hub must not be read as an available packet-forwarding path.",
+              "nodes": [
+                { "id": "school-spoke", "label": "School spoke", "detail": "10.20.0.0/16; web 10.20.1.4", "column": 0, "row": 1 },
+                { "id": "services-hub", "label": "Services hub", "detail": "10.40.0.0/16; peering alone does not forward between spokes", "column": 1, "row": 1 },
+                { "id": "library-spoke", "label": "Library spoke", "detail": "10.60.0.0/16; no direct school peering", "column": 2, "row": 1 }
+              ],
+              "edges": [
+                { "from": "school-spoke", "to": "services-hub", "label": "Configured peering" },
+                { "from": "services-hub", "to": "school-spoke", "label": "Reciprocal peering" },
+                { "from": "library-spoke", "to": "services-hub", "label": "Configured peering" },
+                { "from": "services-hub", "to": "library-spoke", "label": "Reciprocal peering" }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Direct school-to-library peering is suitable when those networks should communicate directly without centralized inspection. A routed design is appropriate when traffic must pass through a security appliance or use a shared gateway connection. At larger scale, Azure Virtual Network Manager can centrally manage hub-and-spoke or mesh connectivity configurations instead of requiring manual creation of every relationship. That is a separate configured service, not a reason to assume ordinary peerings suddenly become transitive. Always identify the actual connectivity model in use."
+            }
+          ]
+        },
+        {
+          "id": "understand-a-shared-gateway",
+          "title": "Gateway transit reuses a real gateway connection",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An Azure VPN gateway is a managed service that connects networks through configured VPN connections. A site-to-site connection joins an office network to Azure; a point-to-site connection joins individual VPN clients; a VNet-to-VNet VPN connection joins network gateways. Gateway transit lets a peered spoke use the hub's configured gateway connectivity instead of deploying its own gateway. For our office case, services VNet must actually contain a supported VPN gateway in a dedicated subnet named GatewaySubnet and have a working office connection."
+            },
+            {
+              "type": "paragraph",
+              "text": "Gateway transit works with regional and global peering. A SKU identifies a product's particular tier or configuration. Current VPN Gateway documentation supports transit for VPN gateway SKUs other than Basic. A VNet can have only one VPN gateway, and a spoke using a remote gateway cannot already have its own virtual network gateway. It can select a remote gateway through only one peering. Do not turn that into a claim that all advanced VPN and ExpressRoute coexistence designs are impossible; this lesson uses a single shared VPN gateway with no local gateway in the spoke."
+            },
+            {
+              "type": "table",
+              "caption": "Settings for school VNet to borrow services VNet's VPN gateway",
+              "headers": ["Peering side", "Gateway setting", "Meaning"],
+              "rows": [
+                ["Services hub toward school", "Allow gateway transit: enabled", "The hub offers its existing supported gateway to the school peer."],
+                ["School spoke toward services", "Use remote gateways: enabled", "The school selects the gateway offered by this peer; it has no local gateway."],
+                ["Services hub toward school", "Use remote gateways: disabled", "The hub is the provider in this design, not a borrower of a nonexistent school gateway."],
+                ["Both sides", "VNet access enabled; review forwarded-traffic settings for the configured transit path", "The documented VPN-transit portal setup enables receiving forwarded traffic on both sides. These options still do not create the gateway or tunnel."]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Portal wording can mention gateway or Route Server together. Azure Route Server exchanges routes with compatible routing devices; it is not itself a VPN tunnel to the office. In this exercise the provider is specifically the services VPN gateway. Identify the resource that supplies the connection before selecting a checkbox. A network with ordinary peering but no gateway cannot satisfy a requirement to reuse the hub's office VPN simply by enabling gateway transit."
+            }
+          ]
+        },
+        {
+          "id": "worked-office-transit",
+          "title": "Follow the school packet to the office and back",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "School web VM reaches the office server",
+              "scenario": "School web VM 10.20.1.4 needs an approved HTTPS service on office server 172.20.10.50. The office is 172.20.0.0/16. Services hub is 10.40.0.0/16. This example assumes no library traffic and does not route through a security NVA. No DNS name is required for the initial IP-level test.",
+              "steps": [
+                { "action": "Verify a supported services-hub VPN gateway in GatewaySubnet, for example a planned nonoverlapping 10.40.255.0/27 subnet, and a healthy site-to-site tunnel to the office VPN device.", "why": "Peering cannot create the gateway, configure the office device, or negotiate the tunnel. These are prerequisites that must be observed rather than inferred." },
+                { "action": "Confirm both school-services peering resources are Connected with VNet access enabled. On the hub side offer gateway transit; on the school side enable use of the remote gateway, with no school gateway present.", "why": "The two settings have complementary roles. Enabling only the hub's offer does not make the school consume it." },
+                { "action": "Review forwarded-traffic settings against the documented transit setup and verify that the office prefix 172.20.0.0/16 is configured or learned through the gateway connection.", "why": "The gateway needs to know the office destinations. Transit permission does not invent the office's address ranges." },
+                { "action": "Leave gateway route propagation enabled for the school's relevant subnet route table unless an explicitly designed replacement exists. Inspect the web NIC for the office route using the virtual network gateway.", "why": "The school must learn the external destination route. Disabling propagation can remove needed routes even when the peering and VPN both appear healthy." },
+                { "action": "Verify the office routes and VPN traffic selectors include the school range 10.20.0.0/16, not just services range 10.40.0.0/16.", "why": "The reply is addressed to 10.20.1.4. A tunnel that knows only the hub can carry hub traffic while dropping or misrouting spoke replies." },
+                { "action": "Permit the exact source and service port in Azure and office security controls, verify the server listens, then test TCP 443 and inspect the return path.", "why": "A complete path is two-way and protocol-specific. A successful connection does not yet prove an authorized HTTPS session or a valid certificate for an IP address." }
+              ],
+              "result": "The intended request path is school spoke, shared services gateway, office VPN device, office server. Replies return through the office tunnel and hub gateway to school. The service still needs its own authentication, and names need a separately configured DNS solution."
+            },
+            {
+              "type": "diagram",
+              "title": "Explicit site-to-site gateway-transit data path",
+              "description": "This diagram assumes the gateway, site-to-site tunnel, reciprocal peering, gateway-sharing settings, routes, and security permissions described in the worked example already exist. The request travels from web VM 10.20.1.4 through the services-hub VPN gateway and office VPN device to 172.20.10.50. Replies follow the reverse path. It does not show a DNS lookup or imply that peering created the tunnel.",
+              "nodes": [
+                { "id": "web-source", "label": "School web VM", "detail": "10.20.1.4; spoke uses the services remote gateway", "column": 0, "row": 0 },
+                { "id": "shared-vpn-gateway", "label": "Services VPN gateway", "detail": "In services VNet 10.40.0.0/16; gateway transit offered", "column": 1, "row": 0 },
+                { "id": "office-vpn-device", "label": "Office VPN device", "detail": "Configured site-to-site connection and school return route", "column": 2, "row": 0 },
+                { "id": "office-server", "label": "Office server", "detail": "172.20.10.50; HTTPS listener assumed on TCP 443", "column": 2, "row": 2 }
+              ],
+              "edges": [
+                { "from": "web-source", "to": "shared-vpn-gateway", "label": "Office route via transit" },
+                { "from": "shared-vpn-gateway", "to": "office-vpn-device", "label": "Configured VPN tunnel" },
+                { "from": "office-vpn-device", "to": "office-server", "label": "Office LAN route" },
+                { "from": "office-server", "to": "office-vpn-device", "label": "Reply to 10.20.1.4" },
+                { "from": "office-vpn-device", "to": "shared-vpn-gateway", "label": "Tunnel return route" },
+                { "from": "shared-vpn-gateway", "to": "web-source", "label": "Return through peering" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "gateway-routes-and-boundaries",
+          "title": "Route propagation does not remove routing responsibilities",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Route propagation distributes routes learned through the gateway into the relevant subnet routing tables. Border Gateway Protocol, or BGP, is a protocol that connected routers can use to advertise reachable prefixes to each other. VPN connections can also use configured address ranges rather than BGP. In either case, check the actual office prefix in effective routes. A route table's gateway-propagation setting can prevent those routes from appearing. Do not disable propagation on GatewaySubnet as a casual troubleshooting step, because the gateway depends on its supported routing configuration."
+            },
+            {
+              "type": "paragraph",
+              "text": "ExpressRoute gateway sharing is another supported gateway-transit scenario, but an ExpressRoute gateway is not a valid next-hop type for a user-defined route that tries to force traffic directly to it. Use the appropriate gateway routing design instead. If direct peering and a gateway-based interconnection both exist between the same VNets, the direct peering path normally carries traffic between those VNets. Sharing the office gateway does not by itself prove that unrelated spokes can communicate through the hub. Test each intended destination and return route."
+            },
+            {
+              "type": "paragraph",
+              "text": "Point-to-site clients introduce another route consumer. After relevant topology changes, Windows VPN clients can require a freshly downloaded and installed VPN client package so they learn the changed routes. The fact that a VM can reach a spoke does not prove that a laptop's old VPN configuration can. Also budget for the gateway's running cost and relevant peering transfer charges; current documentation explicitly includes peering charges for spoke traffic using gateway transit. Reusing one gateway can reduce duplicated infrastructure without making its traffic free."
+            }
+          ]
+        },
+        {
+          "id": "service-chaining-with-an-appliance",
+          "title": "Use a real forwarding device when inspection is required",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A network virtual appliance, or NVA, is a virtual machine running a network function such as a firewall or router. Service chaining means deliberately sending traffic through such a service rather than taking a direct path. A user-defined route, or UDR, supplies a destination prefix and next hop. Associate its route table with the subnet whose outgoing traffic should follow that instruction. The next hop can be the private IP of an appliance in a directly peered VNet. It must actually be reachable and capable of forwarding."
+            },
+            {
+              "type": "example",
+              "title": "School-to-library traffic inspected in the services hub",
+              "scenario": "Return to school 10.20.0.0/16 and library 10.60.0.0/16, each peered to services 10.40.0.0/16 but not directly to one another. Explicitly deploy and configure a forwarding NVA at 10.40.2.4 in dedicated subnet 10.40.2.0/24. The destination is an approved service on library VM 10.60.1.4. This is a separate design from the office gateway example.",
+              "steps": [
+                { "action": "Verify both complete spoke-hub peering pairs and the NVA's private reachability from each spoke.", "why": "A UDR pointing at an unreachable next-hop IP does not establish the missing network connection." },
+                { "action": "Associate a route table with the school web subnet containing destination 10.60.0.0/16, next hop Virtual appliance, address 10.40.2.4.", "why": "This sends school requests for the library to the hub's actual forwarding device rather than assuming peering is transitive." },
+                { "action": "Associate a route table with the library workload subnet containing destination 10.20.0.0/16 through the same appliance 10.40.2.4.", "why": "Replies must return through the intended inspection path. A stateful firewall may reject flows whose return direction bypasses it." },
+                { "action": "Enable IP forwarding on the relevant Azure NVA NIC and configure forwarding, routes, and security policy inside its operating system or appliance software.", "why": "Azure's NIC permission and the appliance's own forwarding behavior are separate requirements. A normal VM does not become a router just because another subnet points at it." },
+                { "action": "On each spoke's peering to the hub, enable receiving forwarded traffic from the hub. Verify the NVA can use the hub's direct peering routes toward the destination spokes.", "why": "The relayed packet originated in another spoke, not in the hub. Receiving forwarded traffic permits that class of packet but still does not install UDRs or the appliance." },
+                { "action": "Permit the precise application flow in spoke and appliance security controls, then inspect effective routes and appliance logs while testing both directions.", "why": "A successful source-to-NVA test alone does not prove the NVA-to-library leg or the reply path. Logs can show whether the intended inspection point actually handled the traffic." }
+              ],
+              "result": "The configured request path is 10.20.1.4 to NVA 10.40.2.4 to 10.60.1.4, with the symmetric return path through the same NVA. This is explicit routing and forwarding layered on top of two peerings, not automatic peering transitivity."
+            },
+            {
+              "type": "paragraph",
+              "text": "Do not attach a route that sends the appliance's own traffic back to itself. Keep its subnet routing appropriate for reaching each spoke, and avoid deploying the appliance into the same workload subnet whose traffic you are redirecting through it. A single NVA can also become a single point of failure or a throughput bottleneck; production designs need a supported availability and scaling plan. Peering's performance characteristics cannot remove the limits of a device you deliberately place in the path."
+            }
+          ]
+        },
+        {
+          "id": "specific-routes-beat-broad-intentions",
+          "title": "A default route does not mean all traffic",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the ordinary UDR and peering routes in this example, Azure selects the matching destination prefix with the most fixed bits, called the longest-prefix match. A /16 match is more specific than a /0 match. Only when comparing the same prefix do normal route-source preferences place a UDR ahead of a BGP route and then a system route. Read actual effective routes, because Azure documents special preferred platform routes, including service-endpoint routes and preferred VNet or peering routes relative to BGP advertisements. Do not apply a simplified slogan to every platform feature."
+            },
+            {
+              "type": "table",
+              "caption": "Routes visible to the school web subnet in a separate prediction scenario",
+              "headers": ["Destination prefix", "Source", "Next hop"],
+              "rows": [
+                ["10.20.0.0/16", "System", "Virtual network"],
+                ["10.40.0.0/16", "System", "Virtual network peering"],
+                ["0.0.0.0/0", "User", "Virtual appliance 10.40.2.4"]
+              ]
+            },
+            {
+              "type": "prediction",
+              "id": "peering-default-route-prediction",
+              "prompt": "Using exactly the table above, does a packet from 10.20.1.4 to shared service 10.40.1.4 pass through NVA 10.40.2.4 because the administrator added a user-defined default route?",
+              "answer": "No. The 10.40.0.0/16 peering route matches more specifically than 0.0.0.0/0.",
+              "explanation": "Compare prefix lengths before route sources. The administrator's wish to inspect everything is not encoded by a /0 route when a more-specific direct route exists. An inspection design could deliberately route the service subnet 10.40.1.0/24 through the NVA while preserving direct reachability to its separate 10.40.2.0/24 subnet, and would also need a valid return path."
+            },
+            {
+              "type": "paragraph",
+              "text": "A route is not an outbound connectivity service either. Seeing an Internet next hop or pointing 0.0.0.0/0 at an appliance does not guarantee source-address translation or internet access. Source network address translation, or SNAT, replaces a private source address with an appropriate outbound address. New private-subnet deployments need an explicit supported outbound method when internet access is required. This module's private peering tests do not assume that VMs can download tools or reach public package repositories merely because a default route exists."
+            },
+            {
+              "type": "paragraph",
+              "text": "Current documentation says the portal defaults new VNets to private subnets, and the API version released after March 31, 2026 changes that default for new VNets as well. Existing VNets are not automatically changed, and deployments using older API versions can retain earlier behavior. Inspect the actual subnet and outbound configuration. An explicitly configured NAT Gateway is one possible outbound method, but it is a separately charged resource and is not required just to send private traffic through peering."
+            }
+          ]
+        },
+        {
+          "id": "transit-troubleshooting-and-exam",
+          "title": "Prove every segment, including the reply",
+          "blocks": [
+            {
+              "type": "list",
+              "ordered": true,
+              "items": [
+                "Identify the intended design: direct peering, shared gateway, or NVA forwarding. Do not troubleshoot an imaginary path that was never configured.",
+                "Check peering states and the exact access, gateway-sharing, remote-gateway, and forwarded-traffic settings required for that design.",
+                "For office traffic, verify the gateway connection, office prefixes, route propagation, and the office return route to the spoke.",
+                "For appliance traffic, verify subnet route-table association, the chosen next-hop IP, both Azure NIC and appliance forwarding, and destination-spoke acceptance of forwarded packets.",
+                "Check the actual protocol and port in every relevant security control, then the guest listener and application. Verify DNS separately if the test uses a hostname.",
+                "Repeat the test after a targeted change and record both directions. A Connected peering or a successful hub-only test is not a substitute for the requested end-to-end flow."
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "The four common transit mistakes",
+              "text": "Peering alone is not transitive. Allow forwarded traffic does not create a forwarding device or route. The hub offers gateway transit while the spoke selects use of that remote gateway. A user-defined /0 route does not override a more-specific /16 peering route merely because it is user-defined. Match each requirement to its own configuration and always include the return path."
+            },
+            {
+              "type": "paragraph",
+              "text": "For names, apply the same discipline. The office network 172.20.0.0/16 has no automatic access to db.classroom.internal merely because a VPN works. The manual db record, private-zone link to the resolver's VNet, reachable DNS service, and office conditional forwarding must be configured. For Azure clients using Azure-provided DNS, link the appropriate VNets to that zone. A DNS answer of 10.20.2.5 still does not authorize database access. This is why networking investigations should keep a small evidence record for naming, routing, filtering, and the application rather than collapse them into one yes-or-no connectivity label."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "hub-no-implicit-transit",
+          "kind": "single",
+          "prompt": "School and library each have working direct peering to services VNet. No school-library peering, NVA, UDRs, or other transit service exists. Why does school-to-library traffic fail?",
+          "choices": [
+            { "id": "peering-is-nontransitive", "text": "The two peerings do not create a school-to-library path through the hub.", "explanation": "Ordinary peering relationships are nontransitive. The hub is not automatically a packet-forwarding device." },
+            { "id": "both-must-use-public-addresses", "text": "Spoke-to-spoke traffic always requires public IP addresses.", "explanation": "A direct peering or a correctly configured private routed design can provide this connectivity without public workload addresses." },
+            { "id": "rename-hub-resource", "text": "The services VNet must be renamed hub to enable forwarding.", "explanation": "Hub describes its architectural role. A resource name does not configure routes or forwarding." }
+          ],
+          "correctIds": ["peering-is-nontransitive"],
+          "explanation": "Choose an explicit direct relationship or an actual transit design; a visual line through a hub is not a configured network path."
+        },
+        {
+          "id": "gateway-settings-placement",
+          "kind": "multiple",
+          "prompt": "Services VNet owns the supported office VPN gateway. School VNet has no gateway and should reuse it. Select the two complementary gateway settings.",
+          "choices": [
+            { "id": "hub-offers-transit", "text": "Allow gateway transit on the services-hub side toward school.", "explanation": "The network that owns the gateway must offer its connectivity to the peer." },
+            { "id": "spoke-uses-remote", "text": "Use remote gateways on the school-spoke side toward services.", "explanation": "The borrowing network must select the peer's offered gateway and cannot already have its own gateway in this design." },
+            { "id": "hub-borrows-school", "text": "Use remote gateways on services toward the gateway-less school VNet.", "explanation": "That reverses the provider and consumer roles and points toward a network that has no gateway to offer." },
+            { "id": "both-own-and-borrow", "text": "Create a school VPN gateway as a prerequisite for using services' remote gateway.", "explanation": "A spoke using a remote gateway cannot already have its own virtual network gateway; deploying one would contradict this design." }
+          ],
+          "correctIds": ["hub-offers-transit", "spoke-uses-remote"],
+          "explanation": "The two settings establish an offer-and-use relationship. The tunnel, routes, access settings, and security permissions are still separate prerequisites."
+        },
+        {
+          "id": "gateway-return-prefix",
+          "kind": "single",
+          "prompt": "The office can reach services VNet. School's peering is Connected and its effective routes include office 172.20.0.0/16 through the gateway. School connections still time out, and the office VPN device knows only return range 10.40.0.0/16. What is missing?",
+          "choices": [
+            { "id": "office-school-return-route", "text": "The office must route and permit the school prefix 10.20.0.0/16 through the VPN.", "explanation": "Replies to 10.20.1.4 are not covered by the hub's 10.40.0.0/16 range. The return path must include the spoke." },
+            { "id": "rename-dns-record", "text": "Rename the private database DNS record.", "explanation": "The evidence concerns a missing return prefix, not name resolution. Renaming a record cannot add an office VPN route." },
+            { "id": "shorten-peering-name", "text": "Use a shorter peering resource name.", "explanation": "Resource naming does not determine packet destinations or office routing behavior." }
+          ],
+          "correctIds": ["office-school-return-route"],
+          "explanation": "A healthy tunnel for one Azure prefix is not proof that the office can return traffic to every spoke."
+        },
+        {
+          "id": "route-prefix-before-source",
+          "kind": "single",
+          "prompt": "A source subnet has system peering route 10.40.0.0/16 and UDR 0.0.0.0/0 to an NVA. There are no other relevant routes. Which route handles destination 10.40.1.4?",
+          "choices": [
+            { "id": "specific-peering-route", "text": "The /16 peering route.", "explanation": "The destination matches both routes, but /16 fixes more destination bits than /0 and is therefore more specific." },
+            { "id": "user-route-always-wins", "text": "The /0 UDR because user routes always win before prefix comparison.", "explanation": "This reverses the decision order for the stated routes. Route-source preference does not let a broad /0 defeat the more-specific peering destination." },
+            { "id": "random-route-selection", "text": "Azure randomly distributes connections between the two routes.", "explanation": "These are competing route prefixes, not a load-balancing pool. Azure selects the applicable route by its routing rules." }
+          ],
+          "correctIds": ["specific-peering-route"],
+          "explanation": "A route table must encode the inspection requirement at an appropriate prefix, and the complete design must preserve next-hop reachability and the return path."
+        },
+        {
+          "id": "nva-forwarding-requirements",
+          "kind": "multiple",
+          "prompt": "The school and library UDRs point at 10.40.2.4 in the peered hub. Select the two additional requirements for the described inspected path.",
+          "choices": [
+            { "id": "nva-two-layer-forwarding", "text": "Enable Azure NIC IP forwarding and configure the appliance itself to forward the permitted traffic.", "explanation": "Azure must allow packets that are not addressed to the appliance, and its software must actually route or inspect them." },
+            { "id": "spokes-accept-forwarded", "text": "Allow the receiving spokes to accept forwarded traffic from the hub and maintain the return route through the appliance.", "explanation": "Packets originated in the other spoke. Reception permission and symmetric routing are required parts of this service chain." },
+            { "id": "udr-creates-appliance", "text": "Assume the UDR creates a forwarding service at 10.40.2.4.", "explanation": "A route references a next hop; it does not deploy a VM, enable its operating system's forwarding, or create a firewall policy." },
+            { "id": "public-nva-required", "text": "Assign the NVA a public IP because private next hops cannot be used across peering.", "explanation": "A private appliance IP in a directly peered VNet is a supported next hop. A public IP is not required for this private service chain." }
+          ],
+          "correctIds": ["nva-two-layer-forwarding", "spokes-accept-forwarded"],
+          "explanation": "Routes, a real functioning appliance, peering acceptance, and the two-way data path are distinct requirements."
+        }
+      ],
+      "takeaways": [
+        "A hub-and-spoke drawing does not create transitive peering.",
+        "The gateway-owning hub offers transit; the gateway-less spoke selects that remote gateway through one peering.",
+        "Gateway routes and office return routes must include the spoke's address space.",
+        "Service chaining requires subnet-associated UDRs, a reachable forwarding appliance, appropriate peering settings, and permitted return traffic.",
+        "A /0 UDR cannot defeat a more-specific peering route in the stated route-selection scenario.",
+        "DNS, outbound translation, application health, and authorization remain separate from peering and transit."
+      ],
+      "sourceIds": ["peering-module", "peering-unit-gateway", "peering-unit-chaining", "peering-unit-exercise", "peering-overview", "peering-management", "peering-gateway-transit", "peering-routing", "peering-private-dns", "peering-outbound", "peering-exam-guide"]
+    }
+  ],
+  "glossary": [
+    { "term": "Virtual network", "definition": "An Azure private network resource with its own address space and subnets; connecting it does not merge its administrative ownership." },
+    { "term": "Peering", "definition": "A configured private connection between Azure VNets that enables direct routing for the participating address spaces under its settings." },
+    { "term": "Regional peering", "definition": "Peering between VNets in the same Azure region." },
+    { "term": "Global peering", "definition": "Peering across supported Azure regions within a cloud, not a connection between different Azure clouds." },
+    { "term": "Nonoverlapping ranges", "definition": "Address ranges that share no IP addresses, allowing destinations in the connected networks to be distinguished." },
+    { "term": "Subscription", "definition": "An Azure billing and management boundary containing resource groups and resources." },
+    { "term": "Microsoft Entra tenant", "definition": "An identity directory, distinct from an Azure region, subscription, or sovereign cloud." },
+    { "term": "RBAC scope", "definition": "The set of Azure resources over which a role assignment grants its management permissions." },
+    { "term": "Nontransitive", "definition": "A property meaning that school-to-hub and hub-to-library peerings do not automatically create school-to-library connectivity." },
+    { "term": "Hub and spoke", "definition": "A topology with shared central infrastructure in a hub network and separate surrounding workload networks." },
+    { "term": "Gateway transit", "definition": "A peering capability allowing a network to use a gateway in its peer for configured external or gateway-connected destinations." },
+    { "term": "Route propagation", "definition": "Distribution of gateway-provided destination routes into relevant network routing tables." },
+    { "term": "BGP", "definition": "Border Gateway Protocol, used by routers to advertise reachable address prefixes to one another." },
+    { "term": "Effective routes", "definition": "The combined routes applicable to a network interface after Azure accounts for system and configured routing information." },
+    { "term": "UDR", "definition": "User-defined route: an administrator's destination-prefix and next-hop instruction in a route table associated with a subnet." },
+    { "term": "NVA", "definition": "Network virtual appliance: a VM running a network function such as routing, filtering, or traffic inspection." },
+    { "term": "Service chaining", "definition": "Deliberately directing traffic through a network service such as an appliance, using a complete forwarding and return-path design." },
+    { "term": "Forwarded traffic", "definition": "Traffic relayed by a device in a peer rather than originating from that peer's own workload address space." },
+    { "term": "Peering synchronization", "definition": "Refreshing a peer's knowledge of a changed remote VNet address space after a supported resize." },
+    { "term": "SNAT", "definition": "Source network address translation, which changes a packet's source address for an appropriate outbound path; a route alone does not provide it." }
+  ],
+  "sources": [
+    { "id": "peering-module", "url": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/", "title": "Configure Azure Virtual Network peering", "supports": "Official objectives and complete eight-unit sequence; all instructional units, the assessment, and summary were consulted." },
+    { "id": "peering-unit-uses", "url": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/2-determine-uses", "title": "Determine Azure Virtual Network peering uses", "supports": "Regional and global concepts, private backbone connectivity, performance, independent administration, nonoverlap, and DNS boundaries. Older resize and Government-cloud statements are corrected using current product sources." },
+    { "id": "peering-unit-gateway", "url": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/3-determine-gateway-transit-connectivity", "title": "Determine gateway transit and connectivity", "supports": "Peering access options, forwarded traffic, gateway-sharing roles, and site-to-site, point-to-site, and VNet-to-VNet use cases." },
+    { "id": "peering-unit-create", "url": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/4-create", "title": "Create virtual network peering", "supports": "Portal configuration, Network Contributor or custom permissions, reciprocal configuration, and Initiated versus Connected states." },
+    { "id": "peering-unit-chaining", "url": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/5-determine-service-chaining-uses", "title": "Extend peering with user-defined routes and service chaining", "supports": "Nontransitivity, hub-and-spoke topology, appliance next hops, UDRs, and Azure Virtual Network Manager's central connectivity role." },
+    { "id": "peering-unit-exercise", "url": "https://learn.microsoft.com/en-us/training/modules/configure-vnet-peering/6-simulation-peering", "title": "Exercise: Implement Intersite Connectivity", "supports": "Practice coverage: separate VNet VMs, before-and-after connectivity tests, Network Watcher, PowerShell diagnostics, and optional route reasoning." },
+    { "id": "peering-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview", "title": "Azure virtual network peering", "supports": "Current private-path behavior, automatic peering routes, nontransitive service chaining, supported resize scope, global gateway transit, and peering charges including gateway-transit spoke traffic." },
+    { "id": "peering-management", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-manage-peering", "title": "Create, change, or delete Azure virtual network peering", "supports": "Current options, reciprocal resources, permissions, nonoverlap, same-cloud global peering including Government regions, DNS boundaries, and different restrictions for resource moves." },
+    { "id": "peering-cross-tenant", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/create-peering-different-subscriptions", "title": "Create peering across subscriptions and Microsoft Entra tenants", "supports": "Authorized cross-subscription and cross-tenant workflows, guest invitation acceptance, role scope, and single-operator or separated-operator choices." },
+    { "id": "peering-resize", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/update-virtual-network-peering-address-space", "title": "Update the address space for a peered virtual network", "supports": "Add, modify, and remove ranges, synchronize every affected remote peer after changes, avoid overlap, and do not remove occupied ranges." },
+    { "id": "peering-gateway-transit", "url": "https://learn.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-peering-gateway-transit", "title": "Configure VPN gateway transit for virtual network peering", "supports": "Hub and spoke gateway settings, supported VPN SKUs excluding Basic, forwarded-traffic portal configuration, route propagation, and Windows VPN-client package refresh." },
+    { "id": "peering-routing", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-udr-overview", "title": "Azure virtual network traffic routing", "supports": "System peering routes, UDR association and appliance next hops, NIC and guest forwarding, longest-prefix decisions, same-prefix preference, platform-route exceptions, and ExpressRoute next-hop restrictions." },
+    { "id": "peering-private-dns", "url": "https://learn.microsoft.com/en-us/azure/dns/private-dns-virtual-network-links", "title": "What is a virtual network link?", "supports": "Explicit private-zone resolution links, Completed link status, and the separation of DNS links from network peering." },
+    { "id": "peering-basic-lb-retirement", "url": "https://learn.microsoft.com/en-us/azure/load-balancer/load-balancer-basic-upgrade-guidance", "title": "Upgrade from Basic Load Balancer to Standard Load Balancer", "supports": "September 30, 2025 Basic Load Balancer retirement and Standard guidance for new ARM-native workloads; retirement is not immediate forced shutdown of every legacy instance." },
+    { "id": "peering-basic-ip-retirement", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/public-ip-basic-upgrade-guidance", "title": "Upgrade Basic Public IP Address to Standard SKU", "supports": "September 30, 2025 Basic public IP retirement and guidance to use Standard public IP resources for new ARM-native designs." },
+    { "id": "peering-connection-troubleshoot", "url": "https://learn.microsoft.com/en-us/azure/network-watcher/connection-troubleshoot-overview", "title": "Connection troubleshoot overview", "supports": "Protocol-specific testing, Reachable and Unreachable observations, route and security diagnostics, and the distinction between current agent-based requirements and the preview agentless experience." },
+    { "id": "peering-test-command", "url": "https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/support/troubleshooting", "title": "Troubleshoot Windows Admin Center", "supports": "Official Test-NetConnection pattern with ComputerName, Port, and InformationLevel Detailed, consulted through Microsoft code-sample search and adapted to an authorized private target." },
+    { "id": "peering-outbound", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/ip-services/default-outbound-access", "title": "Default outbound access in Azure", "supports": "Current portal and post-March 31, 2026 API private-subnet defaults, unchanged existing VNets, older API behavior, and the need for explicit outbound connectivity rather than assuming a route supplies SNAT." },
+    { "id": "peering-exam-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104", "title": "Study guide for Exam AZ-104", "supports": "Current objectives for VNet peering, UDRs, name resolution, and troubleshooting; lesson priority is not an asserted exam probability." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: reciprocal peering and address-space sync",
+    "purpose": "Observe configuration states with empty disposable VNets, then optionally add two approved test VMs for before-and-after private TCP tests. Gateway transit and NVA service chaining remain paper exercises unless separately budgeted and designed. Nothing here is executed automatically.",
+    "prerequisites": [
+      "An approved subscription. For the configuration-only branch, Network Contributor or equivalent network permissions on the disposable resource group must cover creating and managing both lab VNets and their peerings. These permissions alone do not authorize VM creation or Run Command. Use one tenant rather than changing guest access to real organizations.",
+      "A new empty dedicated resource group named rg-school-peering-lab, with a verified resource list and agreed spending limit. Its creation requires separately approved resource-group creation permission at subscription scope, or an authorized administrator must create it first. A role scoped only to the resource group does not grant permission to create that group.",
+      "Nonoverlapping lab ranges 10.20.0.0/16, 10.40.0.0/16, and later 10.41.0.0/16, confirmed not to conflict with any connected network.",
+      "For the optional VM runtime branch, approval for two small disposable Windows Server VMs, their disks and NICs, plus appropriate compute creation and management permissions alongside the network permissions. Contributor scoped to the new disposable resource group is one example; narrower suitable role combinations are also possible. Use an approved private management method or explicitly authorized portal Run Command.",
+      "If using Run Command, the operator needs permission to execute commands on the test VMs. Listing available commands in the portal additionally requires the subscription-level Microsoft.Compute/locations/runCommands/read permission, for example through an approved Reader assignment or a narrower custom role. Do not assume a resource-group role grants that subscription-level read permission.",
+      "For runtime tests, healthy VM agents, required management connectivity, and a known listener on the destination. Do not assume default internet outbound access from a new private subnet; explicitly design any outbound service that the selected management or software setup requires.",
+      "For Network Watcher runtime diagnostics, the necessary resource permissions and the requirements of the selected experience. If an agent-based test requires the Network Watcher VM extension, configure that extension explicitly; do not confuse it with Azure Monitor Agent. The agentless experience is documented as preview, not assumed here."
+    ],
+    "costWarning": "Peering transfer is metered, with different regional and global rates. Optional VMs and disks incur charges; Bastion, NAT Gateway, public IPs, diagnostics storage, VPN gateways, and security appliances can add continuing charges. Gateway transit does not eliminate spoke peering-transfer charges. Review current regional prices before creating anything. The configuration-only path does not require VMs, public IPs, a gateway, or an appliance, and no free-credit assumption is made.",
+    "steps": [
+      "Verify the approved subscription and dedicated empty resource group. Create school VNet 10.20.0.0/16 with web subnet 10.20.1.0/24 and database subnet 10.20.2.0/24. Create services VNet 10.40.0.0/16 with workload subnet 10.40.1.0/24. Use the same region initially and no preexisting connectivity.",
+      "Optional runtime branch: create approved disposable Windows Server test VMs in the school web and services workload subnets with NIC private addresses 10.20.1.4 and 10.40.1.4. Set addresses through Azure NIC configuration, not a conflicting manual guest address. Do not assign VM public IPs or allow internet-facing RDP.",
+      "For that runtime branch only, verify the destination's RDP service listens on TCP 3389 and its guest firewall permits only the intended test source. Configure relevant NSGs to permit the test from 10.20.1.4/32 to 10.40.1.4 on TCP 3389, and source outbound permission. Both NIC and subnet rules must permit the path. RDP is only a convenient known TCP listener here, not a public management service.",
+      "Before peering, run the lesson's PowerShell diagnostic from the school test VM with Port changed from 443 to 3389, using the approved management path. Record TcpTestSucceeded. With the isolated topology described here, it should be False. If no VMs were created, record that runtime connectivity was not tested.",
+      "Open school VNet, Peerings, Add. Select services VNet using its verified resource identity, name the directions school-to-services and services-to-school, and allow VNet access both ways. Leave gateway-sharing options disabled. Save both directions, or have the properly authorized operator complete the reciprocal configuration.",
+      "Refresh both VNets' peering pages and confirm both states are Connected. If only one side exists and shows Initiated, complete the reciprocal configuration rather than changing DNS or deploying a gateway.",
+      "With running test VMs, inspect the NIC effective routes: school should have remote prefix 10.40.0.0/16 through Virtual network peering, and services should have return prefix 10.20.0.0/16. Repeat the TCP 3389 diagnostic and expect True only if the listener and all security controls meet the earlier prerequisites.",
+      "Optionally run Network Watcher Connection troubleshoot from the school test VM to 10.40.1.4 on TCP 3389 using the explicitly supported diagnostic setup. Compare its reachability and reported rule or route issues with the PowerShell observation. Do not infer application login permission from a successful port probe.",
+      "Add 10.41.0.0/16 to services VNet's address space after the nonoverlap check. Use the documented Sync operation for its school peer. Inspect the remote-address information and, if a school VM is running, the new effective peering route. Do not add the range to school's own address space.",
+      "Remove the added 10.41.0.0/16 range only while it remains unused, then synchronize the peer again. Verify the remote range and corresponding route are removed while the original 10.40.0.0/16 relationship remains.",
+      "Complete the hub-and-spoke paper exercise in the browser: write the school-to-library and library-to-school UDRs, the NVA IP 10.40.2.4, forwarding settings, and return path. Do not attach routes to a nonexistent appliance or deploy a VPN gateway merely to complete the worksheet.",
+      "If you want hostname-based evidence, separately create a disposable classroom.internal private zone, manual db record 10.20.2.5, and resolution-only links to the lab VNets using Azure-provided DNS. No database VM exists in this lab, so a successful DNS answer would demonstrate resolution only. Skip this extension if you do not want additional DNS charges."
+    ],
+    "expectedResults": [
+      "Both directional peering resources show Connected. An incomplete one-sided configuration does not satisfy the relationship.",
+      "Only on the optional VM branch, the private TCP test changes from False to True after peering when the stated listener, routing, and security prerequisites hold; no application login has been tested.",
+      "Running VM NICs expose the reciprocal system peering routes. Without VMs, the lab proves only peering configuration, not packet delivery.",
+      "After adding 10.41.0.0/16 and synchronizing, the school peer learns the new remote range; after removing the unused range and synchronizing again, it disappears without changing school VNet's own address space.",
+      "The paper topology still requires explicit NVA or gateway configuration for transit. No office VPN, school-library transit path, DNS link, or internet outbound service is created by ordinary peering."
+    ],
+    "cleanup": [
+      "Inspect rg-school-peering-lab and confirm all listed resources were created only for this lab. Check both VNet peering lists and any optional private-zone links before removal.",
+      "Remove the disposable peering relationship and confirm no reciprocal lab entry remains. Remove optional private-zone links and the lab-only zone if you created the DNS extension.",
+      "Delete the optional test VMs and verify their associated disks, NICs, and any separately approved management, outbound, diagnostics, or public IP resources are also removed. Deallocation alone does not remove every billable dependency.",
+      "Delete only the verified disposable VNets and dedicated group after checking their contents. Never delete a shared resource group or an office connection used by other workloads.",
+      "Refresh the subscription inventory to confirm the named lab resources are gone. Review Cost Management after reporting catches up; already incurred usage charges can still appear after cleanup."
+    ]
+  }
+}
