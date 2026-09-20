@@ -1,0 +1,452 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-governance",
+  "title": "Azure governance: organize, protect, and pay deliberately",
+  "summary": "Organize the school's subscriptions and resources, enforce understandable rules with Policy, tags and locks, and turn cost information into safe operational decisions.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 governance objectives require reasoning about hierarchy, subscriptions, resource groups, Policy, locks, tags, costs, budgets, and Advisor. These controls interact but do not replace each other.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/governance/management-groups/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Implement and manage Azure Policy.",
+    "Configure resource locks.",
+    "Apply and manage tags on resources.",
+    "Manage resource groups.",
+    "Manage subscriptions.",
+    "Manage costs with alerts, budgets, and Azure Advisor recommendations.",
+    "Configure management groups."
+  ],
+  "lessons": [
+    {
+      "id": "governance-resource-hierarchy",
+      "title": "Build a hierarchy that survives change",
+      "summary": "Choose lifecycle and governance boundaries, distinguish three kinds of move, and plan subscription administration without losing access.",
+      "objectives": [
+        "Explain the relationship between a tenant, management groups, subscriptions, resource groups, and resources.",
+        "Create and organize management groups with appropriate authority and inheritance awareness.",
+        "Manage resource groups according to lifecycle rather than assumed regional containment.",
+        "Compare resource moves, management-group moves, and directory transfers."
+      ],
+      "sections": [
+        {
+          "id": "hierarchy-purpose",
+          "title": "Different containers solve different problems",
+          "blocks": [
+            { "type": "paragraph", "text": "The school has a live application, a private database, a document archive, and experiments built by students. Putting everything into one administrative bucket is convenient on day one but dangerous at cleanup time. Ana needs production rules to remain stable while Bogdan can finish and delete a classroom project. Governance means arranging ownership, permissions, constraints, and cost accountability so those normal actions produce predictable results. It is not a substitute for backups, application security, or an accurate inventory." },
+            { "type": "paragraph", "text": "A Microsoft Entra tenant supplies the identity directory trusted by subscriptions. A subscription is an Azure resource-management and billing boundary associated with one tenant at a time; one tenant can serve many subscriptions. A management group organizes subscriptions for shared access and policy. A resource group organizes resources inside one subscription. A resource is an actual managed object such as a VM, virtual network, or storage account. These names describe relationships, not folders on a Windows disk: you cannot drag any object anywhere and expect its dependencies or access to follow." },
+            { "type": "diagram", "title": "A small school governance tree", "description": "The tenant's root management group leads to two governance branches. The Teaching subscription is shown down to one resource. The Live branch can contain its own subscriptions. This is administrative inheritance, not a network connection or a regional map.", "nodes": [
+              { "id": "gov-root", "label": "Tenant root group", "detail": "One root for the school directory", "column": 1, "row": 0 },
+              { "id": "gov-teaching", "label": "mg-teaching", "detail": "Classroom rules", "column": 0, "row": 1 },
+              { "id": "gov-live", "label": "mg-live", "detail": "Production rules", "column": 2, "row": 1 },
+              { "id": "gov-subscription", "label": "School-Teaching", "detail": "Subscription", "column": 0, "row": 2 },
+              { "id": "gov-group", "label": "rg-school-lab", "detail": "Resource group", "column": 1, "row": 2 },
+              { "id": "gov-resource", "label": "vm-lab", "detail": "Resource", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "gov-root", "to": "gov-teaching", "label": "Parent" },
+              { "from": "gov-root", "to": "gov-live", "label": "Parent" },
+              { "from": "gov-teaching", "to": "gov-subscription", "label": "Contains" },
+              { "from": "gov-subscription", "to": "gov-group", "label": "Contains" },
+              { "from": "gov-group", "to": "gov-resource", "label": "Contains" }
+            ] },
+            { "type": "paragraph", "text": "All management groups and subscriptions in this tree trust the same tenant. Each child management group or subscription has one parent, so inheritance has a defined path. Multiple management groups are not multiple directories. Regions are not extra hierarchy levels. A production subscription can contain resources in more than one region, and a management group can apply policy to all of them. A policy on mg-live does not automatically apply to its mg-teaching sibling." }
+          ]
+        },
+        {
+          "id": "configure-management-groups",
+          "title": "Create the governance branches carefully",
+          "blocks": [
+            { "type": "paragraph", "text": "Every directory has a single root management group, normally displayed as Tenant root group. It cannot be moved or deleted. Its identifier matches the tenant ID, but it is still an Azure governance object, not the directory itself. A root assignment can affect every subscription beneath it, so reserve root policy and access for genuinely organization-wide needs. Being able to see the root in the portal does not mean you can manage it. An Entra Global Administrator must explicitly elevate Azure access when using that recovery route." },
+            { "type": "paragraph", "text": "In the portal's Management groups area, an authorized operator adds a management group with a directory-unique ID and a readable display name. The ID cannot be edited later; the display name can. Choose a stable purpose such as mg-teaching instead of one teacher's name. Verify the resulting parent, then place approved subscriptions in the correct branch. New subscriptions land under the root by default, but a configured default management group can change that landing point. Do not assume a newly created subscription has no inherited policy." },
+            { "type": "paragraph", "text": "Creation permissions have an important qualification. If hierarchy protection requiring authorization is not enabled, an Entra user can create a management group without an existing management-group write grant, and becomes Owner of the new group. Organizations can require authorization instead. This is not permission for every user to administer the root or reorganize existing subscriptions. Keep the hierarchy shallow and purposeful; the documented maximum is six management-group levels below the root, excluding the subscription level. The limit is not a target to fill." },
+            { "type": "example", "title": "Move a classroom subscription into its intended branch", "scenario": "School-Teaching is under an old management group. Ana is directly assigned Owner on this subscription and has the required management-group write authority on both old and new parent groups. Both groups are in the same tenant.", "steps": [
+              { "action": "Inventory access and policy inherited from the old parent and expected from mg-teaching.", "why": "Moving the subscription changes its ancestor chain and can remove useful access or introduce restrictions." },
+              { "action": "Check the move permissions on the child and both parents, then move School-Teaching under mg-teaching using the management-group workflow.", "why": "A subscription role alone is not universal authority over arbitrary destination groups. Root-parent exceptions and inherited-Owner safeguards are documented separately." },
+              { "action": "Verify the new parent, effective assignments, and representative compliant operations after propagation.", "why": "Hierarchy information can be cached. Existing resources stay in their regions, but their governance context has changed." }
+            ], "result": "The subscription ID and tenant remain unchanged. Its inherited management-group access and policies now follow the new branch. If Ana's only Owner grant had come from the old parent, additional move safeguards would prevent treating that disappearing grant like direct ownership." }
+          ]
+        },
+        {
+          "id": "resource-group-lifecycle",
+          "title": "A resource group is a lifecycle boundary, not a region",
+          "blocks": [
+            { "type": "paragraph", "text": "An ordinary resource-group-scoped resource belongs to one resource group at a time. Groups cannot be nested. Resources in different groups can depend on each other, such as a web application reaching a database in a shared-data group. Grouping does not establish a network connection or prohibit one. Choose a group for resources that should be deployed, updated, delegated, and retired together. Keep a long-lived school archive out of a temporary competition group's deletion boundary." },
+            { "type": "paragraph", "text": "When creating a group, select its subscription, name, and location. The group's location is where Azure stores the group's metadata; it does not force every member resource into that region. A group whose metadata is in West Europe can contain a resource in North Europe if the service and applicable policies allow it. Each resource still has its own location and service-specific constraints. Moving a resource into a group with a different metadata location does not physically move the workload or its stored data." },
+            { "type": "paragraph", "text": "Deleting a resource group requests deletion of the contained resources, not just removal of an organizational label. Permissions to delete the group, applicable locks, and service dependencies matter. Inventory the full contents, backups, and external dependencies first. A delete lock on a contained resource can block deletion of the entire group. Never use a group delete as a trial to discover what is important. For a classroom project, define its owner and retirement date when creating it, then verify that only disposable resources are still present at retirement." },
+            { "type": "example", "title": "Separate an archive from an experiment", "scenario": "Bogdan's short-lived website and its disposable test database share a project end date. The document archive must survive for several years.", "steps": [
+              { "action": "Place the website and disposable database in rg-school-lab, and plan the archive under an independently managed data group.", "why": "The archive has a different lifecycle and should not be selected by routine lab cleanup." },
+              { "action": "Grant the lab team only the appropriate lab-group role and review explicit cross-group dependencies.", "why": "The grouping supports delegation but does not automatically grant access to the archive." },
+              { "action": "Before retirement, review the group's inventory and recovery requirements with Ana.", "why": "Resources added later may not share the original assumptions. The group name alone is not a safety check." }
+            ], "result": "The planned cleanup boundary matches the intended lifecycle rather than the application's diagram or deployment region." }
+          ]
+        },
+        {
+          "id": "resource-move-planning",
+          "title": "A supported resource move changes its address in management",
+          "blocks": [
+            { "type": "paragraph", "text": "Moving resources between groups or subscriptions is a resource-provider-supported operation, not a universal capability. Consult the move support for every involved type and its dependencies. For a cross-subscription resource move, both subscriptions must be active and in the same Entra tenant. The target needs the relevant resource providers registered and enough quota. Cross-subscription dependencies generally must be gathered in the same source group and moved together. A resource group itself is not moved to a new subscription; supported contents move to a destination group." },
+            { "type": "paragraph", "text": "The operator needs the source group's moveResources action and destination group's write authority. Validate the proposed move before submitting it. A read-only lock on an involved group or subscription blocks this workflow. Source and destination groups are temporarily protected against management changes while a move runs. Running resources can remain operational, but that is not permission to promise every workload zero disruption: dependencies and service-specific limitations still require review." },
+            { "type": "paragraph", "text": "A moved resource's resource ID changes because its path contains the subscription and resource-group names or IDs. Update scripts, dashboards, and integrations storing that path. Resource-level role assignments do not move with the resource and can become orphaned; plan their recreation and inspect the new inherited grants. Old group tags and policies do not become the new group's settings. Validate both successful application behavior and appropriate access after the move. A region change is a separate migration or service-specific move process, not this administrative regrouping." }
+          ]
+        },
+        {
+          "id": "subscription-administration-and-transfer",
+          "title": "Changing the trusted directory is a different project",
+          "blocks": [
+            { "type": "paragraph", "text": "Managing a subscription includes controlling its resource access, policy inheritance, provider registration, quotas, spending visibility, and lifecycle. Creating or acquiring one also depends on the billing agreement and the operator's billing permissions; Entra User Administrator is not a universal subscription-purchase role. Use separate live and teaching subscriptions when that provides useful delegation, policy, quota, or cost boundaries. Extra subscriptions are not a way to hide charges or ignore tenant-level identity risks." },
+            { "type": "paragraph", "text": "Transferring a subscription to another Entra directory changes its identity trust. It is not the same as changing its management-group parent or moving selected resources to another subscription in the same tenant. Current transfer guidance warns that Azure RBAC assignments and custom roles are permanently deleted rather than migrated. Recreate them against verified target-directory principals, whose object IDs differ. Inventory and plan restoration of Policy objects, managed identities, key-vault dependencies, data access lists, and other service integrations. This can require downtime and some services or configurations do not support transfer." },
+            { "type": "paragraph", "text": "The documented transfer procedure requires the relevant billing ownership, an unconditional directly assigned subscription Owner role rather than a group or PIM assignment, and an account in both directories. Cloud Solution Provider subscriptions do not support this directory-change operation. System-assigned identities need supported re-enablement and new grants; user-assigned identities need recreation and reattachment. Do not casually disable encryption to make a transfer pass: customer-managed key dependencies can cause serious recovery problems. Treat the service inventory and approved recovery plan as prerequisites." },
+            { "type": "example", "title": "Reject an unsafe 'just change directory' request", "scenario": "A partner school asks Ana to move a subscription into its directory. The website uses a managed identity to read a key vault, and the archive has stored account keys held by the original team.", "steps": [
+              { "action": "Separate the requested directory trust change from a billing-only transfer and from a management-group reorganization.", "why": "The requested outcome determines which operations and risks apply." },
+              { "action": "Export and review authorization and governance configuration, map target identities, and check every service's transfer support and key dependencies.", "why": "Old object IDs, managed identities, and role assignments cannot simply be assumed to survive." },
+              { "action": "Plan restoration and credential rotation before any approved transfer, or choose a supported alternative architecture.", "why": "Losing RBAC assignments does not invalidate previously disclosed account keys or guest operating-system credentials." }
+            ], "result": "Ana does not perform a directory transfer as routine cleanup. The team has a migration decision, restoration plan, and explicit access-removal plan instead of a misleadingly successful portal change." }
+          ]
+        },
+        {
+          "id": "hierarchy-prediction",
+          "title": "Predict what changes and what stays",
+          "blocks": [
+            { "type": "prediction", "id": "gov-predict-region-move", "prompt": "An eligible VM resource in West Europe is moved from one resource group to another whose metadata location is North Europe. Does the VM now run in North Europe?", "answer": "No. A resource-group move changes the management container, not the VM's physical region.", "explanation": "The resource's ID and applicable inherited access may change. A regional relocation needs its own supported migration workflow and dependency planning." },
+            { "type": "callout", "tone": "exam", "title": "Identify which move is being described", "text": "Management-group moves change the subscription's governance ancestors. Resource moves change the management path of supported resources within one tenant. Directory transfers change subscription identity trust and can destroy authorization configuration. Resource-group location describes metadata, not a regional placement rule for every member." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "gov-check-management-parent", "kind": "single", "prompt": "School-Teaching moves between management groups in the same tenant. Which result should Ana specifically review?", "choices": [
+          { "id": "new-inheritance-chain", "text": "Its inherited Azure roles and policies can change.", "explanation": "The new management-group ancestors contribute a different governance context." },
+          { "id": "automatic-new-tenant", "text": "The subscription automatically receives a new Entra tenant.", "explanation": "Moving within one management-group hierarchy does not change the trusted directory." },
+          { "id": "automatic-new-region", "text": "All VMs move to the destination group's region.", "explanation": "A management group is not a regional hosting container." }
+        ], "correctIds": ["new-inheritance-chain"], "explanation": "Review the new parent path, not just the portal's success notification." },
+        { "id": "gov-check-group-lifecycle", "kind": "single", "prompt": "A temporary classroom VM and a multiyear archive have different retirement dates. Which grouping best supports safe cleanup?", "choices": [
+          { "id": "separate-lifecycles", "text": "Separate their lifecycle groups and explicitly manage the cross-group dependency.", "explanation": "The archive should not be part of the classroom group's routine deletion boundary." },
+          { "id": "same-name-protects", "text": "Put both in one group and name the archive DoNotDelete.", "explanation": "A friendly resource name does not block group deletion." },
+          { "id": "region-guarantees", "text": "Use different regions inside one group because group deletion affects only its metadata region.", "explanation": "Group deletion targets contained resources regardless of that false regional assumption." }
+        ], "correctIds": ["separate-lifecycles"], "explanation": "Choose groups according to lifecycle and administration, then verify contents before deletion." },
+        { "id": "gov-check-directory-transfer", "kind": "single", "prompt": "An eligible subscription will be transferred to a different Entra directory. Which planning assumption is correct?", "choices": [
+          { "id": "rebuild-authorization", "text": "Existing Azure RBAC assignments and custom roles must be inventoried and recreated against target identities.", "explanation": "They are permanently deleted rather than migrated automatically by the directory transfer." },
+          { "id": "same-display-name-survives", "text": "Users with matching display names automatically retain their roles.", "explanation": "Authorization uses object identities, not a display-name match across directories." },
+          { "id": "all-secrets-revoked", "text": "The transfer automatically revokes every storage key and VM password.", "explanation": "Those other access mechanisms need their own review and credential rotation." }
+        ], "correctIds": ["rebuild-authorization"], "explanation": "Directory transfer is a high-risk identity migration with service-specific support and recovery requirements." },
+        { "id": "gov-check-resource-move", "kind": "multiple", "prompt": "Select the two correct preparations for a supported resource move across subscriptions.", "choices": [
+          { "id": "same-tenant-required", "text": "Verify that the active source and destination subscriptions trust the same tenant.", "explanation": "Ordinary cross-subscription resource moves require the same directory." },
+          { "id": "dependencies-and-grants", "text": "Validate provider support, dependencies, quota, and role-assignment restoration.", "explanation": "Move success and usable access require more than choosing a destination group." },
+          { "id": "group-itself-moves", "text": "Move the source resource-group object with all of its policies and tags intact.", "explanation": "Supported contents move to a destination group; the source group itself is not transferred this way." },
+          { "id": "resource-id-stable", "text": "Leave integrations unchanged because the resource ID cannot change.", "explanation": "The ID includes subscription and group scope, so references can need updating." }
+        ], "correctIds": ["same-tenant-required", "dependencies-and-grants"], "explanation": "Separate platform move validation from the broader operational verification." }
+      ],
+      "takeaways": [
+        "Use management groups for shared subscription governance and resource groups for coherent resource lifecycles.",
+        "Root assignments have a broad impact; visibility is not management permission.",
+        "A resource group's region is a metadata location, not a compulsory member-resource location.",
+        "Validate resource moves and update IDs, dependencies, and access afterward.",
+        "A directory transfer is not a normal hierarchy move and requires explicit recovery planning."
+      ],
+      "sourceIds": ["gov-management-groups", "gov-create-management-group", "gov-resource-groups", "gov-resource-moves", "gov-directory-transfer"]
+    },
+    {
+      "id": "governance-policy-tags-locks",
+      "title": "Choose the right guardrail and prove its effect",
+      "summary": "Build an enforceable school standard with Policy, apply tags deliberately, and use management locks without mistaking them for data protection.",
+      "objectives": [
+        "Distinguish a policy definition, initiative, assignment, exclusion, and exemption.",
+        "Select effects and plan managed-identity remediation for existing resources.",
+        "Apply consistent resource tags and distinguish resource tagging from cost-record inheritance.",
+        "Predict control-plane and data-plane behavior under Delete and Read-only locks."
+      ],
+      "sections": [
+        {
+          "id": "policy-object-model",
+          "title": "A permission is not a deployment standard",
+          "blocks": [
+            { "type": "paragraph", "text": "Bogdan has permission to create a lab VM, but the school wants teaching resources only in approved regions and with an accountable cost owner. Azure RBAC answers whether his identity may perform the operation. Azure Policy adds governance rules evaluated against the applicable request and resource configuration. An authorized deployment can still be rejected because it violates policy. Policy does not grant Bogdan the missing permission to create a VM. Conversely, giving him Owner at the resource group does not bypass a deny policy inherited from a management group he cannot change." },
+            { "type": "paragraph", "text": "A policy definition contains the reusable rule: what is tested and which effect follows when it matches. Parameters make the definition reusable, such as an allowed-locations list. An initiative groups several definitions under one purpose, for example School baseline containing location and tag rules. An assignment applies one definition or initiative to a scope and supplies parameter values, exclusions, and other settings. Creating a definition or initiative alone does not enforce it. A custom definition's location also affects where it can be assigned, so choose a management-group or subscription definition scope that includes the intended assignments." },
+            { "type": "paragraph", "text": "In the portal, start in Policy, inspect a built-in definition's conditions and effect, then create an assignment at the intended scope. Record the exact parameters and a useful noncompliance message. Definitions may target particular resource types or properties; an allowed resource-location rule does not automatically constrain resource-group metadata locations in the same way. Inspect the actual definition instead of trusting its title. Test with an audit-friendly equivalent or pilot scope before introducing enforcement across a live hierarchy." }
+          ]
+        },
+        {
+          "id": "policy-effects",
+          "title": "Choose what should happen, not just what is wrong",
+          "blocks": [
+            { "type": "table", "caption": "Common Policy effects and the operational result", "headers": ["Effect", "What it does", "What it does not promise"], "rows": [
+              ["audit", "Records noncompliance for matching resource properties without blocking the request.", "It does not repair the configuration."],
+              ["deny", "Rejects a matching noncompliant create or update request.", "It does not delete existing noncompliant resources."],
+              ["append", "Adds specified information to an eligible create or update request.", "It is not a remediation task for every existing resource."],
+              ["modify", "Changes supported properties on eligible requests and supports remediation of existing resources.", "Not every property or resource-provider API version is modifiable."],
+              ["auditIfNotExists", "Checks whether a related resource or configuration meeting the definition's condition exists.", "It does not deploy that missing related resource."],
+              ["deployIfNotExists", "Can deploy the specified related configuration when the required condition is not met.", "Existing noncompliant resources need deliberate remediation."],
+              ["disabled", "Skips evaluation of that definition.", "It is not a temporary exemption record for a specific resource."]
+            ] },
+            { "type": "paragraph", "text": "Effects are not universally interchangeable. A definition that checks a related diagnostic setting needs different rule details from one checking a VM's own region. Some built-ins expose an effect parameter; others have a fixed effect. Changing a dropdown is not a safe substitute for understanding the rule. Existing resources are evaluated for compliance, including on periodic scans, but evaluation and repair are separate events. Expect reporting delays after assignment or change rather than declaring success from a freshly empty compliance screen." },
+            { "type": "paragraph", "text": "Multiple applicable assignments are evaluated together. A permissive rule at a child group does not override a restrictive parent rule. If the parent denies regions outside West Europe and a child denies regions outside North Europe, a new resource subject to both can satisfy neither combination. The answer is to fix the intended assignments or approve a narrow exception, not add a third allow-looking assignment. Current Policy also has more specialized effects and identity-aware capabilities; the core distinction remains that governance evaluation does not create an Azure RBAC grant." }
+          ]
+        },
+        {
+          "id": "policy-exceptions",
+          "title": "Make exceptions visible and temporary",
+          "blocks": [
+            { "type": "paragraph", "text": "An assignment exclusion, often shown as an excluded scope, removes that scope from the assignment's evaluation. Use it when the scope should genuinely be outside that assignment. A policy exemption is a tracked exception tied to a particular assignment for an otherwise relevant resource or hierarchy. A Waiver accepts a deviation; Mitigated records that another control satisfies the intention. Capture a reason, accountable approver, and review or expiry date instead of using exemptions as a way to hide uncomfortable results." },
+            { "type": "paragraph", "text": "For an initiative, an exemption can target selected member definitions rather than bypass the whole baseline. An expiry ends the exemption's effect but does not delete the exemption object, preserving a record. Exempt means excepted, not necessarily technically configured to the normal standard. Creating an exemption requires the relevant exemption write permission and permission to exempt the target assignment. A resource-group Contributor should not be assumed able to waive a management-group policy. Keep exceptional preview options, such as bypassing assignment-scope validation, out of ordinary school workflows." }
+          ]
+        },
+        {
+          "id": "managed-identity-remediation",
+          "title": "Existing resources need an actor that can repair them",
+          "blocks": [
+            { "type": "paragraph", "text": "Remediation for modify or deployIfNotExists runs using the managed identity associated with the policy assignment. A managed identity is an Azure-managed application identity, not Ana's interactive account. The definition declares role requirements; the identity must actually receive the necessary Azure role assignments at the resources it will modify. A policy assignment and its managed identity are not magical administrative authority. An identity without the needed operation or scope produces a failed remediation, even while compliance evaluation correctly reports what is wrong." },
+            { "type": "paragraph", "text": "The portal can create or select the assignment identity and grant the roles listed by the definition when the operator has the required authority. With SDK or other programmatic assignment workflows, plan and verify those role grants explicitly. Later edits to a definition's required roles do not automatically update an existing identity's permissions. Targets outside the assignment scope can need additional grants. Assigning a policy requires policy-management rights; granting roles to its identity separately requires role-assignment rights. Broad Contributor is not a substitute for either complete job." },
+            { "type": "example", "title": "Backfill an accountable project tag", "scenario": "rg-school-lab has tag CostCenter=SCIENCE. Two existing eligible resources lack that tag, and a third intentionally has CostCenter=LIBRARY. Ana chooses the built-in Inherit a tag from the resource group if missing policy with tagName set to CostCenter.", "steps": [
+              { "action": "Inspect the definition and assign it only to the approved lab scope with the required identity and tag parameter.", "why": "The if-missing variant preserves an existing value; the add-or-replace variant would express a different business rule." },
+              { "action": "Verify the assignment identity has the minimum declared tag-remediation permissions at the needed scope.", "why": "Declaring required role IDs does not by itself guarantee the identity can modify existing resources." },
+              { "action": "Allow evaluation, inspect the noncompliant resources, and create a remediation task for that specific definition and approved targets.", "why": "Existing missing tags require deliberate backfill. An initiative remediation selects the member policy to remediate." },
+              { "action": "Inspect task success and each resource's actual tags, then check the later compliance result.", "why": "A started task is not a completed repair, and the reporting view can lag behind the resource change." }
+            ], "result": "The two previously untagged resources receive SCIENCE under the stated conditions. The LIBRARY value remains because this policy only fills missing tags. Removing the assignment later does not undo tags already written." }
+          ]
+        },
+        {
+          "id": "tagging-without-magic-inheritance",
+          "title": "Tags are useful labels, not secure instructions",
+          "blocks": [
+            { "type": "paragraph", "text": "A tag is a key-value label such as Environment=Teaching, CostCenter=SCIENCE, or Project=Robotics. Apply tags to supported resources, resource groups, and subscriptions, not management groups. They make search and cost allocation easier, but do not create a permission boundary or automatically switch a service off. Store only nonsensitive classification information. Tags are plain text exposed through management and reporting surfaces, so a password, student identifier, or private medical note does not belong there." },
+            { "type": "paragraph", "text": "A tag on a resource group or subscription does not automatically become a tag on child resources. Use explicit tagging, deployment conventions, or an appropriate Policy if resource objects must carry it. Choose a consistent vocabulary and spelling: tag-name operations are case-insensitive, while tag values are case-sensitive. Environment=Teaching and Environment=teaching can split reporting. Resource types have their own tagging support and limits; the general tag limit does not prove every type supports that many. Check existing tags before a replace operation so an unrelated owner's metadata is not lost." },
+            { "type": "paragraph", "text": "The portal's resource Tags page is a manual route for an operator with appropriate resource write authority. A tags-specific permission, including Tag Contributor, can manage tags through supported APIs without granting general resource management, but portal support for that role differs by target. Do not promise that Tag Contributor alone makes every resource Tags blade editable. In either workflow, read the existing set, add or merge only the approved key and value, save, then read back the resulting resource metadata." },
+            { "type": "paragraph", "text": "Cost Management has a separate tag-inheritance setting for supported billing account types and scopes. It applies inherited labels to child usage records for cost reporting, not to the resources themselves. That can help the finance view while an actual resource remains untagged and noncompliant with a resource-tag policy. Current support includes qualifying Enterprise Agreement, Microsoft Customer Agreement, and Microsoft Partner Agreement Azure-plan arrangements; permissions and update timing depend on scope. Never treat a neatly tagged cost report as proof that the resource objects have the same tags." }
+          ]
+        },
+        {
+          "id": "management-locks",
+          "title": "Prevent accidental management changes without claiming a backup",
+          "blocks": [
+            { "type": "paragraph", "text": "A management lock can be applied to a subscription, resource group, or resource, not a management group. A Delete lock, called CanNotDelete in APIs, allows authorized reads and modifications but blocks covered deletion operations. A Read-only lock, called ReadOnly, blocks covered updates and deletion as well. Locks inherit to descendants, including resources added later, and the most restrictive applicable lock governs. A child cannot weaken an inherited read-only lock by adding its own delete lock." },
+            { "type": "paragraph", "text": "Locks affect management-plane requests, not the ordinary data plane. A delete lock on the archive account does not prevent an otherwise authorized user from deleting a blob through the storage data service. A read-only lock on a database server does not make all database rows read-only. Some services expose similarly named operations through both management and data APIs, so identify which API is used. Use data permissions, soft delete, versioning, immutability where suitable, and backups for data protection rather than substituting a resource lock." },
+            { "type": "paragraph", "text": "Read-only locks can have surprising side effects. VM start and restart are management actions, not simple reads, and can be blocked. Listing storage account keys is also a management POST operation and is blocked, even though the button sounds like viewing information. Scaling an App Service plan can be blocked by a parent read-only lock. A lock applies even to an otherwise authorized Owner while it exists, but an operator with lock-removal permission can remove it through the authorized workflow. It is protection against accidents, not an absolute barrier against every privileged administrator." },
+            { "type": "paragraph", "text": "Creating or removing a lock requires appropriate Microsoft.Authorization lock permissions; Owner and User Access Administrator include them, while the narrower RBAC Administrator definition does not. In the chosen scope's Locks page, add a meaningful name, choose the level, and record why it exists. Inspect inherited locks before making a maintenance plan. Remove only the approved lock at its original scope, perform the approved change, and restore protection when required. A lock does not stop subscription cancellation or guarantee that a bill stays below a budget." }
+          ]
+        },
+        {
+          "id": "worked-lock-and-policy-decision",
+          "title": "Use the mechanism that matches the risk",
+          "blocks": [
+            { "type": "example", "title": "Protect the archive and keep teaching possible", "scenario": "Ana wants the archive storage account protected from accidental management deletion while teachers continue updating documents. She also wants future teaching VMs limited to approved regions.", "steps": [
+              { "action": "Use a narrowly scoped CanNotDelete lock on the archive account after reviewing dependencies and maintenance needs.", "why": "The requirement is to prevent resource deletion, not freeze all management updates." },
+              { "action": "Keep document authorization and recoverability controls separate, and verify an approved document update still follows its normal data permissions.", "why": "A management lock does not decide or protect ordinary document data operations." },
+              { "action": "Assign and pilot an appropriate allowed-region Policy for teaching resources.", "why": "A location rule is a deployment standard; a lock does not express it." },
+              { "action": "Document the authorized lock-removal procedure and narrow policy exceptions.", "why": "Maintenance must be possible without silently abandoning protection across the whole subscription." }
+            ], "result": "Each control has a clear purpose. A protected resource can still contain mutable data, and an authorized VM deployment can still fail an inherited region policy." },
+            { "type": "prediction", "id": "gov-predict-tag-lock", "prompt": "The archive account has a Delete lock. Bogdan has valid blob-delete permission and reaches the Blob service through an allowed path. Does the management lock block an ordinary blob data-plane delete?", "answer": "No. That operation is outside the management lock's scope.", "explanation": "The account resource is protected from covered management deletion. Blob data protection requires the appropriate data-access and recovery controls. Do not test this prediction on real school documents." },
+            { "type": "callout", "tone": "exam", "title": "Keep the four mechanisms separate", "text": "RBAC grants operations to identities. Policy enforces or assesses governance rules. Tags classify objects or, with a separate Cost Management feature, usage records. Locks restrict management operations. Neither a tag nor a budget is a permission, and neither a management lock nor a deny policy retroactively repairs all stored data." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "gov-check-policy-remediation", "kind": "single", "prompt": "An assigned modify policy correctly reports existing resources missing CostCenter, but no tag changes occur. The remediation identity has the required permissions. What deliberate step is missing?", "choices": [
+          { "id": "create-remediation-task", "text": "Create and verify a remediation task for the approved noncompliant resources.", "explanation": "Compliance evaluation is not the same as modifying existing resources." },
+          { "id": "assign-reader-to-tags", "text": "Assign Reader to the CostCenter tag.", "explanation": "Tags are not principals receiving Azure roles." },
+          { "id": "deny-deletes-untagged", "text": "Switch to deny so Azure deletes all existing untagged resources.", "explanation": "Deny does not perform that cleanup and would not implement the requested backfill." }
+        ], "correctIds": ["create-remediation-task"], "explanation": "Check both authorization and execution: an identity with permission still needs a remediation task for the existing population." },
+        { "id": "gov-check-lock-plane", "kind": "single", "prompt": "Which statement accurately describes a Delete lock on a storage account?", "choices": [
+          { "id": "resource-not-data-protection", "text": "It blocks covered management deletion, not every authorized blob data-plane deletion.", "explanation": "Lock enforcement applies to the control plane, so data protection must be designed separately." },
+          { "id": "all-data-immutable", "text": "Every blob becomes immutable until the account lock is removed.", "explanation": "Resource locks are not blob immutability policies." },
+          { "id": "reader-granted-by-lock", "text": "Everyone in the tenant gains read access to the account.", "explanation": "A restriction does not grant authorization to any identity." }
+        ], "correctIds": ["resource-not-data-protection"], "explanation": "Name the operation and plane before predicting a lock's effect." },
+        { "id": "gov-check-tag-inheritance", "kind": "single", "prompt": "rg-school-lab has CostCenter=SCIENCE. No resource-tagging Policy or automation exists. Cost Management tag inheritance is enabled in a supported scope. What can happen?", "choices": [
+          { "id": "usage-record-not-resource", "text": "Child usage records can receive the reporting tag while the actual resource remains untagged.", "explanation": "Cost-record inheritance and resource-object tagging are separate mechanisms." },
+          { "id": "resource-tags-guaranteed", "text": "Every child resource must now have the physical tag.", "explanation": "Neither ordinary parent tagging nor Cost Management inheritance writes every resource's tags." },
+          { "id": "tag-grants-data-access", "text": "Everyone in the SCIENCE department automatically gains blob access.", "explanation": "This classification label creates no such permission assignment." }
+        ], "correctIds": ["usage-record-not-resource"], "explanation": "Verify the resource's metadata when assessing resource-tag compliance." },
+        { "id": "gov-check-exemption", "kind": "single", "prompt": "One archive needs a documented temporary exception to one policy in an initiative. The rest of the baseline should remain active. Which approach fits?", "choices": [
+          { "id": "narrow-expiring-waiver", "text": "An authorized, narrowly targeted Waiver exemption with a reason and expiration.", "explanation": "It tracks the accepted deviation without disabling the whole initiative." },
+          { "id": "disable-all-policies", "text": "Disable all policies in the tenant.", "explanation": "This removes unrelated protection and is far broader than the requirement." },
+          { "id": "child-allow-overrides", "text": "Assign a permissive child policy because child assignments override parent denies.", "explanation": "Applicable policies combine; a more permissive child assignment does not cancel an inherited deny." }
+        ], "correctIds": ["narrow-expiring-waiver"], "explanation": "An exemption can target selected initiative members. Expiration ends its effect but preserves the record." }
+      ],
+      "takeaways": [
+        "Definitions describe rules, initiatives bundle them, and assignments apply them to scopes.",
+        "Audit, deny, modify, and deployIfNotExists have different operational consequences.",
+        "Remediation needs an appropriately authorized assignment identity and deliberate execution.",
+        "Resources do not automatically inherit parent tags; cost-record inheritance is a separate feature.",
+        "Locks protect management operations, not ordinary service data."
+      ],
+      "sourceIds": ["gov-policy-overview", "gov-policy-effects", "gov-policy-exemptions", "gov-policy-remediation", "gov-tags", "gov-tag-policies", "gov-cost-tag-inheritance", "gov-locks"]
+    },
+    {
+      "id": "governance-cost-controls",
+      "title": "Turn a budget warning into a safe decision",
+      "summary": "Read costs with the correct scope and assumptions, calculate alert thresholds, and evaluate Advisor savings without turning off the school's essential services.",
+      "objectives": [
+        "Use Cost Analysis dimensions and time windows to explain a bill.",
+        "Configure realistic budget thresholds, recipients, and forecast alerts.",
+        "Distinguish cost alerts from spending caps and safe automation from blind shutdown.",
+        "Evaluate rightsizing, deallocation, cleanup, reservations, and savings-plan tradeoffs."
+      ],
+      "sections": [
+        {
+          "id": "cost-model-and-scope",
+          "title": "The bill follows consumption, not classroom intentions",
+          "blocks": [
+            { "type": "paragraph", "text": "Cloud resources can charge while nobody is looking at the portal. Compute may charge for allocated time; disks for provisioned capacity; storage for capacity, operations, and transfer; monitoring for ingestion or retention. The exact meters and rates depend on the service, region, configuration, and agreement. A stopped classroom lesson is not a billing event. Ana must translate the timetable into actual resource states and retention decisions. A budget is useful feedback, but it cannot make an oversized VM cheaper by itself." },
+            { "type": "paragraph", "text": "Start Cost Analysis at a known scope, such as School-Teaching, with the required cost-read access. Choose a date range and currency, and decide whether to inspect daily or accumulated cost. Group by service to find the largest category, then by resource group or resource to identify the owner. Filter by a consistently applied project tag when appropriate, but compare with an unfiltered view so untagged charges are not hidden. Distinguish a higher unit rate from more hours or more data: the remediation differs." },
+            { "type": "paragraph", "text": "Actual cost and amortized cost answer different questions. Actual cost shows charges as they occur, including relevant purchases. Amortized views distribute applicable reservation or savings-plan commitment costs over usage to help compare workload economics. A large upfront purchase can therefore make actual cost spike without a sudden VM-usage increase. Budget evaluations use actual costs, not amortized costs. Keep the view, scope, filters, date range, and currency aligned when comparing a dashboard number with an alert." },
+            { "type": "paragraph", "text": "Availability and permissions vary by agreement and scope. A fresh subscription may need time before Cost Management is fully usable. Management-group Cost Management is not supported for Microsoft Customer Agreement subscriptions, even though management groups still govern those subscriptions. Multi-currency management-group budget evaluation is also not supported. Use a supported subscription or billing scope instead of assuming every administrative container has identical cost features. None of these qualifications means the resources are not accruing charges." }
+          ]
+        },
+        {
+          "id": "budget-configuration",
+          "title": "A budget defines what to watch and who must react",
+          "blocks": [
+            { "type": "paragraph", "text": "A budget has a scope, optional filters, an amount, a reset period, start and end dates, and alert conditions. Choose a period that matches the decision you want to make, such as a calendar month for the teaching club. Some subscription types also support billing-period alignment. A budget on only the Robotics tag does not watch untagged costs or another project. A monthly budget repeats its amount until expiry; it is not a lifetime allowance and does not reset the money already billed." },
+            { "type": "paragraph", "text": "Actual-cost alerts compare accumulated actual cost with a percentage of the budget. Forecast alerts compare the projected period total with a threshold, so they can warn before current spending reaches the full amount. A forecast is a model based on available history and filters, not an invoice or a promise. New or irregular workloads can make it less reliable. Put both early actual thresholds and a useful forecast threshold in the plan, then name the person who must examine each warning." },
+            { "type": "paragraph", "text": "In the selected scope's Budgets area, create the budget, verify filters and amount, set the dates and reset period, and configure actual or forecast thresholds plus approved email recipients. Read access can view a budget; creating and managing one requires suitable permissions, with details depending on agreement and ownership. Check notification recipients and delivery rather than assuming a school distribution list accepts external mail. Do not set a budget on the wrong subscription just because its display name looks familiar." },
+            { "type": "paragraph", "text": "Cost and usage data commonly arrives after a delay, and budget evaluation is periodic rather than per transaction. Microsoft describes typical data availability of 8 to 24 hours, daily budget evaluation, and notification delivery after evaluation; these are not hard real-time stopping guarantees. Resources continue consuming when a threshold is reached. A sudden expensive deployment can outrun yesterday's dashboard. Spending limits available on some offer types are a different mechanism and are not created by setting a Cost Management budget." }
+          ]
+        },
+        {
+          "id": "worked-budget-arithmetic",
+          "title": "Calculate the warning before choosing the response",
+          "blocks": [
+            { "type": "example", "title": "A fictional EUR 120 teaching budget", "scenario": "Assume a supported subscription scope whose budget currency is EUR, a 30-day calendar month, a EUR 120 budget, actual alerts at 50%, 80%, and 100%, and a forecast alert at 100%. These are invented teaching numbers, not Azure prices. After ten complete days, recorded actual cost is EUR 48.", "steps": [
+              { "action": "Calculate actual thresholds: 120 x 0.50 = 60; 120 x 0.80 = 96; 120 x 1.00 = 120.", "why": "A percentage is relative to the configured amount, not the current bill or number of days." },
+              { "action": "Compare EUR 48 with those thresholds.", "why": "The recorded actual cost is 40% of budget and has not reached the first EUR 60 actual threshold." },
+              { "action": "For a transparent paper estimate, assume the same EUR 4.80 per day continues: 48 / 10 x 30 = EUR 144.", "why": "That projection is 120% of budget and suggests an early investigation. It is a simplified scenario calculation, not a reproduction of Azure's forecasting algorithm." },
+              { "action": "If Azure's own forecast also exceeds EUR 120 at evaluation, inspect its forecast alert and investigate costs by resource and day.", "why": "Forecast warnings can occur before an actual-cost threshold. They identify a risk rather than commanding automatic deletion." },
+              { "action": "At a later recorded cost of EUR 97, check the 80% alert and assigned response owner.", "why": "97 is above EUR 96. The account is still operating; a received notification does not mean consumption was capped." }
+            ], "result": "Ana can explain which alert is expected under each stated observation and why a forecast warning and an actual-cost warning need not arrive together." },
+            { "type": "table", "caption": "Keep the fictional numbers auditable", "headers": ["Quantity", "Calculation", "Meaning"], "rows": [
+              ["Current budget share", "48 / 120 x 100 = 40%", "Below the 50% actual alert."],
+              ["Paper projected total", "4.80 x 30 = EUR 144", "Above the EUR 120 forecast threshold if that projection were observed."],
+              ["Projected excess", "144 - 120 = EUR 24", "A gap to address, not an automatic extra credit allocation."]
+            ] }
+          ]
+        },
+        {
+          "id": "alerts-and-safe-response",
+          "title": "An alert needs a human or a deliberately designed action",
+          "blocks": [
+            { "type": "paragraph", "text": "A useful response starts with a named owner and a decision checklist. Ana verifies the scope and period, finds the resource causing the increase, checks whether the change was planned, and asks whether it serves live teaching or a disposable experiment. Bogdan can stop his approved experiment but must not disable the archive merely because both appear under the same cost category. Alert fatigue is reduced by clear thresholds and recipients, not by assuming email is an enforcement mechanism." },
+            { "type": "paragraph", "text": "At supported subscription and resource-group budget scopes, a budget can call an Azure Monitor action group. An action group defines notification or automation actions. A separate automation workflow can respond, but it needs its own identity, permissions, error handling, exclusions, and approval model. It is not an atomic spending cap: data delay, failed automation, ongoing storage charges, and already incurred costs remain. Test such automation in isolation and ensure a retry cannot repeatedly damage a live environment. This course does not deploy any shutdown automation." },
+            { "type": "prediction", "id": "gov-predict-budget-cap", "prompt": "The school reaches 100% of a EUR 120 budget. The only configured action is an email to Ana. Do its VMs stop immediately, preventing any further cost?", "answer": "No. The email is a notification, and resource consumption continues.", "explanation": "Budget thresholds do not cap consumption. Even a separately configured shutdown workflow is delayed and cannot remove already incurred or unrelated charges." }
+          ]
+        },
+        {
+          "id": "advisor-realistic-remediation",
+          "title": "Advisor recommends; the operator still decides",
+          "blocks": [
+            { "type": "paragraph", "text": "Azure Advisor uses resource configuration and telemetry to recommend improvements, including cost changes such as shutting down unused compute or choosing a more appropriate size. A low-usage week may be a school holiday, not proof that the exam-week database is oversized. Review the observation window, memory and disk requirements, peak traffic, availability commitments, and planned demand. Recommendations are evidence to investigate, not unconditional instructions. A disaster-recovery standby can be intentionally quiet." },
+            { "type": "paragraph", "text": "For a disposable VM, shutting down inside the guest operating system can leave it allocated and still billed for compute. Verify Stopped (Deallocated) when the intention is to release allocated compute. Disks and other associated resources can still charge afterward. Deleting a VM does not prove every disk, public IP, backup item, or log has also disappeared. Inventory retained dependencies and delete only approved disposable objects, preserving data and recovery requirements. Never promise a zero bill from one VM status change." },
+            { "type": "paragraph", "text": "Rightsizing means selecting capacity that still meets the workload. Plan any restart or deallocation required for a size change, check regional capacity and compatibility, observe performance afterward, and keep a rollback route. Reservations or savings plans can reduce eligible costs for predictable usage in exchange for commitment, but they are not a cure for waste or free flexibility. Advisor's VM savings estimates use retail-rate assumptions and can ignore existing reservations, savings plans, or discounts. Moving to a cheaper-looking family can reduce commitment utilization or even increase the real total." },
+            { "type": "example", "title": "Reduce the teaching bill without breaking Monday's class", "scenario": "Cost Analysis identifies a nonproduction lab VM running overnight. Advisor suggests a smaller size. The teacher confirms that the VM is needed only during lessons, but its test disk must be retained for one more week.", "steps": [
+              { "action": "Confirm the resource owner and timetable, then compare a safe deallocation schedule with resizing.", "why": "Removing unused hours may achieve the goal without reducing capacity during class." },
+              { "action": "Review commitments, retained disk cost, startup needs, and any potential performance impact before approval.", "why": "Estimated compute savings are not the whole cost or reliability equation." },
+              { "action": "Apply only the approved change, verify the actual VM state and next-class readiness, and compare later comparable cost periods.", "why": "Operational success and observed net savings matter more than accepting a recommendation badge." }
+            ], "result": "The lab avoids unnecessary allocated hours while retaining the approved test data. Remaining disk charges are expected rather than misdiagnosed as a failed budget." }
+          ]
+        },
+        {
+          "id": "cost-control-distinction",
+          "title": "Close the loop with evidence",
+          "blocks": [
+            { "type": "paragraph", "text": "Record the original daily cost, the approved change, its time, and the expected affected meters. Later compare like-for-like periods after data has arrived, not a partial day against a full school week. Explain remaining charges rather than deleting more resources blindly. Keep the budget active and adjust it only when the approved plan changes. Raising it just to clear an alert hides the problem; lowering it does not itself save money." },
+            { "type": "callout", "tone": "exam", "title": "Observation, recommendation, and enforcement differ", "text": "Cost Analysis explains consumption. A budget watches selected costs and notifies on thresholds. Advisor suggests changes based on evidence and assumptions. Azure Policy can restrict some costly configurations, but does not create a universal currency cap. A lock prevents certain management actions, not spending. Safe cost management combines these controls with an accountable response." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "gov-check-budget-threshold", "kind": "single", "prompt": "A EUR 120 monthly budget has an actual-cost alert at 80%. At the next evaluation, its included actual cost is EUR 97. Which statement is correct?", "choices": [
+          { "id": "threshold-ninety-six", "text": "The EUR 96 threshold is exceeded; the configured alert can trigger, but consumption is not capped.", "explanation": "120 x 0.80 equals 96, and a budget alert does not stop resources." },
+          { "id": "threshold-eighty-euros", "text": "The threshold is EUR 80 because the percentage is 80.", "explanation": "80% is a proportion of EUR 120, not a fixed currency amount." },
+          { "id": "stop-at-threshold", "text": "Azure must shut down the entire subscription at EUR 96.", "explanation": "This confuses an alert threshold with automatic enforcement." }
+        ], "correctIds": ["threshold-ninety-six"], "explanation": "Calculate the amount, then separately identify the configured notification or automation behavior." },
+        { "id": "gov-check-forecast-actual", "kind": "single", "prompt": "Actual cost is EUR 48 against a EUR 120 budget. Azure's forecast at evaluation is EUR 144 and its forecast alert threshold is 100%. Which warning is justified?", "choices": [
+          { "id": "forecast-warning", "text": "A forecast warning can occur even though actual cost is only 40% of budget.", "explanation": "The forecast compares the predicted period total with the EUR 120 threshold." },
+          { "id": "actual-already-full", "text": "The actual bill has already reached EUR 144.", "explanation": "A projection is not incurred cost." },
+          { "id": "forecast-needs-actual-full", "text": "No forecast alert is possible until actual cost reaches 100%.", "explanation": "That would defeat the purpose of an early forecast warning." }
+        ], "correctIds": ["forecast-warning"], "explanation": "Forecast and actual alerts evaluate different quantities." },
+        { "id": "gov-check-deallocation", "kind": "single", "prompt": "Bogdan shuts down a lab VM inside its operating system. It shows Stopped, not Stopped (Deallocated), and its disk remains. What should he conclude?", "choices": [
+          { "id": "allocation-still-billed", "text": "Allocated compute can still be billed; approved deallocation and retained-resource review are separate steps.", "explanation": "Guest shutdown does not necessarily release allocated hardware, and disk charges can continue after deallocation." },
+          { "id": "zero-total-cost", "text": "The whole application now has zero cost.", "explanation": "This ignores both the allocated state and other billable resources." },
+          { "id": "budget-stops-disk", "text": "The budget automatically deletes the disk at month end.", "explanation": "Budgets neither own disk lifecycle nor perform automatic cleanup by default." }
+        ], "correctIds": ["allocation-still-billed"], "explanation": "Verify actual resource state and all relevant meters before estimating savings." },
+        { "id": "gov-check-advisor-decision", "kind": "single", "prompt": "Advisor suggests shrinking the school database VM after a quiet holiday week. What is the best next decision?", "choices": [
+          { "id": "review-workload-and-commitments", "text": "Review term-time peaks, performance requirements, commitments, and rollback before approving a change.", "explanation": "Historical observations and retail-rate estimates may not represent the real workload or net bill." },
+          { "id": "blind-resize", "text": "Resize immediately because recommendations guarantee no performance impact for this school's future demand.", "explanation": "The recommendation cannot know all future requirements and service dependencies." },
+          { "id": "buy-reservation-first", "text": "Buy a long commitment before checking whether the VM is still needed.", "explanation": "A discount on unnecessary capacity can lock in waste rather than remove it." }
+        ], "correctIds": ["review-workload-and-commitments"], "explanation": "Use Advisor as evidence for an operational decision, not a replacement for it." }
+      ],
+      "takeaways": [
+        "Align scope, date range, filters, currency, and cost view before interpreting a number.",
+        "Budget alerts are notifications based on delayed evaluation, not spending caps.",
+        "Forecast alerts can warn before actual thresholds are reached.",
+        "Deallocation affects compute billing but does not eliminate every associated charge.",
+        "Validate Advisor recommendations against workload needs, commitments, and observed net savings."
+      ],
+      "sourceIds": ["gov-cost-analysis", "gov-budgets", "gov-management-groups", "gov-advisor-cost", "gov-vm-billing"]
+    }
+  ],
+  "glossary": [
+    { "term": "Management group", "definition": "An Azure governance container above subscriptions for inherited access and policy." },
+    { "term": "Tenant root group", "definition": "The single unmovable, undeletable root of a directory's management-group hierarchy." },
+    { "term": "Resource group", "definition": "A subscription-scoped container used to manage related resources and their lifecycle." },
+    { "term": "Resource ID", "definition": "The management path identifying a resource, including its applicable subscription and resource-group scope." },
+    { "term": "Policy definition", "definition": "A reusable governance rule with conditions, an effect, and optional parameters." },
+    { "term": "Initiative", "definition": "A collection of policy definitions managed together for a shared goal." },
+    { "term": "Policy assignment", "definition": "Application of a definition or initiative to a scope with its chosen settings." },
+    { "term": "Exemption", "definition": "A tracked exception from a particular policy assignment, potentially limited by purpose, scope, and expiration." },
+    { "term": "Remediation", "definition": "An authorized modification or deployment that brings selected existing resources into compliance." },
+    { "term": "Managed identity", "definition": "An application identity with Azure-managed credentials that still needs appropriate permission assignments." },
+    { "term": "Tag", "definition": "A nonsensitive key-value label used for organization and supported reporting." },
+    { "term": "Management lock", "definition": "A restriction on covered control-plane modifications or deletions, not a blanket data-plane protection." },
+    { "term": "Actual cost", "definition": "Cost recorded as incurred, including relevant purchases rather than distributing commitment costs over usage." },
+    { "term": "Amortized cost", "definition": "A view that distributes applicable commitment costs over usage for economic analysis." },
+    { "term": "Budget", "definition": "A scoped amount and time period used to monitor selected costs and trigger notifications, not cap consumption." },
+    { "term": "Forecast", "definition": "An estimate of future period cost based on available data and assumptions." },
+    { "term": "Deallocated", "definition": "A VM state in which allocated compute hardware has been released; related resources may still incur charges." },
+    { "term": "Rightsizing", "definition": "Selecting resource capacity appropriate to real workload requirements while checking cost and reliability." }
+  ],
+  "sources": [
+    { "id": "gov-management-groups", "url": "https://learn.microsoft.com/en-us/azure/governance/management-groups/overview", "title": "What are Azure management groups?", "supports": "Single-tenant hierarchy, root behavior, depth, single parents, inherited governance, move permissions and ownership safeguards, and MCA management-group cost limitations." },
+    { "id": "gov-create-management-group", "url": "https://learn.microsoft.com/en-us/azure/governance/management-groups/create-management-group-portal", "title": "Quickstart: Create a management group", "supports": "Portal creation, immutable group ID versus editable display name, hierarchy-protection qualification, default group placement, and creator ownership." },
+    { "id": "gov-resource-groups", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal", "title": "Use the Azure portal and Azure Resource Manager to manage resource groups", "supports": "Lifecycle grouping, metadata location, cross-region members, creation fields, deletion, tags, access, and portal operations." },
+    { "id": "gov-resource-moves", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/move-resource-group-and-subscription", "title": "Move Azure resources to a new resource group or subscription", "supports": "Same-tenant and active-subscription prerequisites, provider support, quotas, dependencies, permissions, validation, changed resource IDs, orphaned role assignments, and no physical region move." },
+    { "id": "gov-directory-transfer", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/transfer-subscription", "title": "Transfer an Azure subscription to a different Microsoft Entra directory", "supports": "Full transfer prerequisites and impact table: deleted assignments/custom roles, identity and Policy restoration, CSP exclusion, service-specific unsupported cases, encryption dependencies, and surviving non-RBAC credentials." },
+    { "id": "gov-policy-overview", "url": "https://learn.microsoft.com/en-us/azure/governance/policy/overview", "title": "What is Azure Policy?", "supports": "Definitions, initiatives, assignments, parameters, evaluation, governance versus granting permissions, policy-management authority, and cumulative enforcement." },
+    { "id": "gov-policy-effects", "url": "https://learn.microsoft.com/en-us/azure/governance/policy/concepts/effect-basics", "title": "Azure Policy definitions effect basics", "supports": "Effect behavior and noninterchangeability, request versus related-resource evaluation, and combined restrictive assignments." },
+    { "id": "gov-policy-exemptions", "url": "https://learn.microsoft.com/en-us/azure/governance/policy/concepts/exemption-structure", "title": "Azure Policy exemption structure", "supports": "Waiver/Mitigated, selected initiative members, expiry retaining the record, permissions, and preview assignment-scope-validation distinction." },
+    { "id": "gov-policy-remediation", "url": "https://learn.microsoft.com/en-us/azure/governance/policy/how-to/remediate-resources", "title": "Remediate non-compliant resources with Azure Policy", "supports": "Full remediation workflow, assignment managed identity, declared versus granted roles, portal versus SDK behavior, unchanged identity grants after definition edits, and task verification." },
+    { "id": "gov-tags", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-resources", "title": "Use tags to organize your Azure resources and management hierarchy", "supports": "Supported scopes, plaintext warning, case behavior, no automatic resource inheritance, per-type limits and support, and Tag Contributor portal qualifications." },
+    { "id": "gov-tag-policies", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-policies", "title": "Assign policy definitions for tag compliance", "supports": "If-missing versus add-or-replace tag policies, tag parameters, append limitations, and modify remediation for existing resources." },
+    { "id": "gov-cost-tag-inheritance", "url": "https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/enable-tag-inheritance", "title": "Group and allocate costs using tag inheritance", "supports": "Usage-record-only inheritance, supported agreement types and scopes, permissions, update delay, and separation from actual resource tags." },
+    { "id": "gov-locks", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/lock-resources", "title": "Lock your Azure resources to protect your infrastructure", "supports": "Full control-plane scope and side effects, inheritance, CanNotDelete/ReadOnly behavior, management permissions, group-delete protection, data-plane exclusions, and no subscription-cancellation prevention." },
+    { "id": "gov-cost-analysis", "url": "https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/quick-acm-cost-analysis", "title": "Quickstart: Start using Cost Analysis", "supports": "Scope and read prerequisites, grouping/filtering/date-range workflow, actual versus amortized views, forecasts, and comparison caveats." },
+    { "id": "gov-budgets", "url": "https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets", "title": "Tutorial: Create and manage budgets", "supports": "Full budget prerequisites, scopes, currencies, amounts, reset periods, actual and forecast alerts, data/evaluation delays, actual-not-amortized evaluation, no consumption cap, and action-group scope limits." },
+    { "id": "gov-advisor-cost", "url": "https://learn.microsoft.com/en-us/azure/advisor/advisor-cost-recommendations", "title": "Optimize VM or VMSS spend by resizing or shutting down underutilized instances", "supports": "Telemetry-based recommendations, observation-window qualifications, workload exceptions, retail-rate savings assumptions, and reservation/savings-plan limitations." },
+    { "id": "gov-vm-billing", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/states-billing", "title": "States and billing status of Azure Virtual Machines", "supports": "Stopped allocated versus deallocated billing and continuing associated disk or networking charges." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect governance on an empty training group",
+    "purpose": "Observe a tag, a management lock, and a budget configuration without deploying any workload, moving subscriptions, or applying organization-wide policy.",
+    "prerequisites": [
+      "An approved existing training subscription and a verified empty disposable resource group owned for this exercise.",
+      "Appropriate resource-tag write, lock write/delete, and cost-read/budget-management permissions at the chosen scopes. These are separate operations; ordinary Contributor does not include lock administration.",
+      "A supported Cost Management agreement and scope, an approved notification recipient, and a recorded baseline of preexisting tags, locks, assignments, and budgets."
+    ],
+    "costWarning": "No VMs, storage accounts, paid logs, reservations, savings plans, or automation are needed. The exercise uses management metadata and an optional budget only. Existing subscription resources can still incur charges, and a budget is not a spending cap. Do not create a new subscription or enable paid services for this lab.",
+    "steps": [
+      "Inspect the resource group's subscription, metadata region, empty inventory, inherited access, policies, and locks. Record the baseline without changing inherited controls.",
+      "Add only the nonsensitive tag Project=GovernancePractice to the disposable group. Read it back and explain why it would not automatically tag a future child resource.",
+      "With the approved lock operator, add a lab-only ReadOnly lock to the empty group. Attempt a harmless change to the lab tag and record the management lock error. Do not attempt to delete real resources.",
+      "Remove only that lab lock at its original scope, then restore the group's original tag state. Verify the expected management restriction is gone without changing any parent lock.",
+      "Inspect a relevant built-in Policy definition and compare audit, deny, and modify behavior on paper. Do not assign policy or start remediation against existing school resources.",
+      "If approved and supported, create a clearly named short-lived test budget at the chosen scope with an agreed amount and recipient. Review actual versus forecast conditions without generating spend to trigger them.",
+      "Record the scope, period, currency, thresholds, and expected delayed notification behavior. State explicitly that no VM shutdown or data protection was configured."
+    ],
+    "expectedResults": [
+      "The tag is visible on the group, with no claim of automatic child-resource tagging.",
+      "The lab ReadOnly lock blocks a covered management change until the authorized removal.",
+      "The budget configuration identifies selected costs and notifications, not a consumption cap."
+    ],
+    "cleanup": [
+      "Remove only the lab-created lock, tag changes, and test budget, restoring recorded preexisting metadata.",
+      "Verify no policy assignments, remediation identities, deployments, or paid services were created.",
+      "Leave the preexisting group and subscription intact. Never perform a directory transfer, resource move, or broad resource-group deletion as cleanup."
+    ]
+  }
+}

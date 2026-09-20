@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "domainId": "identity-governance",
+  "reviewedAt": "2026-09-20",
+  "objectives": [
+    {
+      "objectiveId": "ig-01",
+      "lessons": [
+        {
+          "moduleId": "entra-identities",
+          "lessonId": "identity-tenant-users-groups",
+          "sectionIds": ["tenant-directory-subscription", "create-and-maintain-users", "group-types-and-properties", "dynamic-membership-qualified", "worked-user-and-group-lifecycle"],
+          "checkpointIds": ["identity-check-tenant-subscription", "identity-check-group-choice", "identity-check-dynamic"],
+          "evidence": "Teaches what the tenant contains, the authorized cloud-user creation fields and workflow, security versus Microsoft 365 groups, owners and membership choices, and qualified dynamic membership. The worked onboarding creates Bogdan's identity and explicitly adds him to an assigned security group without inventing resource or license entitlements."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-02",
+      "lessons": [
+        {
+          "moduleId": "entra-identities",
+          "lessonId": "identity-tenant-users-groups",
+          "sectionIds": ["user-type-and-authority", "create-and-maintain-users", "group-types-and-properties", "dynamic-membership-qualified", "worked-user-and-group-lifecycle"],
+          "checkpointIds": ["identity-check-source-authority", "identity-check-dynamic"],
+          "evidence": "Separates UserType from origin and authentication, identifies per-property source of authority, and explains editable group properties, fixed identity/type, owners, and rule-driven membership. Ana's department change is made at its authoritative source, then synchronized and checked for downstream group and access consequences."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-03",
+      "lessons": [
+        {
+          "moduleId": "entra-identities",
+          "lessonId": "identity-licenses-and-guests",
+          "sectionIds": ["licenses-are-entitlements", "current-license-workflow", "direct-inherited-and-errors", "worked-group-licensing"],
+          "checkpointIds": ["identity-check-licensing-location", "identity-check-nested-licensing", "identity-check-license-error"],
+          "evidence": "Uses the current Microsoft 365 Billing/Licenses workflow and teaches product capacity, usage location, enabled service plans, asynchronous processing, error correction and reprocessing. A worked nested-group failure explains why Bogdan is missed, while Ana's direct-to-inherited migration verifies effective service entitlement before removal."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-04",
+      "lessons": [
+        {
+          "moduleId": "entra-identities",
+          "lessonId": "identity-licenses-and-guests",
+          "sectionIds": ["b2b-invite-and-redemption", "b2b-access-and-offboarding"],
+          "checkpointIds": ["identity-check-guest-lifecycle"],
+          "evidence": "Follows a B2B guest object from verified invitation through PendingAcceptance and redemption, explains external authentication and separate access grants, and ends with approved removal. Elena's worked lab-review scenario grants only scoped Reader and distinguishes deleting the resource-tenant guest from deleting the home identity."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-05",
+      "lessons": [
+        {
+          "moduleId": "entra-identities",
+          "lessonId": "identity-password-reset",
+          "sectionIds": ["password-change-reset-licensing", "sspr-scope-and-registration", "current-authentication-methods", "administrator-recovery-policy", "hybrid-writeback-separation", "worked-sspr-pilot"],
+          "checkpointIds": ["identity-check-sspr-license", "identity-check-sspr-scope-methods", "identity-check-administrator-policy", "identity-check-writeback"],
+          "evidence": "Builds a complete nonadministrator SSPR pilot with scoped eligibility, current method administration, qualifying licensing, sufficient registration, reset execution and verification. It separately reasons through administrator policy exceptions, supported versus sign-in-only methods, and additional licensing, connector, permission and password-policy requirements for hybrid writeback."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-06",
+      "lessons": [
+        {
+          "moduleId": "azure-access-control",
+          "lessonId": "rbac-roles-and-scopes",
+          "sectionIds": ["different-doors-different-authorities", "principal-role-scope", "compare-built-in-roles", "worked-role-assignment"],
+          "checkpointIds": ["rbac-check-directory-boundary", "rbac-check-access-admin"],
+          "evidence": "Compares current Owner, Contributor, Reader, User Access Administrator and RBAC Administrator operations, including management read and broader authorization-object differences. The worked assignment selects Contributor for lab management without giving access-management powers and explains why Ana's assignment authority is not itself VM-resize permission."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-07",
+      "lessons": [
+        {
+          "moduleId": "azure-access-control",
+          "lessonId": "rbac-roles-and-scopes",
+          "sectionIds": ["principal-role-scope", "choose-and-inherit-scope", "worked-role-assignment", "predict-role-boundaries"],
+          "checkpointIds": ["rbac-check-lab-scope", "rbac-check-role-components"],
+          "evidence": "Teaches management-group, subscription, resource-group and resource scopes, downward inheritance, future descendants, and no sideways access. Ana's portal workflow verifies the principal, role and lab-group scope, checks a harmless positive and negative result, and removes the original grant rather than assuming a narrower Reader cancels inherited rights."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-08",
+      "lessons": [
+        {
+          "moduleId": "azure-access-control",
+          "lessonId": "rbac-evaluate-effective-access",
+          "sectionIds": ["effective-access-method", "actions-and-data-actions", "worked-scope-access-table", "subtraction-versus-denial", "conditional-grants", "verify-and-troubleshoot-access"],
+          "checkpointIds": ["rbac-check-additive-access", "rbac-check-notactions", "rbac-check-data-boundary", "rbac-check-condition-deny"],
+          "evidence": "A nine-row access table and worked operation trace calculate direct, group and inherited grants for Ana and Bogdan under explicit assumptions. Separate examples demonstrate per-role NotActions subtraction, overriding deny assignments, assignment-local conditions, and Entra-token data access without confusing network reachability, keys, or application permissions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-09",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-policy-tags-locks",
+          "sectionIds": ["policy-object-model", "policy-effects", "policy-exceptions", "managed-identity-remediation"],
+          "checkpointIds": ["gov-check-policy-remediation", "gov-check-exemption"],
+          "evidence": "Explains definitions, initiatives, assignments, parameters, common effects, evaluation versus repair, cumulative restrictions and tracked exemptions. A worked modify-policy rollout selects the exact if-missing behavior, grants the assignment identity its required permissions, remediates existing targets and verifies both resource state and later compliance."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-10",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-policy-tags-locks",
+          "sectionIds": ["management-locks", "worked-lock-and-policy-decision"],
+          "checkpointIds": ["gov-check-lock-plane"],
+          "evidence": "Teaches lock scopes, inheritance, CanNotDelete versus ReadOnly, lock-management permissions, authorized removal and unexpected control-plane POST restrictions. The archive example chooses a Delete lock for resource protection while deliberately preserving normal data operations and explaining why blob deletion requires separate data-protection controls."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-11",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-policy-tags-locks",
+          "sectionIds": ["tagging-without-magic-inheritance", "managed-identity-remediation"],
+          "checkpointIds": ["gov-check-tag-inheritance"],
+          "evidence": "Teaches tag key/value design, supported scopes and type qualifications, plaintext sensitivity, case behavior, permissions and safe merge/readback. The worked CostCenter backfill distinguishes if-missing from replace and actual resource tags from Cost Management's separate usage-record inheritance."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-12",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-resource-hierarchy",
+          "sectionIds": ["resource-group-lifecycle", "resource-move-planning", "hierarchy-prediction"],
+          "checkpointIds": ["gov-check-group-lifecycle", "gov-check-resource-move"],
+          "evidence": "Explains resource-group creation inputs, metadata location, cross-region membership, nonnested containment, lifecycle deletion and dependency review. The worked archive-versus-experiment design chooses separate retirement boundaries, while move planning covers provider support, permissions, validation, changed IDs and restoration of resource-level assignments."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-13",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-resource-hierarchy",
+          "sectionIds": ["hierarchy-purpose", "resource-move-planning", "subscription-administration-and-transfer"],
+          "checkpointIds": ["gov-check-directory-transfer", "gov-check-resource-move"],
+          "evidence": "Teaches subscriptions as resource, access, billing and quota boundaries, with billing-role and agreement qualifications. The worked partner-school transfer separates directory trust change from billing and hierarchy moves, inventories deleted/recreated authorization and managed identities, checks unsupported services and key dependencies, and plans independent credential rotation."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-14",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-cost-controls",
+          "sectionIds": ["cost-model-and-scope", "budget-configuration", "worked-budget-arithmetic", "alerts-and-safe-response", "advisor-realistic-remediation", "cost-control-distinction"],
+          "checkpointIds": ["gov-check-budget-threshold", "gov-check-forecast-actual", "gov-check-deallocation", "gov-check-advisor-decision"],
+          "evidence": "Uses a fully calculated EUR 120 scenario to distinguish actual thresholds, a transparent paper forecast and Azure's own forecast alerts. It teaches scope/filter/currency and actual/amortized interpretation, delayed notifications rather than caps, action-group qualifications, and a worked safe response balancing deallocation, remaining charges, Advisor assumptions, commitments and classroom availability."
+        }
+      ]
+    },
+    {
+      "objectiveId": "ig-15",
+      "lessons": [
+        {
+          "moduleId": "azure-governance",
+          "lessonId": "governance-resource-hierarchy",
+          "sectionIds": ["hierarchy-purpose", "configure-management-groups"],
+          "checkpointIds": ["gov-check-management-parent"],
+          "evidence": "Teaches the single-tenant root hierarchy, stable IDs versus display names, single parents, inherited access/policy, depth, creation authority and default-placement qualifications. Ana's worked subscription move verifies permissions at the child and both parents and examines the resulting governance chain instead of assuming a management-group move changes tenant or region."
+        }
+      ]
+    }
+  ]
+}

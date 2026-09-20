@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-access-control",
+  "title": "Azure access control: explain every permission",
+  "summary": "Use identities, role definitions, and scopes to grant appropriate access, then prove what Ana and Bogdan can actually do without confusing resource management with data access.",
+  "priority": "core",
+  "priorityReason": "AZ-104 explicitly requires managing built-in roles, assigning roles at different scopes, and interpreting access assignments. Understanding the authorization decision is more useful than memorizing portal buttons.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/role-based-access-control/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Manage built-in Azure roles.",
+    "Assign roles at different scopes.",
+    "Interpret access assignments."
+  ],
+  "lessons": [
+    {
+      "id": "rbac-roles-and-scopes",
+      "title": "Give the right identity the right job at the right scope",
+      "summary": "Separate directory administration from Azure resource administration and construct a role assignment from its three essential parts.",
+      "objectives": [
+        "Distinguish Microsoft Entra roles from Azure roles and from application permissions.",
+        "Choose among the five fundamental Azure roles using actual operations.",
+        "Explain downward inheritance and choose the narrowest practical scope.",
+        "Create and remove a role assignment using an authorized portal workflow."
+      ],
+      "sections": [
+        {
+          "id": "different-doors-different-authorities",
+          "title": "Signing in is not permission to do everything",
+          "blocks": [
+            { "type": "paragraph", "text": "Ana maintains the school's cloud application. Bogdan helps with a classroom development environment. Microsoft Entra ID authenticates their accounts: it checks who is signing in and issues a token, a signed statement the receiving service can validate. Authorization is the next question: may this identity perform this operation on this particular target? A successful sign-in proves neither that Bogdan may restart a virtual machine nor that he may download the private archive. A virtual machine, or VM, is an Azure resource running an operating system; its guest login is another authorization boundary." },
+            { "type": "paragraph", "text": "Azure role-based access control, abbreviated Azure RBAC, grants permissions over Azure resources through Azure Resource Manager, the management service used by the portal and management APIs. Microsoft Entra roles instead govern directory tasks such as creating users, managing groups, or administering authentication methods. User Administrator is an Entra role; Contributor is an Azure role. Giving Ana Contributor on a subscription does not authorize her to reset a teacher's directory password. Giving Bogdan a directory administrator role does not automatically grant access to the school's VMs." },
+            { "type": "paragraph", "text": "Even Microsoft Entra Global Administrator does not receive Azure resource permissions by default. A Global Administrator can deliberately elevate Azure access, obtaining User Access Administrator at root scope, and then grant Azure roles. That is an explicit, powerful recovery operation, not an automatic consequence of the role's impressive name. Remove temporary elevated access afterward. Conversely, Azure subscription Owner is not Microsoft Entra Global Administrator. Older references to classic Service Administrator or Co-Administrator describe retired administration, not roles to choose for a new design." },
+            { "type": "paragraph", "text": "There are still more doors. The storage firewall determines whether a request can reach a storage service. A data role determines whether that service accepts an Entra-authenticated read. The school website decides whether a signed-in student is allowed to see a mark. Neither a network route nor an Azure Reader assignment supplies that application permission. When explaining an access failure, name the door and operation rather than saying only that the account needs more access." }
+          ]
+        },
+        {
+          "id": "principal-role-scope",
+          "title": "The three-part permission sentence",
+          "blocks": [
+            { "type": "paragraph", "text": "Read every role assignment as a sentence: this principal may perform this role's operations within this scope. A security principal is the identity receiving access. It can be a user, a security group, a service principal representing an application, or a managed identity whose credentials Azure manages. A role definition is a named set of allowed operations. Scope is the boundary containing the targets. None of these parts can replace another. A role definition sitting in the catalogue grants nobody access until an assignment connects it to a principal and scope." },
+            { "type": "diagram", "title": "One assignment, three independent decisions", "description": "The group determines who receives the grant. The role determines operations. The resource group determines where those operations apply. The arrows mean association, not network communication.", "nodes": [
+              { "id": "rbac-school-operators", "label": "SchoolLabOperators", "detail": "Security group containing Bogdan", "column": 0, "row": 1 },
+              { "id": "rbac-contributor-role", "label": "Contributor", "detail": "Resource management, not role assignment", "column": 1, "row": 0 },
+              { "id": "rbac-lab-scope", "label": "rg-school-lab", "detail": "Only this group's resource hierarchy", "column": 2, "row": 1 }
+            ], "edges": [
+              { "from": "rbac-school-operators", "to": "rbac-contributor-role", "label": "Receives these permissions" },
+              { "from": "rbac-contributor-role", "to": "rbac-lab-scope", "label": "At this scope" }
+            ] },
+            { "type": "paragraph", "text": "Use object identity, not just a friendly display name, when selecting the recipient. Two people can have the same display name. A guest's object in the school directory is distinct from their home-directory object. A managed identity for the website is distinct from Ana even when she deployed it. Assigning a group simplifies onboarding, but anyone allowed to change that group's membership can indirectly affect who benefits from its Azure permissions. Review membership authority along with the role assignment." }
+          ]
+        },
+        {
+          "id": "compare-built-in-roles",
+          "title": "Compare operations, not senior-sounding names",
+          "blocks": [
+            { "type": "table", "caption": "Fundamental Azure roles at the assigned scope, assuming no additional grants or restrictions", "headers": ["Role", "What it supplies", "Important boundary"], "rows": [
+              ["Reader", "Read resource configuration and management information.", "No resource updates, role assignment, or automatic blob-content read."],
+              ["Contributor", "Broad resource creation, update, and deletion permissions, with documented exclusions.", "Cannot create Azure role assignments, policy definitions or assignments, or management locks through this role."],
+              ["Owner", "Broad resource management plus Azure role assignment authority.", "Not an Entra administrator; its definition does not directly grant all DataActions."],
+              ["Role Based Access Control Administrator", "Create and delete Azure role assignments, read control-plane information, and manage support requests.", "Narrower authorization management than User Access Administrator; does not itself grant policy or lock administration."],
+              ["User Access Administrator", "Broad Microsoft.Authorization operations, control-plane read, and support operations.", "Can administer more authorization objects, including policies and locks; not general VM modification authority."]
+            ] },
+            { "type": "paragraph", "text": "The current Role Based Access Control Administrator definition includes control-plane read permissions, not just an invisible ability to assign roles. User Access Administrator includes the broader Microsoft.Authorization permission family. This matters if Ana needs someone to assign Reader but not alter a governance policy: these two roles are not interchangeable. Both are privileged because unconstrained role assignment authority can let a person give themselves Owner. Choosing the narrower role and scope reduces exposure, but does not make unconstrained delegation harmless." },
+            { "type": "paragraph", "text": "Built-in roles are maintained by Microsoft and cannot be edited into your own version. Inspect the current permissions in the role's details rather than assuming a short description lists every exclusion. A specialist role, such as Virtual Machine Contributor, can be a better match than broad Contributor, although separate network, storage, or login permissions may still be required for the complete task. If no built-in role fits, a custom role is a separate definition, not a modification of the built-in one. Its assignable scopes say where it may be assigned, not where somebody already has access." },
+            { "type": "paragraph", "text": "Do not use broad management roles as a promise of data isolation. Owner and Contributor have no general blob DataActions, but their management powers can include retrieving storage keys where allowed; Owner can also grant a data role. A data service can authorize those keys independently. The precise statement is that management permission does not itself become an Entra data permission. Protect sensitive data by controlling management privileges, credential access, network paths, and data authorization together." }
+          ]
+        },
+        {
+          "id": "choose-and-inherit-scope",
+          "title": "Permissions flow downward, not sideways",
+          "blocks": [
+            { "type": "paragraph", "text": "The usual Azure scope hierarchy is management group, subscription, resource group, resource. A management group can contain subscriptions and other management groups. A subscription contains resource groups; a resource group contains resources such as the school VM. A role assigned at a parent is inherited by applicable descendants, including resources created later. A subscription Reader can inspect resources across that subscription. A Reader on one VM does not become Reader on the neighboring database or on the entire subscription." },
+            { "type": "paragraph", "text": "Suppose School-Teaching contains rg-school-lab and rg-school-live. Bogdan needs to manage only classroom experiments. Contributor on rg-school-lab fits that stated requirement more closely than Contributor on School-Teaching. It still covers every eligible resource in the lab group, not just today's VM. If the requirement is only to manage an existing VM, investigate a suitable role at that VM instead. Resource creation may require rights on the containing group or on separate dependencies, so the narrowest possible-looking scope is not automatically sufficient." },
+            { "type": "paragraph", "text": "Assigning Reader at the live group does not cancel Contributor inherited from the subscription. Azure grants normally add together; a narrower grant is not an override. To reduce access, remove or narrow the broad grant at the place it was created, considering other users who inherit it. You cannot delete a subscription assignment by deleting a separate resource-group assignment. Group membership, direct grants, and inherited grants must all be considered before calling a removal complete." }
+          ]
+        },
+        {
+          "id": "worked-role-assignment",
+          "title": "Give Bogdan a lab, not the whole school",
+          "blocks": [
+            { "type": "example", "title": "An authorized and reversible assignment", "scenario": "Ana has an active, unrestricted Role Based Access Control Administrator assignment on rg-school-lab. The existing security group SchoolLabOperators contains only approved lab helpers. Bogdan has no other Azure grants. The group needs broad lab resource management, but no access-management authority.", "steps": [
+              { "action": "Open rg-school-lab in the correct subscription and inspect Access control (IAM), including current role assignments.", "why": "Identity and access management, abbreviated IAM, is the portal surface. Starting from the target scope prevents accidentally assigning at subscription level." },
+              { "action": "Choose Add role assignment, inspect Contributor's permissions, and select SchoolLabOperators by its verified directory identity.", "why": "The intended grant is resource management to this group. Owner would unnecessarily add role assignment authority." },
+              { "action": "Review the principal, role, and resource-group scope, then save and record the assignment.", "why": "Ana's roleAssignments/write permission authorizes this assignment. Ordinary Contributor would not authorize the same action." },
+              { "action": "After propagation and a fresh sign-in if needed, have Bogdan inspect the lab and verify the intended permitted operation on an approved test resource.", "why": "A saved configuration is not proof that the current session is using updated permissions. Do not test with a production deletion." },
+              { "action": "Verify that the assignment does not grant lab helpers control of rg-school-live. Remove the lab grant when the project ends, then inspect effective access again.", "why": "A scope boundary and a revocation result both deserve evidence. Another direct or inherited assignment could still allow access." }
+            ], "result": "Bogdan receives broad management rights only under the lab group through his membership. Ana can administer the assignment but cannot resize the VM merely because she holds the access-administrator role." },
+            { "type": "paragraph", "text": "Some tenants use Privileged Identity Management, or PIM, for eligible or time-bound access. Eligible means a user must activate the role through the configured process before using it. It does not mean permanently active. Relevant PIM capabilities require appropriate licensing and policy configuration. These examples use active assignments unless stated otherwise. If an Add role assignment button is unavailable, first check the active assignment, target scope, and any delegation condition instead of assuming the portal is broken." }
+          ]
+        },
+        {
+          "id": "predict-role-boundaries",
+          "title": "Predict before requesting more privilege",
+          "blocks": [
+            { "type": "prediction", "id": "rbac-predict-group-reader", "prompt": "Bogdan gets Contributor on School-Teaching through a group. Ana adds Reader directly on rg-school-live, hoping to make live resources read-only for him. With no denies, locks, or policies restricting the requested change, can he still modify a live VM?", "answer": "Yes. His inherited Contributor grant still supplies the management operation.", "explanation": "The direct Reader grant contributes read permissions but subtracts nothing. Ana must address the subscription-level grant or its membership, preserving legitimate access through a narrower replacement." },
+            { "type": "callout", "tone": "exam", "title": "Translate the requested operation", "text": "Creating a directory user points to an Entra role. Restarting a VM points to an Azure management role. Assigning Azure Reader needs role-assignment authority. Reading a blob using an Entra token needs an applicable data permission. A question mentioning administrator, portal, or subscription does not erase these differences." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "rbac-check-directory-boundary", "kind": "single", "prompt": "Ana has only Azure Contributor on School-Teaching. She must create an Entra user for a new teacher. What follows?", "choices": [
+          { "id": "directory-role-needed", "text": "She needs appropriate Entra user-management authority; Contributor alone is insufficient.", "explanation": "Directory user management is not an Azure resource-management operation granted by Contributor." },
+          { "id": "subscription-contributor-enough", "text": "Contributor can create every kind of user because the subscription trusts the tenant.", "explanation": "Trust identifies the directory used for authentication. It does not merge the two permission systems." },
+          { "id": "resource-reader-fix", "text": "Reader on the teacher's VM will enable user creation.", "explanation": "A VM Reader grant is a read-only Azure resource permission, unrelated to creating directory users." }
+        ], "correctIds": ["directory-role-needed"], "explanation": "Match the authorization system to the object being administered." },
+        { "id": "rbac-check-access-admin", "kind": "single", "prompt": "Choose the narrower built-in role for assigning Azure roles and reading management information, without the broader policy and lock administration supplied by User Access Administrator.", "choices": [
+          { "id": "rbac-administrator", "text": "Role Based Access Control Administrator.", "explanation": "Its current definition provides role assignment write/delete, control-plane read, and support operations without the broad Microsoft.Authorization wildcard." },
+          { "id": "resource-contributor", "text": "Contributor.", "explanation": "Contributor manages resources but excludes role-assignment writes." },
+          { "id": "broad-owner", "text": "Owner.", "explanation": "Owner can assign roles but adds broad resource management and therefore is not the narrower requested choice." }
+        ], "correctIds": ["rbac-administrator"], "explanation": "The selected role remains powerful because unconstrained assignment rights can enable privilege escalation. Scope and delegation constraints still matter." },
+        { "id": "rbac-check-lab-scope", "kind": "single", "prompt": "SchoolLabOperators must manage all resources in rg-school-lab, including future lab resources, but not a sibling live resource group. Which stated grant fits?", "choices": [
+          { "id": "lab-contributor-scope", "text": "Contributor on rg-school-lab.", "explanation": "The role supplies management operations and the resource-group scope includes its current and future descendants." },
+          { "id": "subscription-contributor-scope", "text": "Contributor on the subscription.", "explanation": "This also covers the live resource group and exceeds the requirement." },
+          { "id": "single-vm-reader-scope", "text": "Reader on the current lab VM.", "explanation": "This cannot manage the VM and does not include other or future lab resources." }
+        ], "correctIds": ["lab-contributor-scope"], "explanation": "Role and scope must both match the requirement." },
+        { "id": "rbac-check-role-components", "kind": "multiple", "prompt": "Ana records an assignment as SchoolLabOperators / Contributor / rg-school-lab. Select the two correct interpretations.", "choices": [
+          { "id": "group-is-principal", "text": "SchoolLabOperators is the principal receiving the grant.", "explanation": "The security group identifies which members benefit from this assignment." },
+          { "id": "group-is-scope", "text": "SchoolLabOperators is an Azure resource group because it contains users.", "explanation": "An Entra security group contains identities; an Azure resource group contains resources. They are different objects." },
+          { "id": "resource-group-is-boundary", "text": "rg-school-lab determines the resource boundary of the grant.", "explanation": "This is the scope, not an operation or identity." },
+          { "id": "contributor-is-person", "text": "Contributor identifies the person who approved the request.", "explanation": "Contributor is the role definition, a set of permissions." }
+        ], "correctIds": ["group-is-principal", "resource-group-is-boundary"], "explanation": "Always preserve the principal, role, and scope as separate fields in your reasoning." }
+      ],
+      "takeaways": [
+        "Authentication identifies the caller; authorization permits a particular operation on a target.",
+        "Entra directory roles and Azure resource roles do not automatically substitute for one another.",
+        "A role assignment joins a principal, a role definition, and a scope.",
+        "Use current role permissions, not just role names, to distinguish the access administrators.",
+        "Inherited grants add to narrower grants; Reader does not cancel Contributor."
+      ],
+      "sourceIds": ["rbac-overview", "rbac-role-boundaries", "rbac-privileged-roles", "rbac-definitions", "rbac-portal-assignments"]
+    },
+    {
+      "id": "rbac-evaluate-effective-access",
+      "title": "Work out effective access one operation at a time",
+      "summary": "Combine direct and group grants, distinguish management from data actions, and account for exclusions, conditions, deny assignments, and independent service restrictions.",
+      "objectives": [
+        "Calculate the applicable grants for a concrete target and operation.",
+        "Interpret Actions, NotActions, DataActions, and NotDataActions without treating subtraction as a deny.",
+        "Explain how role assignment conditions and deny assignments affect the decision.",
+        "Troubleshoot an access result without unnecessarily expanding privileges."
+      ],
+      "sections": [
+        {
+          "id": "effective-access-method",
+          "title": "Start with an operation, not a person",
+          "blocks": [
+            { "type": "paragraph", "text": "The question 'What access does Bogdan have?' is incomplete until you name a target and operation. Reading a VM's configuration, restarting it, signing into its operating system, and reading a document stored on its disk are different requests. Begin with the exact resource, tenant, subscription, identity, and authentication method. Then collect direct role assignments, assignments through applicable group memberships, and assignments inherited from ancestor scopes. Ignore assignments on unrelated siblings. A role name without its scope is insufficient evidence." },
+            { "type": "paragraph", "text": "Azure RBAC supports transitive security-group membership for role assignments: a user in a group nested inside an assigned group can receive that grant. Do not generalize the group-based licensing rule to Azure RBAC; licensing does not process nested members in the same way. For every relevant grant, inspect its operations and any condition. Also inspect applicable deny assignments. An explicit deny that applies to the principal, scope, and requested action can block an otherwise valid grant. Finally consider independent controls such as a resource lock, policy, storage network restriction, or the application's own authorization." },
+            { "type": "paragraph", "text": "This is a reasoning model, not a guarantee that every service implements every Azure RBAC feature identically. Azure Resource Manager handles management requests. Supported data services evaluate their own Azure RBAC data permissions, sometimes alongside other service-specific authorization mechanisms. State the mechanism in examples. We will use Entra-token blob access, not an account key, so the role analysis has a defined meaning." }
+          ]
+        },
+        {
+          "id": "actions-and-data-actions",
+          "title": "Two permission lists for two different jobs",
+          "blocks": [
+            { "type": "paragraph", "text": "Actions describes management-plane operations. For example, Microsoft.Compute/virtualMachines/read retrieves VM management information, and Microsoft.Compute/virtualMachines/restart/action requests a restart. The slash-separated string identifies a provider, resource type, and operation. The wildcard symbol * matches a set of operations. Reader's management reads do not mean that the user can read every file or database row. The verb read is meaningful only together with its provider operation and plane." },
+            { "type": "paragraph", "text": "DataActions describes supported operations on the data inside a service. Storage Blob Data Reader includes permission to read blob content, while plain Reader does not. Some data roles also include limited management Actions, such as reading a container's management information. It is therefore inaccurate to say that every role belongs exclusively to one plane. Read both lists. A storage account role scoped to one container does not authorize reading all containers in the account merely because the role's name contains Storage." },
+            { "type": "paragraph", "text": "NotActions removes matching operations from the Actions allowed by that role definition. NotDataActions does the equivalent within DataActions. Think of each definition as a basket of granted operations after its own exclusions are applied. Then combine applicable baskets. An excluded operation is absent from that basket, not prohibited everywhere. A second applicable role can supply it. This is why adding an access-administrator role can supply role-assignment permission that Contributor's own definition excludes." },
+            { "type": "table", "caption": "Read permission fields without confusing them", "headers": ["Field", "Interpretation", "Not a valid inference"], "rows": [
+              ["Actions", "Management operations granted by this role.", "A wildcard automatically grants all data access."],
+              ["NotActions", "Management operations removed from this role's grant.", "The same operation is denied even when another role grants it."],
+              ["DataActions", "Supported service-data operations granted by this role.", "Every network path to the service is opened."],
+              ["NotDataActions", "Data operations removed from this role's grant.", "This is a system-protected deny assignment."]
+            ] }
+          ]
+        },
+        {
+          "id": "worked-scope-access-table",
+          "title": "Trace Ana and Bogdan through a complete assignment table",
+          "blocks": [
+            { "type": "paragraph", "text": "Assume School-Teaching contains rg-school-lab with vm-lab and storage account schoolarchive, and rg-school-live with vm-live. Container lesson-files is inside schoolarchive. Bogdan has Reader directly on School-Teaching, belongs to SchoolLabOperators with Contributor on rg-school-lab, and has Storage Blob Data Reader on lesson-files. Ana has Role Based Access Control Administrator directly on rg-school-lab and no other grant. All assignments are active and propagated. For this exercise there are no applicable denies, conditions, locks, policies, or network blocks; requests use their own Entra identities." },
+            { "type": "table", "caption": "Effective result for the stated operation, before any new self-assignment", "headers": ["Caller and request", "Applicable permission", "Result and reason"], "rows": [
+              ["Bogdan reads vm-live configuration", "Subscription Reader", "Allowed: the live resource is a descendant of School-Teaching."],
+              ["Bogdan restarts vm-live", "Only Reader applies at this target", "Not allowed: lab Contributor does not extend sideways."],
+              ["Bogdan restarts vm-lab", "Inherited lab Contributor", "Allowed: this management operation is included."],
+              ["Bogdan assigns Reader on vm-lab", "Reader plus Contributor", "Not allowed: neither grant supplies roleAssignments/write."],
+              ["Bogdan reads a blob in lesson-files", "Container Storage Blob Data Reader", "Allowed through the stated data role and Entra token."],
+              ["Bogdan reads a blob in a sibling container using an Entra token", "No matching data grant", "Not allowed by these assignments, even though he manages the account."],
+              ["Ana reads vm-lab configuration", "RBAC Administrator control-plane read", "Allowed: the current role definition includes management reads."],
+              ["Ana resizes vm-lab", "No compute write grant", "Not allowed by her current assignment."],
+              ["Ana assigns Reader on vm-lab", "Inherited RBAC Administrator", "Allowed: the role supplies assignment write at this descendant scope."]
+            ] },
+            { "type": "example", "title": "Explain two surprising results without inventing a new role", "scenario": "Bogdan can restart vm-lab but cannot add a teammate as Reader. Ana can add that teammate but cannot resize the VM with her current grants.", "steps": [
+              { "action": "Identify restart, role assignment, and resize as distinct management operations.", "why": "Being able to perform one management action does not imply all management actions are granted." },
+              { "action": "Trace Bogdan's membership to Contributor at rg-school-lab and apply that role's exclusions.", "why": "The grant covers restart but does not supply role-assignment write." },
+              { "action": "Trace Ana's RBAC Administrator grant to the same group and inspect its current permission list.", "why": "Assignment write and management read are present, but compute write is not." },
+              { "action": "Have Ana make only the approved Reader assignment and record its scope and recipient.", "why": "The legitimate task can be completed without permanently giving either person a broader job." }
+            ], "result": "Both initial results are consistent. Ana's ability to grant roles is itself sensitive: with an unconstrained assignment she could grant herself a compute role, but that would be a new authorization change, not a permission already supplied by her present role." }
+          ]
+        },
+        {
+          "id": "subtraction-versus-denial",
+          "title": "An exclusion and a deny are different mechanisms",
+          "blocks": [
+            { "type": "example", "title": "Subtract within a role, then combine roles", "scenario": "Use a simplified teaching set, not a deployable custom-role definition. Role A grants read, update, and delete on one lab resource, with delete excluded by NotActions. Role B separately grants delete on the same resource. Bogdan has both roles. Initially no deny assignment applies.", "steps": [
+              { "action": "Evaluate Role A as read and update only.", "why": "The exclusion removes delete from that role's own permission set." },
+              { "action": "Add Role B's delete permission.", "why": "Role assignments are additive; Role A's exclusion is not a prohibition on Role B." },
+              { "action": "Now introduce a system-managed deny assignment that covers Bogdan, this resource, and deletion without excluding him.", "why": "A matching deny is a separate restriction that defeats the otherwise valid delete grant." }
+            ], "result": "Deletion is allowed by the two grants before the deny, then blocked once the applicable deny exists. The reasoning for data operations with NotDataActions follows the same per-role subtraction principle." },
+            { "type": "paragraph", "text": "You cannot ordinarily create a free-standing deny assignment in IAM the way you create a role assignment. Azure creates and manages them, including through deployment stack deny settings. Inspect the Deny assignments tab to find denied operations, scope, inheritance behavior, and excluded principals. Do not assume every deny affects everybody or every descendant. Do not delete a managed application's protection as a shortcut. Follow the owning service's supported management workflow and distinguish a deny-assignment error from a lock or policy error." }
+          ]
+        },
+        {
+          "id": "conditional-grants",
+          "title": "A condition narrows a grant, not the entire identity",
+          "blocks": [
+            { "type": "paragraph", "text": "Attribute-based access control, abbreviated ABAC, can add an extra condition to supported Azure role assignments. For example, a supported Blob Storage data-read assignment can require an appropriate blob index tag before allowing a particular read. Blob index tags are service data attributes, not the resource group's governance tags. Conditions are not a universal filter that can be attached to every action of every Azure service. Supported operations, attributes, storage configurations, and feature status must be checked for the actual service." },
+            { "type": "paragraph", "text": "Azure documents generally available condition capabilities for supported Blob and Queue Storage data actions, with specific feature combinations qualified in service documentation. The portal also supports delegation conditions on privileged access-administrator assignments, limiting which roles may be assigned and to which principals. That is a different use from filtering blob reads. Neither feature means you can invent an arbitrary condition for any VM operation. Use the condition editor for the supported scenario and review the generated meaning with a positive and a negative case." },
+            { "type": "prediction", "id": "rbac-predict-condition-union", "prompt": "Bogdan has a conditional data-read grant allowing only lesson-files blobs meeting its tag condition. He also receives an unconditional Storage Blob Data Reader grant on the whole account. A blob fails the first condition. Assume no applicable deny or other restriction. Does the failed condition necessarily block the read?", "answer": "No. The broader unconditional grant can independently authorize the read.", "explanation": "A condition filters the permissions of its own assignment. It is not an explicit deny overriding all other assignments. Review the union of applicable grants before promising that one condition restricts the user." }
+          ]
+        },
+        {
+          "id": "verify-and-troubleshoot-access",
+          "title": "Prove both the allowed and the forbidden path",
+          "blocks": [
+            { "type": "paragraph", "text": "Use the target resource's IAM Check access view to inspect assignments for the exact identity, including inherited grants and group paths. Check the assignment's state if PIM is involved, and inspect conditions and denies. Role and group changes can take time to propagate; a cached sign-in or service token can preserve an older view temporarily. Refresh the session and allow documented propagation rather than immediately granting Owner. Record the failed operation and error details so you can distinguish wrong tenant, missing operation, invalid condition, and unrelated service failure." },
+            { "type": "paragraph", "text": "A successful configuration read proves only that read. Verify a permitted operation on a disposable resource and a harmless negative case outside scope. For data access, use the intended Entra authentication method rather than letting a tool silently use a stored account key. A private endpoint or firewall can still block an authorized identity; an open network can still reject an unauthorized one. Removing a role does not rotate previously disclosed keys, revoke a database password, or remove a local operating-system account. Offboarding must consider those separate credentials." },
+            { "type": "callout", "tone": "exam", "title": "Solve the request, not the longest role list", "text": "Build the ancestor chain, collect applicable direct and group grants, subtract exclusions within each definition, account for conditions and matching denies, and keep management and data operations distinct. A narrower Reader grant does not override a parent Contributor. NotActions is not a deny. Resource Owner is not automatic authorization for every application or data-plane operation." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "rbac-check-additive-access", "kind": "single", "prompt": "Bogdan has Contributor on the subscription and Reader on its live resource group. No other restrictions apply. What permits him to update a live VM?", "choices": [
+          { "id": "inherited-contributor-remains", "text": "The inherited Contributor grant still applies.", "explanation": "The VM is inside the subscription and Reader does not subtract permissions." },
+          { "id": "closest-reader-wins", "text": "Nothing, because the closest role assignment always overrides parents.", "explanation": "That is not Azure RBAC's additive grant model." },
+          { "id": "reader-allows-write", "text": "Reader itself allows writes when inherited from a resource group.", "explanation": "Scope changes where the role applies, not the operations in its definition." }
+        ], "correctIds": ["inherited-contributor-remains"], "explanation": "Reducing privilege requires addressing every applicable broad grant, not adding a narrower read grant." },
+        { "id": "rbac-check-notactions", "kind": "single", "prompt": "Role A excludes delete through NotActions. Role B grants that same delete at the same target. Both assignments apply, and there are no conditions, denies, locks, or policies blocking deletion. What is the RBAC result?", "choices": [
+          { "id": "second-role-grants", "text": "Delete is allowed through Role B.", "explanation": "The exclusion changes only Role A's contribution to the effective permission set." },
+          { "id": "notactions-global-deny", "text": "Delete is denied because NotActions always defeats another grant.", "explanation": "This confuses an exclusion with a deny assignment." },
+          { "id": "newest-role-decides", "text": "Whichever role was assigned most recently decides.", "explanation": "Assignment time is not the conflict-resolution rule for additive grants." }
+        ], "correctIds": ["second-role-grants"], "explanation": "Evaluate each definition, then combine its applicable allowed operations." },
+        { "id": "rbac-check-data-boundary", "kind": "single", "prompt": "Ana has only Reader on a storage account and uses her Entra token to download a blob. The network permits the request. Is the role enough?", "choices": [
+          { "id": "data-role-missing", "text": "No. Reader does not supply the required blob data-read permission.", "explanation": "Management read and blob-content read are separate operations." },
+          { "id": "network-means-authorized", "text": "Yes. A permitted network request is automatically authorized.", "explanation": "Reachability does not establish data authorization." },
+          { "id": "read-word-enough", "text": "Yes. Reader grants every operation containing the word read.", "explanation": "Reader's management Actions do not become service DataActions." }
+        ], "correctIds": ["data-role-missing"], "explanation": "Under the stated Entra-token mechanism, an applicable data grant is needed separately." },
+        { "id": "rbac-check-condition-deny", "kind": "multiple", "prompt": "Select the two accurate statements about restrictions.", "choices": [
+          { "id": "condition-local-to-grant", "text": "A failed condition on one assignment does not cancel an independent unconditional grant.", "explanation": "The condition filters that assignment's permission contribution rather than creating a global deny." },
+          { "id": "deny-can-block-grant", "text": "An applicable deny assignment can block an operation that a role otherwise grants.", "explanation": "A matching deny is explicitly considered by Azure authorization." },
+          { "id": "all-services-abac", "text": "Every Azure service action accepts arbitrary ABAC conditions.", "explanation": "Conditions have documented supported actions and attributes, not universal applicability." },
+          { "id": "manual-deny-like-reader", "text": "Create a free-standing deny assignment exactly like assigning Reader in IAM.", "explanation": "Deny assignments are Azure-managed; deployment stack settings are one supported mechanism that produces them." }
+        ], "correctIds": ["condition-local-to-grant", "deny-can-block-grant"], "explanation": "Conditions and deny assignments solve different problems and must be interpreted separately." }
+      ],
+      "takeaways": [
+        "Effective access depends on the requested operation, target, identity, authentication method, and all applicable assignments.",
+        "NotActions and NotDataActions subtract within a role; they are not global deny rules.",
+        "Management Actions and service DataActions are separate, even when one role contains both.",
+        "Conditions narrow individual grants, while applicable deny assignments can block allowed operations.",
+        "Check propagation, PIM activation, locks, policy, and service restrictions before expanding privilege."
+      ],
+      "sourceIds": ["rbac-overview", "rbac-definitions", "rbac-privileged-roles", "rbac-conditions", "rbac-deny", "rbac-portal-assignments"]
+    }
+  ],
+  "glossary": [
+    { "term": "Authentication", "definition": "Establishing which identity is making a request." },
+    { "term": "Authorization", "definition": "Deciding whether that identity may perform a particular operation on a target." },
+    { "term": "Security principal", "definition": "A user, group, service principal, or managed identity that can receive permissions." },
+    { "term": "Role definition", "definition": "A named permission set describing operations that assignments of the role can grant." },
+    { "term": "Role assignment", "definition": "The connection between a principal, a role definition, and a scope, optionally with supported conditions." },
+    { "term": "Scope", "definition": "The resource boundary where a grant or governance rule applies." },
+    { "term": "Inheritance", "definition": "Application of a parent-scope grant to its applicable descendants, not to siblings or parents." },
+    { "term": "Management plane", "definition": "The API surface for creating, configuring, and managing Azure resource objects; also called the control plane." },
+    { "term": "Data plane", "definition": "The service surface used to work with data, such as downloading a blob or querying a database." },
+    { "term": "NotActions", "definition": "Operations excluded from one role definition's Actions, without denying grants from another role." },
+    { "term": "Deny assignment", "definition": "An Azure-managed restriction that can block specified operations despite an otherwise applicable grant." },
+    { "term": "ABAC", "definition": "Attribute-based access control, used in Azure through supported conditions that narrow role-assignment permissions." },
+    { "term": "PIM", "definition": "Privileged Identity Management, which supports eligible and time-bound privilege with configured activation requirements and licensing." }
+  ],
+  "sources": [
+    { "id": "rbac-overview", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/overview", "title": "What is Azure role-based access control?", "supports": "Principal, role and scope model; inheritance; transitive group grants; additive permissions; high-level authorization evaluation." },
+    { "id": "rbac-role-boundaries", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/rbac-and-directory-admin-roles", "title": "Azure roles, Microsoft Entra roles, and classic subscription administrator roles", "supports": "Directory versus Azure role boundaries, explicit Global Administrator elevation, and retirement of classic administration rather than teaching classic roles as a current setup." },
+    { "id": "rbac-privileged-roles", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/privileged", "title": "Azure built-in roles for Privileged", "supports": "Current Owner, Contributor, User Access Administrator and RBAC Administrator permissions; RBAC Administrator includes control-plane read but not broader policy or lock administration." },
+    { "id": "rbac-definitions", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/role-definitions", "title": "Understand Azure role definitions", "supports": "Actions, NotActions, DataActions, NotDataActions, assignable scopes, management/data separation, and storage-key qualifications." },
+    { "id": "rbac-portal-assignments", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal", "title": "Assign Azure roles using the Azure portal", "supports": "Required assignment authority, IAM workflow, verified principals, delegation and storage conditions, active versus eligible assignments, and PIM licensing qualifications." },
+    { "id": "rbac-conditions", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/conditions-overview", "title": "What is Azure attribute-based access control?", "supports": "Conditions filter grants rather than create explicit denies; supported Blob and Queue actions and per-feature status, not universal ABAC." },
+    { "id": "rbac-deny", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/deny-assignments", "title": "List Azure deny assignments", "supports": "Azure-managed deny assignments, deployment stack origin, scope and principal exclusions, and IAM inspection." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect a scoped Reader grant",
+    "purpose": "Observe a deliberately narrow assignment and its removal without creating compute, exposing data, or exercising destructive permissions.",
+    "prerequisites": [
+      "An explicitly approved training tenant and an existing empty disposable resource group, created by an authorized administrator. Record its subscription and full identity.",
+      "An authorized operator with active role-assignment write/delete permission at that group, and a separate existing test user with no other relevant Azure grants.",
+      "Permission to sign in as the test user in a separate browser profile. Do not reuse a real student's credentials or grant a production account extra access."
+    ],
+    "costWarning": "The exercise only changes RBAC metadata on an existing empty group and does not require paid compute or storage. PIM is optional and may require paid licensing. Do not create a subscription, enable a trial, or deploy resources for this lab. An empty-looking group must be checked before any cleanup.",
+    "steps": [
+      "Record the exact test user's directory object and the empty resource-group scope. Inspect inherited assignments so the result will not be confused by existing access.",
+      "As the authorized operator, open the group's Access control (IAM), add Reader, select the verified test user, and review the scope before saving.",
+      "After propagation, sign in as the test user and inspect the group. Confirm the test user can read its management information, not create resources or assign roles.",
+      "Use IAM inspection and a harmless attempt to open an unrelated authorized-for-testing scope to distinguish this grant from subscription-wide access. Do not attempt destructive operations.",
+      "Remove only the Reader assignment created for this test at its original scope. Refresh the test session after propagation and inspect access again.",
+      "Record whether access disappeared and investigate any other grant if it did not. No actual Azure action is performed by this lesson."
+    ],
+    "expectedResults": [
+      "The assignment identifies the exact principal, Reader role, and group scope.",
+      "The test user gains management read through this grant, without data access or resource-write permission.",
+      "Removing this grant removes its contribution; independent grants, if discovered, explain remaining access."
+    ],
+    "cleanup": [
+      "Remove only the test role assignment and verify it is absent. Do not remove inherited or preexisting assignments.",
+      "Sign out of the test profile. Leave the preexisting empty group and test user for their owner unless separately approved for deletion."
+    ]
+  }
+}

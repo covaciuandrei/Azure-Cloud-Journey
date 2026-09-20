@@ -1,0 +1,431 @@
+{
+  "schemaVersion": 1,
+  "id": "entra-identities",
+  "title": "Microsoft Entra identities: people, groups, and recovery",
+  "summary": "Create and maintain school identities, distinguish membership from permission and licensing, invite external collaborators safely, and design password recovery that actually works.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 identity objectives explicitly cover users, groups, properties, licensing, external users, and self-service password reset. These are foundations for every later access decision.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/fundamentals/whatis",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Create users and groups.",
+    "Manage user and group properties.",
+    "Manage licenses in Microsoft Entra ID.",
+    "Manage external users.",
+    "Configure self-service password reset."
+  ],
+  "lessons": [
+    {
+      "id": "identity-tenant-users-groups",
+      "title": "Build the school's directory without confusing identity and access",
+      "summary": "Understand the tenant, create the right kind of account and group, and maintain properties at their actual source of authority.",
+      "objectives": [
+        "Distinguish an Entra tenant from an Azure subscription and a resource group.",
+        "Separate Member or Guest status from where an identity originates and authenticates.",
+        "Create and maintain cloud-managed users and appropriate groups.",
+        "Explain assigned and dynamic membership and their licensing and governance qualifications."
+      ],
+      "sections": [
+        {
+          "id": "tenant-directory-subscription",
+          "title": "The directory knows people; the subscription contains resources",
+          "blocks": [
+            { "type": "paragraph", "text": "Imagine a school with a people register and a separate inventory of equipment. The register can tell you that Ana is an IT coordinator and Bogdan is a lab helper, but that fact alone does not authorize either person to open every cupboard. Microsoft Entra ID provides cloud identity and access services. A tenant is an organization's isolated instance of those services, with a directory of users, groups, application identities, and identity settings. In everyday administration, directory and tenant often refer to that same identity environment." },
+            { "type": "paragraph", "text": "An Azure subscription is different: it is a resource-management and billing boundary for things such as VMs and storage accounts. Each subscription trusts one Entra directory at a time, while one directory can be trusted by many subscriptions. The school can have School-Teaching and School-Live subscriptions using the same users. Creating a user does not create a subscription, a VM, or a paid product license. Deleting a VM does not remove the student's directory account." },
+            { "type": "diagram", "title": "One school directory, separate Azure resource boundaries", "description": "Ana and Bogdan are directory identities. Both subscriptions trust that directory but still require their own scoped Azure role assignments. The arrows show identity trust, not automatic permission or billing ownership.", "nodes": [
+              { "id": "identity-tenant", "label": "School tenant", "detail": "Users, groups, identity settings", "column": 1, "row": 0 },
+              { "id": "identity-people", "label": "Ana and Bogdan", "detail": "Directory user objects", "column": 1, "row": 1 },
+              { "id": "identity-teaching-sub", "label": "School-Teaching", "detail": "Lab resources and costs", "column": 0, "row": 2 },
+              { "id": "identity-live-sub", "label": "School-Live", "detail": "Live resources and costs", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "identity-tenant", "to": "identity-people", "label": "Contains identities" },
+              { "from": "identity-teaching-sub", "to": "identity-tenant", "label": "Trusts" },
+              { "from": "identity-live-sub", "to": "identity-tenant", "label": "Trusts" }
+            ] },
+            { "type": "paragraph", "text": "Always verify the active directory before making an identity change. Ana might also be a guest in a partner school's tenant. The same sign-in person can have different directory objects and permissions in different organizations. Names and email addresses help humans recognize an account, but the object ID identifies a particular directory object. A familiar display name in the wrong tenant is not the right administrative target." }
+          ]
+        },
+        {
+          "id": "user-type-and-authority",
+          "title": "Three questions about every user",
+          "blocks": [
+            { "type": "paragraph", "text": "Ask separately: where is this identity managed, how does it authenticate, and what relationship does this tenant assign it? A cloud-created school user can be managed in Entra. A synchronized user can have identity attributes mastered in the school's Windows Server Active Directory Domain Services, abbreviated AD DS, and copied to Entra through synchronization. A business-to-business, or B2B, collaborator normally authenticates with an external identity provider while having a representation in the school's directory. These are origins and management arrangements, not Azure resource roles." },
+            { "type": "paragraph", "text": "The UserType property is Member or Guest. It influences the directory relationship and default access behavior, but does not by itself identify the authentication provider or make a person an administrator. Microsoft documents internal members, internal guests, external members, and external guests. Therefore 'Guest means the password is always elsewhere' and 'Member means the school created the password' are unsafe universal rules. For an ordinary invited B2B guest, external authentication is the expected scenario, but inspect the identity properties rather than deriving them solely from UserType." },
+            { "type": "paragraph", "text": "Source of authority means the system responsible for a particular identity or property. For an ordinary synchronized user whose authority remains in AD DS, update synchronized names, job information, or contact properties at that source, then verify synchronization. A cloud edit may be unavailable or overwritten. Some properties, including usage location, can be cloud-managed even for synchronized users. Inspect the account's actual current authority rather than guessing it from its age, display name, or an old onboarding record." }
+          ]
+        },
+        {
+          "id": "create-and-maintain-users",
+          "title": "Create a useful account, not just a name in a list",
+          "blocks": [
+            { "type": "paragraph", "text": "For a new cloud-managed user, an authorized User Administrator opens Entra ID, Users, New user, Create new user. Choose a user principal name, or UPN, in an allowed verified tenant domain, a display name, mail nickname, and initial password settings. The UPN is the account's sign-in-style name; it need not be identical to every email alias. In this lesson ana@school.example is a fictional explanatory address, not a usable tenant domain. Check uniqueness and spelling before creation so a wrong identity does not become the recipient of access." },
+            { "type": "paragraph", "text": "Set the account-enabled state deliberately, record useful job and department information, and set an accurate usage location before licensing. Deliver any initial password through the approved secure channel, not a shared class chat or a screenshot committed to a repository. Use the required first-sign-in password change and normal authentication registration. Creation does not automatically assign every app, group, license, or Azure role the person will need. Add those only after the job requirements are approved." },
+            { "type": "paragraph", "text": "User maintenance is also a lifecycle task. Update a changed department at its authoritative source, verify the resulting group and application access, and review whether old access is still justified. Blocking sign-in, removing access, revoking sessions, deleting the user, and retaining service data are related but distinct actions. Deleted Entra users are normally recoverable for 30 days unless permanently removed, but service-data retention follows its own rules. Do not describe deletion as a universal immediate wipe or as an automatic backup." }
+          ]
+        },
+        {
+          "id": "group-types-and-properties",
+          "title": "Use security groups for access and Microsoft 365 groups for collaboration",
+          "blocks": [
+            { "type": "table", "caption": "Choose a group according to what it must represent", "headers": ["Group type", "Useful purpose", "Membership boundary"], "rows": [
+              ["Security group", "Collect identities for access assignments such as SchoolLabOperators.", "Assigned membership can include supported users, devices, service principals, and nested security groups; the consuming service decides how it uses them."],
+              ["Microsoft 365 group", "A collaboration group associated with services such as a shared mailbox and team workspace.", "Members are users, including permitted guests; it is not a container for devices or nested groups."],
+              ["Role-assignable security group", "A specially configured group for assigning Entra administrative roles.", "Requires privileged administration and assigned rather than dynamic membership; do not create one merely to organize a classroom."]
+            ] },
+            { "type": "paragraph", "text": "In Entra ID, Groups, All groups, New group, choose the group type, name, description, membership type, owners, and initial members as appropriate. A Microsoft 365 group also has a group email address. The owner maintains the group; membership determines who is included. Owning a group does not mean the owner is automatically a member or Azure subscription Owner. Keep at least a practical ownership and review plan so the group is not abandoned when a teacher changes jobs." },
+            { "type": "paragraph", "text": "Names, descriptions, owners, and membership need maintenance. The object ID and group type are not simply editable labels. When a group's purpose changes fundamentally, consider whether a different group is needed rather than casually repurposing one that already carries permissions. Review where the group is used before removing members or deleting it. A group with a friendly name like Science Club might also be assigned a license, an app, or an Azure management role. Its effects come from those assignments, not from its name." }
+          ]
+        },
+        {
+          "id": "dynamic-membership-qualified",
+          "title": "Rules can maintain membership, but only from trustworthy attributes",
+          "blocks": [
+            { "type": "paragraph", "text": "Assigned membership means authorized people explicitly add and remove members. Dynamic User membership instead evaluates a rule against user properties, such as including enabled internal users whose department is Science. When the relevant properties change, membership is reevaluated; it is not necessarily instant. Dynamic Device membership is available for security groups, not Microsoft 365 groups. One dynamic group cannot mix users and devices, and a device rule cannot use attributes of its owner's account as if they were device properties." },
+            { "type": "paragraph", "text": "You cannot manually add a special exception member to a dynamic group while leaving the rule unchanged. Change the authoritative attributes or the approved rule, or use an assigned group for exceptions. Validate a proposed rule against representative included and excluded users before relying on it for access or licensing. If users can edit a property used to obtain privileges, that property is a poor basis for a sensitive access rule. The rule writer and the attribute editor both influence membership, so both responsibilities require control." },
+            { "type": "paragraph", "text": "Dynamic membership has a licensing prerequisite separate from the license assigned by any consuming application. Current documentation requires qualifying Entra ID P1 or Intune for Education entitlement for each unique user in one or more dynamic groups. The tenant needs sufficient qualifying license capacity; the dynamic-membership article says individual assignment of that feature license is not required merely to count group membership. A user in several dynamic groups counts once for this requirement. Dynamic device groups do not require a user license for each device. Do not assume ordinary group creation and premium dynamic automation have identical entitlements." }
+          ]
+        },
+        {
+          "id": "worked-user-and-group-lifecycle",
+          "title": "Onboard a lab helper and move a teacher correctly",
+          "blocks": [
+            { "type": "example", "title": "Choose the authoritative change first", "scenario": "Bogdan is a new cloud-managed lab helper. Ana is an existing synchronized teacher whose department changes from Science to Library. The school's ScienceStaff dynamic rule uses its trusted department property. SchoolLabOperators is a separate assigned security group.", "steps": [
+              { "action": "An authorized User Administrator creates Bogdan in the verified school tenant with the approved UPN, enabled state, and usage location.", "why": "The user object establishes his identity, not an automatic set of licenses or resource permissions." },
+              { "action": "An authorized group operator confirms SchoolLabOperators' type, purpose, and owners, then adds Bogdan as a member.", "why": "Assigned membership fits a deliberately approved helper list. The group must be connected to appropriate access separately." },
+              { "action": "Update Ana's department in the authoritative on-premises directory and verify the synchronized value in Entra.", "why": "Changing only the cloud copy of a source-managed property is not a reliable maintenance workflow." },
+              { "action": "Wait for dynamic processing, inspect ScienceStaff membership, and review related access or licenses affected by Ana leaving it.", "why": "A property change can have downstream consequences beyond the visible profile field." }
+            ], "result": "Bogdan has the intended identity and group membership without an invented subscription entitlement. Ana's profile and rule-driven membership follow the correct authority and are checked after processing." },
+            { "type": "prediction", "id": "identity-predict-dynamic-exception", "prompt": "ScienceStaff is a Dynamic User group. Bogdan does not satisfy its approved rule, but a teacher wants to manually add him for one afternoon. Can the operator simply add him as a normal member?", "answer": "No. Dynamic membership is determined by the rule, not manual member additions.", "explanation": "Use an approved rule or authoritative attribute change only when it represents reality, or a separate assigned exception group. Falsifying his department to gain access creates unreliable identity data." },
+            { "type": "callout", "tone": "exam", "title": "Keep the identity dimensions separate", "text": "Member or Guest is not the same as cloud-managed or synchronized. A group owner is not automatically a member or an Azure Owner. Dynamic membership is not ordinary assigned membership. Tenant, subscription, resource group, security group, and Microsoft 365 group name different objects with different purposes." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "identity-check-tenant-subscription", "kind": "single", "prompt": "The school wants two Azure subscriptions using the same staff accounts. Which model is valid?", "choices": [
+          { "id": "one-tenant-many-subscriptions", "text": "Both subscriptions can trust the same Entra tenant, with separate scoped resource permissions.", "explanation": "A directory can serve multiple subscriptions without making their access assignments identical." },
+          { "id": "new-directory-per-subscription", "text": "Every subscription must have a different tenant and duplicate user accounts.", "explanation": "The trust model does not impose that one-to-one relationship." },
+          { "id": "users-inside-resource-group", "text": "Move staff user objects into the Azure resource group containing the VMs.", "explanation": "Directory users are not ordinary Azure resource-group members." }
+        ], "correctIds": ["one-tenant-many-subscriptions"], "explanation": "Identity trust, resource containment, and authorization are separate relationships." },
+        { "id": "identity-check-source-authority", "kind": "single", "prompt": "Ana's department is synchronized from on-premises AD DS, which remains authoritative for it. Where should an approved department change originate?", "choices": [
+          { "id": "change-source-then-sync", "text": "At the authoritative on-premises source, followed by synchronization and verification.", "explanation": "This changes the value the cloud copy receives instead of fighting the synchronization model." },
+          { "id": "repeated-cloud-overwrite", "text": "Repeatedly overwrite only the cloud profile until synchronization stops.", "explanation": "That neither changes authority nor supplies a reliable maintained value." },
+          { "id": "change-azure-role", "text": "Assign Contributor to Ana's VM.", "explanation": "An Azure resource role does not update a directory profile property." }
+        ], "correctIds": ["change-source-then-sync"], "explanation": "Determine authority per property instead of assuming every visible field is cloud-mastered." },
+        { "id": "identity-check-group-choice", "kind": "single", "prompt": "Bogdan needs a shared Microsoft 365 collaboration workspace for a group of students, not a group containing devices or nested groups. Which type matches?", "choices": [
+          { "id": "microsoft365-collaboration", "text": "Microsoft 365 group.", "explanation": "It represents user collaboration and integrates with Microsoft 365 group-backed services." },
+          { "id": "azure-resource-group", "text": "Azure resource group.", "explanation": "A resource group organizes Azure resources, not a collaboration membership list." },
+          { "id": "dynamic-device-group", "text": "Dynamic Device security group.", "explanation": "That groups devices according to device attributes, not student collaboration members." }
+        ], "correctIds": ["microsoft365-collaboration"], "explanation": "Choose the object type according to what it contains and what consumes it." },
+        { "id": "identity-check-dynamic", "kind": "multiple", "prompt": "Select the two accurate statements about a Dynamic User group.", "choices": [
+          { "id": "rules-drive-membership", "text": "Membership follows the evaluated rule, so a normal manual member exception is not supported.", "explanation": "Change the approved rule or authoritative data, or choose a separate assigned group." },
+          { "id": "licenses-count-unique-users", "text": "Qualifying dynamic-membership entitlement is based on unique users across the dynamic groups.", "explanation": "The documented P1 or Intune for Education requirement is not multiplied every time one user appears in another group." },
+          { "id": "devices-and-users-mixed", "text": "The same dynamic group can freely mix users and devices.", "explanation": "A dynamic rule targets users or devices, not a mixture of both." },
+          { "id": "guest-implies-external-only", "text": "Changing a user's UserType to Guest proves the account must authenticate externally.", "explanation": "UserType and identity origin/provider are distinct properties." }
+        ], "correctIds": ["rules-drive-membership", "licenses-count-unique-users"], "explanation": "Dynamic membership needs valid rules, controlled attributes, processing time, and the documented entitlement." }
+      ],
+      "takeaways": [
+        "A tenant is the identity environment; a subscription is an Azure resource and billing boundary.",
+        "UserType, authentication provider, and source of authority answer different questions.",
+        "Create identities and grant groups, licenses, apps, and Azure roles deliberately rather than treating them as one operation.",
+        "Security and Microsoft 365 groups have different purposes and membership capabilities.",
+        "Dynamic membership depends on trusted attributes, supported rules, and qualifying license capacity."
+      ],
+      "sourceIds": ["identity-subscription-trust", "identity-user-create", "identity-profile", "identity-external-properties", "identity-group-types", "identity-group-manage", "identity-dynamic"]
+    },
+    {
+      "id": "identity-licenses-and-guests",
+      "title": "License the service and invite the collaborator deliberately",
+      "summary": "Use the current licensing workflow, diagnose inherited assignment failures, and follow a B2B guest through invitation, access, and removal.",
+      "objectives": [
+        "Separate product entitlement from directory and Azure authorization.",
+        "Assign licenses directly or through groups using the current administration location.",
+        "Troubleshoot license availability, usage location, service-plan conflicts, and nested membership.",
+        "Manage B2B invitation, redemption, access grants, and offboarding."
+      ],
+      "sections": [
+        {
+          "id": "licenses-are-entitlements",
+          "title": "A license and a permission are not the same thing",
+          "blocks": [
+            { "type": "paragraph", "text": "A product license is an entitlement to use specified services or features under the organization's agreement. A product can contain several service plans, such as separate collaboration capabilities. Assigning a license to Bogdan does not make him an Entra administrator or Azure subscription Owner. Conversely, an administrative role lets an operator perform its authorized tasks but does not automatically license every premium feature used by every person. Keep the user identity, administrative authority, feature entitlement, and resource permission as four separate checks." },
+            { "type": "paragraph", "text": "There is also a difference between purchasing sufficient product capacity and assigning that product to a user. Group-based assignment automates distribution; it does not purchase missing seats. Dynamic membership is another separate feature with its own qualifying entitlement. Before adopting a group-licensing workflow, verify the organization's current product and feature entitlements rather than copying an old universal SKU rule. The current Microsoft 365 assignment guide specifies supported groups, available product licenses, and administrative roles, but does not provide an exhaustive universal premium-SKU prerequisite list for the assignment engine." },
+            { "type": "paragraph", "text": "Set each user's usage location accurately before licensing. Services can have geographical availability restrictions, so the location is not a decorative address field. With group-based licensing, an unset location can fall back to the directory's location, but that is not a safe multinational identity-data strategy. A Romanian student studying temporarily elsewhere should have the correct approved usage-location value according to the organization's licensing process, not a guessed location chosen only to make an error disappear." }
+          ]
+        },
+        {
+          "id": "current-license-workflow",
+          "title": "Identity management and license assignment have different current screens",
+          "blocks": [
+            { "type": "paragraph", "text": "For the current documented portal workflow, use the Microsoft 365 admin center, Billing, Licenses, and select the product. The assignment workflow can target users or groups. License Administrator or User Administrator are appropriate documented roles for the basic licensing task; use the least privilege required rather than Global Administrator by habit. Group management remains a separate identity task. Older training screenshots showing license assignment under Entra or Azure billing are not a reliable current step-by-step path." },
+            { "type": "paragraph", "text": "For a direct user assignment, verify the target user, product, available seats, usage location, and enabled service plans, then save and inspect the result. For a group assignment, verify the supported group type and its direct user membership, assign the product to the group, choose the intended service plans, and inspect processing. Current group guidance includes security groups, mail-enabled groups, and Microsoft 365 groups. Microsoft Graph is also a supported management route, but no scripting is necessary to understand or complete this lesson." },
+            { "type": "paragraph", "text": "Only direct user members receive product licenses from a licensed group. Members of a nested group are not recursively licensed by that parent assignment. A group's own membership can be dynamically computed if the dynamic-group prerequisites are met, but the licensing engine still processes that group's resulting direct users. Processing is asynchronous, so distinguish group configuration saved from every user's assignment completed. A user can remain unlicensed or have an assignment error while the group's product assignment still exists." }
+          ]
+        },
+        {
+          "id": "direct-inherited-and-errors",
+          "title": "Track every assignment route and every enabled service",
+          "blocks": [
+            { "type": "paragraph", "text": "A user can have a direct product assignment and one or more group-derived assignments. Removing one route does not necessarily remove the user's effective entitlement because another route can still supply it. Before migrating from direct to group-based licensing, verify that the inherited route is processed successfully and includes the needed service plans. Seeing the same product name is not enough if one assignment disables a service the person uses. Do not remove the known working assignment first and hope the new one eventually catches up." },
+            { "type": "paragraph", "text": "When a user leaves a licensed group, its inherited assignment is removed after processing, subject to any other applicable assignment routes. Losing a license can affect access to its services and their data lifecycle, but service-specific retention and grace behavior vary. Do not promise instant deletion of all data or unlimited preservation. Coordinate changes with the service owner, especially when removing the final route to a mailbox or collaboration entitlement." },
+            { "type": "table", "caption": "Investigate the cause before pressing Reprocess", "headers": ["Symptom or error", "Reason to inspect", "Appropriate response"], "rows": [
+              ["Not enough product licenses", "The group has more eligible users than available seats.", "Obtain approved capacity or correct the intended population; group assignment does not buy seats."],
+              ["Conflicting service plans", "Two selected plans may be mutually exclusive.", "Review all direct and inherited assignments and remove only the approved conflict."],
+              ["Missing dependent plan", "A selected service needs another plan enabled.", "Enable the required licensed dependency or remove the dependent service if it is not needed."],
+              ["Invalid or prohibited usage location", "The user has unsuitable location data or the service is unavailable there.", "Correct the actual location or choose a legally available service; do not falsify data."],
+              ["Uniqueness or proxy-address issue", "A service can reject conflicting identity attributes.", "Resolve the identity conflict with the relevant service administrator, then retry."]
+            ] },
+            { "type": "paragraph", "text": "Inspect the product's Errors & issues view and the affected user instead of treating every failure as slow propagation. Correct the underlying condition and use Reprocess where offered, then verify effective services again. If a licensing action is unavailable, check the operator's role and current admin center before buying more capacity. If only one nested user is missing, examine membership structure before assuming the product is globally unavailable." }
+          ]
+        },
+        {
+          "id": "worked-group-licensing",
+          "title": "A successful group assignment can still miss a person",
+          "blocks": [
+            { "type": "example", "title": "The Robotics group has one direct student and one nested group", "scenario": "RoboticsLicenseUsers directly contains Ana and the nested security group StudentHelpers. Bogdan is only a member of StudentHelpers. Assume the product permits the intended usage locations, the organization has the required entitlements, and enough product seats are available. Ana also has a direct assignment of the same product with a required service enabled.", "steps": [
+              { "action": "Assign the approved product and service plans to RoboticsLicenseUsers through Microsoft 365 Billing, Licenses.", "why": "The product assignment belongs to the chosen group; it is not an Azure role assignment." },
+              { "action": "Inspect direct user membership and processing results.", "why": "Ana is directly eligible for the inherited route. Bogdan is not reached through the nested group." },
+              { "action": "Place Bogdan directly in an approved licensed group or license StudentHelpers separately, according to the intended ownership model.", "why": "The remedy is to create a supported assignment route, not wait indefinitely for nonexistent recursive licensing." },
+              { "action": "Verify Ana's group-derived service plans before removing her direct product assignment.", "why": "Removing one route is safe only if the needed effective entitlement remains through another approved route." }
+            ], "result": "The administrator can explain each user's outcome and remove an obsolete direct assignment without accidentally disabling a needed service. Nested-group behavior is feature-specific: this licensing rule must not be copied into Azure RBAC or SSPR reasoning." },
+            { "type": "prediction", "id": "identity-predict-license-removal", "prompt": "Ana's direct product assignment and an already successful group-derived assignment both enable the required service. The direct assignment is removed. Does that action necessarily remove her service entitlement?", "answer": "No. The successful group-derived route can still supply it.", "explanation": "Check all assignment paths and service-plan settings. Removing one assignment is not the same as removing every effective source of the license." }
+          ]
+        },
+        {
+          "id": "b2b-invite-and-redemption",
+          "title": "Invite a partner without becoming their password owner",
+          "blocks": [
+            { "type": "paragraph", "text": "B2B collaboration lets the school work with an external person while retaining control of that person's representation and access in the school tenant. Suppose Bogdan also coordinates a partner teacher, Elena, who already has an account in the partner school's directory. An authorized Guest Inviter, subject to the tenant's external-collaboration policy, uses Entra ID, Users, New user, Invite external user. Verify the recipient's address, explain the purpose, and send the invitation only with approval. An invitation sent to the wrong person is an access-management incident, not a harmless spelling mistake." },
+            { "type": "paragraph", "text": "Inviting creates a user object in the resource tenant, which is the school tenant hosting the collaboration. The invitation can show PendingAcceptance before redemption. Elena follows the invitation or an appropriate tenant-specific access link, authenticates using a supported identity, and completes the required consent and redemption process. The state can then show Accepted. In the ordinary B2B case, the school has not created and taken ownership of a local password for her external account." },
+            { "type": "paragraph", "text": "The actual redemption path depends on the invitee and configured identity providers. An existing work or personal Microsoft identity may be used; email one-time passcode can be a fallback when enabled. Tenant external-collaboration restrictions, cross-tenant access settings, and authentication requirements can prevent or condition access. Do not tell every guest to create a new school password. Inspect the guest object's identity provider and redemption state when troubleshooting, and verify that the person is signing in with the identity intended by the invitation." }
+          ]
+        },
+        {
+          "id": "b2b-access-and-offboarding",
+          "title": "Acceptance is not permission to the archive",
+          "blocks": [
+            { "type": "paragraph", "text": "A redeemed invitation establishes the external identity relationship. Application assignment, group membership, and Azure resource roles are separate. If Elena needs only one approved school application, give its intended application access, not subscription Owner. If she is an infrastructure reviewer, a narrow Azure Reader assignment may be appropriate, but it still does not authorize all archive data. A guest can receive powerful access if someone explicitly grants it; Guest is not a guarantee of harmlessness." },
+            { "type": "paragraph", "text": "Plan an end date and review owner when access is granted. When collaboration ends, remove application, group, and resource access as appropriate, block sign-in or revoke sessions when required by the offboarding process, and delete the guest representation if no longer needed. Deleting the school's guest object does not delete Elena's home-directory account. Deleted users normally have a 30-day recovery window, but do not rely on recovery as a complete access-reconstruction or service-data-retention plan. Credentials independently shared with the guest need separate revocation or rotation." },
+            { "type": "example", "title": "A partner reviews the lab, then leaves", "scenario": "Elena must inspect the classroom Azure resources for one project, not modify them or download private student documents. She has no previous assignments in the school tenant.", "steps": [
+              { "action": "Invite the verified external identity and confirm successful redemption in the school tenant.", "why": "This creates a usable external identity representation and confirms the intended person accepted." },
+              { "action": "Have an authorized Azure role administrator assign Reader only at rg-school-lab, then verify a permitted management read.", "why": "Invitation authority alone is not Azure role-assignment authority, and lab inspection does not require subscription-wide access." },
+              { "action": "Do not assign archive data roles or share storage keys; confirm the application's own access remains separately controlled.", "why": "The requested job is configuration review, not private-document access." },
+              { "action": "At the agreed end date, remove project grants, review any other access, and delete the unnecessary guest object through the approved process.", "why": "Ending one project should remove its access without deleting the external person's home account." }
+            ], "result": "Elena can complete the defined review with a clear access boundary and an auditable exit. An Accepted invitation alone would not have supplied the required Azure management read." },
+            { "type": "callout", "tone": "exam", "title": "Do not merge invitation, licensing, and authorization", "text": "A product license enables licensed features. B2B redemption establishes an external identity relationship. An app assignment or Azure role grants the relevant access. Group membership can drive each feature differently. Explain the specific mechanism instead of assuming one completed step implies all the others." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "identity-check-licensing-location", "kind": "single", "prompt": "Which current documented portal route should Ana use for direct or group product-license assignment?", "choices": [
+          { "id": "m365-billing-licenses", "text": "Microsoft 365 admin center, Billing, Licenses, using appropriate licensing authority.", "explanation": "The current user and group assignment guides use this administration location." },
+          { "id": "azure-iam-owner", "text": "Azure resource-group IAM, by assigning Owner to the product.", "explanation": "Azure roles are not product-license assignments and products are not that recipient principal." },
+          { "id": "guest-invite-license", "text": "Invite external user, which automatically licenses every selected service.", "explanation": "Invitation creates a collaboration identity relationship, not all product entitlements." }
+        ], "correctIds": ["m365-billing-licenses"], "explanation": "The identity service, entitlement, and current administration interface must not be conflated." },
+        { "id": "identity-check-nested-licensing", "kind": "single", "prompt": "A licensed security group contains StudentHelpers as a nested group. Bogdan is only a member of StudentHelpers. All product capacity and location requirements are satisfied. Does this parent license assignment reach him?", "choices": [
+          { "id": "direct-members-only", "text": "No. Group-based licensing processes direct user members, not nested-group members.", "explanation": "Bogdan needs a supported direct membership or another appropriate license-assignment route." },
+          { "id": "recursive-always", "text": "Yes. Every feature recursively expands every nested group.", "explanation": "Nested behavior is feature-specific; licensing does not use that universal rule." },
+          { "id": "license-buy-more", "text": "Only after purchasing a second copy of the same product for the group object.", "explanation": "The stated issue is membership structure, not insufficient seats." }
+        ], "correctIds": ["direct-members-only"], "explanation": "Inspect the assignment route before treating a missing license as a capacity or propagation problem." },
+        { "id": "identity-check-license-error", "kind": "single", "prompt": "A user shows a prohibited usage-location licensing error. What is the correct response?", "choices": [
+          { "id": "verify-real-location", "text": "Verify the actual approved usage location and service availability, correct the cause, then reprocess and inspect.", "explanation": "Licensing restrictions require accurate data and a supported product, not an arbitrary workaround." },
+          { "id": "fake-usage-location", "text": "Choose any country that makes the error disappear.", "explanation": "That falsifies the licensing input instead of resolving the real requirement." },
+          { "id": "azure-reader-repairs", "text": "Assign Azure Reader because it repairs service-plan availability.", "explanation": "A resource role has no such effect on product availability." }
+        ], "correctIds": ["verify-real-location"], "explanation": "Treat error categories as evidence of a specific cause and verify effective entitlement after the fix." },
+        { "id": "identity-check-guest-lifecycle", "kind": "single", "prompt": "Elena accepts the school's B2B invitation. No app or Azure role has been assigned. Which statement is correct?", "choices": [
+          { "id": "grant-access-separately", "text": "Her external relationship is redeemed, but the required application or resource access must be granted separately.", "explanation": "Acceptance is not an authorization grant to every school service." },
+          { "id": "guest-is-subscription-owner", "text": "She is automatically Owner of the subscription used by the school.", "explanation": "That would require an explicit privileged Azure assignment." },
+          { "id": "home-account-deleted-later", "text": "Deleting her school guest object later also deletes her home-directory account.", "explanation": "The resource-tenant representation and the external home identity are separate objects." }
+        ], "correctIds": ["grant-access-separately"], "explanation": "Invitation, redemption, scoped authorization, and guest removal are distinct lifecycle steps." }
+      ],
+      "takeaways": [
+        "Use current Microsoft 365 licensing workflows while managing identities and memberships in their appropriate directory surfaces.",
+        "Product capacity, usage location, service-plan compatibility, and feature entitlement all need attention.",
+        "Group-based licensing processes direct users, not nested-group members.",
+        "Direct and inherited assignments can coexist; inspect all routes before removing one.",
+        "A B2B guest needs separate access grants, and deleting that guest does not delete their home identity."
+      ],
+      "sourceIds": ["identity-license-users", "identity-license-groups", "identity-dynamic", "identity-guest-invite", "identity-guest-redemption", "identity-external-properties", "identity-user-create"]
+    },
+    {
+      "id": "identity-password-reset",
+      "title": "Make self-service password recovery usable and properly licensed",
+      "summary": "Configure a scoped recovery policy, register sufficient supported methods, distinguish administrator behavior, and separate cloud reset from on-premises writeback.",
+      "objectives": [
+        "Distinguish changing a known password from resetting a forgotten one.",
+        "Configure SSPR scope and current authentication-method policy with valid registration.",
+        "Apply scenario-specific licensing and administrator-policy qualifications.",
+        "Explain hybrid password writeback and troubleshoot recovery in layers."
+      ],
+      "sections": [
+        {
+          "id": "password-change-reset-licensing",
+          "title": "Recovery needs both proof and the right entitlement",
+          "blocks": [
+            { "type": "paragraph", "text": "Self-service password reset, abbreviated SSPR, lets an eligible user prove their identity using previously registered recovery methods and choose a new password without a helpdesk agent performing the reset. It solves the problem of being unable to sign in with the old password. Changing a known password while already able to authenticate is a different scenario. Account unlock is another related outcome, especially in hybrid environments. Do not use the single phrase password help to hide which operation is required." },
+            { "type": "paragraph", "text": "Recovery cannot safely depend on possession of the forgotten password alone. Bogdan needs enough working methods that are permitted for the reset process before he gets locked out. A phone number typed by an unknown caller during a helpdesk conversation is not equivalent to a previously verified recovery method. Registration, policy scope, available methods, and product entitlement are prerequisites, not afterthoughts. SSPR also does not repair a blocked account, grant an application role, or reset the separate local administrator password of an unrelated VM." },
+            { "type": "table", "caption": "Use the dedicated SSPR licensing scenarios, not an undifferentiated Free label", "headers": ["Scenario", "Documented examples of entitlement", "Important distinction"], "rows": [
+              ["Cloud-only user changes a known password", "Available with Entra Free.", "This does not mean Free includes every forgotten-password reset scenario."],
+              ["Cloud-only user resets a forgotten password", "Microsoft 365 Business Standard or Business Premium, or Entra ID P1/P2, are examples listed in the scenario matrix.", "Every intended beneficiary needs qualifying entitlement; do not infer all products with similar names qualify."],
+              ["Hybrid change/reset with on-premises writeback", "Business Premium or Entra ID P1/P2 are listed qualifying examples.", "Standalone Business Standard does not provide writeback rights."]
+            ] },
+            { "type": "paragraph", "text": "The exact bundle must be checked against current licensing terms. Some broad overview tables label SSPR under Free without separating known-password change from forgotten-password reset. For these lessons, the dedicated scenario-specific SSPR licensing article controls the distinction. Technical ability to reach a recovery screen is not evidence of licensing compliance. Assign and verify the appropriate licenses for the users intended to benefit before rolling out the feature." }
+          ]
+        },
+        {
+          "id": "sspr-scope-and-registration",
+          "title": "Choose who is eligible and prepare them before failure",
+          "blocks": [
+            { "type": "paragraph", "text": "An authorized Authentication Policy Administrator configures SSPR under Entra ID, Password reset, Properties. The ordinary-user scope can be None, Selected, or All. Start with a pilot group rather than exposing an untested policy to the entire school. The current portal selects one group for Selected scope, and SSPR supports nested groups. This differs from group-based licensing, which processes direct users only. A person eligible through a nested SSPR group still needs appropriate entitlement and sufficient registered methods." },
+            { "type": "paragraph", "text": "Configure the number of methods required for an ordinary-user reset, commonly one or two according to the chosen policy. Two means the user must successfully satisfy the required distinct recovery methods; it is not satisfied by arbitrarily repeating the same challenge. Set registration and reconfirmation expectations so users prepare their recovery information before losing access. A policy that requires two methods while a student has only one usable method does not become secure recovery merely because the setting was saved." },
+            { "type": "paragraph", "text": "Explain the recovery journey to the pilot: open the documented password-reset experience, identify the correct school account, complete the available permitted verification steps, and set a password that satisfies policy. Supply a verified helpdesk route for users who have lost their methods. Enable appropriate notifications and review reset activity so unexpected resets can be investigated. Do not ask students to share verification codes with a helper. A legitimate recovery flow should not teach habits that make social engineering easier." }
+          ]
+        },
+        {
+          "id": "current-authentication-methods",
+          "title": "Use the current method policy, not old screenshots",
+          "blocks": [
+            { "type": "paragraph", "text": "Authentication-method availability is administered through Entra ID, Authentication methods, Policies. Microsoft's stated retirement date for configuring methods through legacy MFA and SSPR policies was September 30, 2025. Multifactor authentication, abbreviated MFA, concerns proving identity with multiple factors during authentication; SSPR concerns recovering the password. Their settings are related but not identical. The current unified method policy does not remove the SSPR eligibility scope or the required number of methods for reset. Security questions remain a documented configuration exception in SSPR settings." },
+            { "type": "paragraph", "text": "Choose methods from the current SSPR support matrix and target them to the pilot group. Documented options include suitable Microsoft Authenticator verification, software one-time codes, email, SMS, and voice, with feature-specific restrictions. Hardware OATH support is documented as preview rather than something every production tenant should assume is generally available. An authenticator application's passwordless sign-in mode is not automatically a supported password-reset verification method merely because both features use the same app." },
+            { "type": "paragraph", "text": "Likewise, passkeys, Windows Hello for Business, certificate authentication, and Temporary Access Pass have purposes in authentication and onboarding but must not be assumed to satisfy the SSPR method list. The current matrix does not mark them as SSPR methods. Email used for a member's password reset is also a different scenario from email one-time passcode used for B2B guest sign-in. Count only the methods that this user has registered, that the policy permits, and that the reset flow supports." },
+            { "type": "callout", "tone": "caution", "title": "A dated public-cloud transition, not an already completed retirement", "text": "Microsoft guidance published September 16, 2026 describes a public-cloud workforce-tenant passkey-default rollout beginning September 1, not proof that every tenant has already received it. Microsoft-provided SMS/voice retirement is planned for February 1, 2027 for most users, and July 1, 2027 for Global Administrators and external users, including B2B collaborators. Internal Guest status alone does not place a user in that later population. The retirement includes SSPR; the announcement does not cover Azure AD B2C or External ID external tenants. Do not call these methods already retired on September 20, 2026, and do not assume promoted passkeys are therefore SSPR verification methods." }
+          ]
+        },
+        {
+          "id": "administrator-recovery-policy",
+          "title": "An administrator is not a normal pilot account",
+          "blocks": [
+            { "type": "paragraph", "text": "Microsoft documents a separate, stronger password-reset policy for administrator accounts. The dedicated password-policy article describes administrators as enabled by default with a two-gate verification policy that does not simply follow the ordinary-user one-method setting. Security questions are not allowed for administrator recovery. Trial or free tenants have additional restrictions on voice methods, and the dedicated article documents limited one-gate exceptions for initial trials and certain default-domain, no-synchronization configurations. Therefore 'every administrator always follows two methods without exception' is too absolute." },
+            { "type": "paragraph", "text": "This administrator policy remains separate from the ordinary Authentication methods policy behavior described for users. Test the selected-group rollout using a nonadministrator account, such as Bogdan's dedicated test identity, rather than Ana's privileged administration account. Otherwise an apparently surprising outcome could come from the administrator policy rather than a broken group selection. Follow the dedicated administrator-policy source where broad SSPR overview wording differs, and verify the actual tenant's recovery behavior before relying on it for emergency access." },
+            { "type": "paragraph", "text": "Keep an approved emergency administrative recovery process outside the classroom exercise. Do not remove all registered methods from the only working administrator to see what happens. A school-wide SSPR rollout should improve normal recovery without making the last privileged account depend on an untested method or a single person's phone. Different administrator roles and on-premises protected accounts also have recovery limitations, so ordinary-user test success does not certify every privileged account." }
+          ]
+        },
+        {
+          "id": "hybrid-writeback-separation",
+          "title": "A cloud recovery screen cannot rewrite AD DS by itself",
+          "blocks": [
+            { "type": "paragraph", "text": "For a user whose password is managed in the school's on-premises AD DS, password writeback sends a supported cloud password change or reset back to that authoritative directory. This is separate from merely synchronizing user objects or password hashes toward Entra. A successful identity synchronization deployment does not prove that writeback is enabled, licensed, permitted, or reachable. Without the supported integration, enabling SSPR for the user does not create an automatic on-premises password-reset channel." },
+            { "type": "paragraph", "text": "Writeback requires qualifying user licensing, SSPR configuration, an on-premises directory, and a supported configured Entra Connect Sync or Cloud Sync deployment. Enable the relevant writeback capability in that integration and the Password reset, On-premises integration settings. The connector needs the documented password-reset/change and related directory rights on the intended users, with correct permission inheritance. It uses outbound connectivity, including HTTPS on port 443, rather than requiring arbitrary inbound internet access to domain controllers." },
+            { "type": "paragraph", "text": "The operation checks the on-premises password policy and returns a result synchronously. Password history, complexity, minimum age, connectivity, and connector permissions can therefore affect a reset. Documentation uses a zero minimum password age to permit immediate repeated test changes, but do not weaken production password policy merely to make a classroom exercise convenient. Protected on-premises administrative accounts have restrictions. Also verify the reset entry point: current documentation distinguishes supported Entra administrator reset paths from Microsoft 365 admin-center administrator resets, which do not perform the same writeback." },
+            { "type": "paragraph", "text": "For an ordinary externally authenticated B2B collaborator, the school's SSPR configuration does not make the school authoritative over the partner's password. The partner identity provider's recovery process governs that credential. This follows the same source-of-authority reasoning used for synchronized school accounts: first identify where the credential belongs, then choose a supported reset mechanism. An Azure VM's local password, an application secret, and an external identity password are not interchangeable targets for Entra SSPR." }
+          ]
+        },
+        {
+          "id": "worked-sspr-pilot",
+          "title": "Design a pilot that can actually complete recovery",
+          "blocks": [
+            { "type": "example", "title": "Bogdan's cloud-only test account forgets its password", "scenario": "Bogdan has an approved nonadministrator cloud-managed test account with qualifying SSPR entitlement. The school chooses two supported recovery methods, an eligible Authenticator verification method and recovery email, and does not use this exercise to change any real student's credential.", "steps": [
+              { "action": "Place the test user within the approved SSPR pilot scope and configure Selected for that group.", "why": "Eligibility is a deliberate scope decision, separate from Azure resource roles." },
+              { "action": "Enable the chosen supported methods for that population in the current Authentication methods policy and set the intended reset-method count.", "why": "The methods must be both permitted and usable for SSPR; a sign-in-only method is insufficient." },
+              { "action": "Register and verify enough working recovery methods before starting the forgotten-password test.", "why": "A two-method policy cannot be satisfied with only one available method at recovery time." },
+              { "action": "Use the approved reset flow as the test user, complete verification, and choose a compliant new password.", "why": "This proves the actual ordinary-user recovery path rather than only the administrator's settings screen." },
+              { "action": "Verify sign-in and the relevant reset activity and notifications, then compare the test with a paper-only hybrid case.", "why": "A cloud-only success proves nothing about on-premises writeback, which needs additional entitlement, integration, and directory permissions." }
+            ], "result": "The pilot demonstrates a complete cloud-managed reset. A failure can be located in scope, entitlement, registration, supported methods, password policy, or integration rather than 'fixed' by granting subscription Owner." },
+            { "type": "prediction", "id": "identity-predict-sspr-two-methods", "prompt": "Bogdan is correctly licensed and in the selected SSPR group. The ordinary-user policy requires two methods, but he has only one permitted registered method available. Does membership alone let him reset the forgotten password?", "answer": "No. Eligibility and licensing do not replace the required verification methods.", "explanation": "He needs the approved recovery/helpdesk process. Before future lockouts, prepare sufficient supported methods. Do not lower the entire school's policy merely to bypass this one incomplete registration." },
+            { "type": "callout", "tone": "exam", "title": "Match the scenario before choosing a fix", "text": "Known-password change, cloud-only forgotten-password reset, administrator recovery, and hybrid writeback have different requirements. SSPR Selected scope can include nested groups, unlike group-based licensing. MFA support does not automatically mean SSPR support. A successful cloud reset is not evidence of successful writeback." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "identity-check-sspr-license", "kind": "single", "prompt": "A cloud-only ordinary user can change a known password with Entra Free. What does that establish about resetting a forgotten password?", "choices": [
+          { "id": "separate-reset-entitlement", "text": "Nothing automatic; forgotten-password reset needs the qualifying entitlement for that scenario.", "explanation": "The dedicated licensing matrix distinguishes known-password change from forgotten-password reset." },
+          { "id": "all-sspr-free", "text": "Every SSPR and hybrid writeback feature must also be free.", "explanation": "This incorrectly expands one supported scenario into all recovery features." },
+          { "id": "azure-owner-license", "text": "Assigning Azure Owner provides the missing SSPR product entitlement.", "explanation": "An Azure resource role is not a product license." }
+        ], "correctIds": ["separate-reset-entitlement"], "explanation": "Use scenario-specific licensing rather than an unqualified SSPR label." },
+        { "id": "identity-check-sspr-scope-methods", "kind": "single", "prompt": "An ordinary user is licensed and included through a nested group within the selected SSPR group. Two methods are required, but only one permitted registered method is available. What blocks the reset?", "choices": [
+          { "id": "missing-second-method", "text": "Insufficient usable verification methods.", "explanation": "SSPR supports the stated nested-group scope, but the required verification still must be completed." },
+          { "id": "nested-always-unsupported", "text": "SSPR can never include nested groups.", "explanation": "That incorrectly copies the group-based licensing restriction into SSPR." },
+          { "id": "missing-contributor-role", "text": "The user lacks Contributor on an Azure resource group.", "explanation": "Resource management rights are unrelated to ordinary SSPR eligibility." }
+        ], "correctIds": ["missing-second-method"], "explanation": "Scope, license, registration, and method count are independent checks." },
+        { "id": "identity-check-administrator-policy", "kind": "single", "prompt": "Why should Ana test the ordinary-user SSPR pilot with a nonadministrator account rather than her administration account?", "choices": [
+          { "id": "admin-policy-separate", "text": "Administrator recovery follows a separate stronger policy with documented exceptions.", "explanation": "Its behavior is not a reliable test of the ordinary selected-group and method-count settings." },
+          { "id": "admins-never-reset", "text": "Administrators can never use any password-reset process.", "explanation": "Microsoft documents administrator recovery; the issue is different policy, not universal prohibition." },
+          { "id": "azure-reader-becomes-admin", "text": "Testing SSPR automatically grants Azure Reader and Entra administration.", "explanation": "Password recovery does not assign those roles." }
+        ], "correctIds": ["admin-policy-separate"], "explanation": "Use the right account population when validating a policy." },
+        { "id": "identity-check-writeback", "kind": "single", "prompt": "A synchronized school's SSPR reset must update the on-premises password. Which statement is correct?", "choices": [
+          { "id": "writeback-explicit-prerequisites", "text": "Qualifying licensing and a supported enabled writeback integration with directory permissions are required.", "explanation": "Object or password-hash synchronization alone does not supply a reverse reset channel." },
+          { "id": "sync-implies-writeback", "text": "Any synchronized account automatically has working writeback.", "explanation": "Writeback is a separate capability with configuration, entitlement, and operational prerequisites." },
+          { "id": "guest-password-school-owned", "text": "Enabling writeback also gives the school control over every B2B guest's home password.", "explanation": "External credentials remain governed by their actual identity provider." }
+        ], "correctIds": ["writeback-explicit-prerequisites"], "explanation": "Trace the password's authority and the supported integration before predicting a successful reset." }
+      ],
+      "takeaways": [
+        "SSPR requires the right population, entitlement, supported methods, registration, and verification count.",
+        "Known-password change and forgotten-password reset are different licensing scenarios.",
+        "Current method administration uses Authentication methods policy, with documented exceptions.",
+        "Administrator recovery has a separate policy; use a nonadministrator to test the ordinary-user rollout.",
+        "Hybrid writeback is separately licensed and configured and must satisfy on-premises requirements."
+      ],
+      "sourceIds": ["identity-sspr-enable", "identity-sspr-how", "identity-sspr-policy", "identity-sspr-licensing", "identity-methods-policy", "identity-methods-matrix", "identity-sspr-writeback", "identity-sms-retirement", "identity-sms-retirement-faq"]
+    }
+  ],
+  "glossary": [
+    { "term": "Tenant", "definition": "An organization's instance of Microsoft Entra identity services and its directory." },
+    { "term": "Directory", "definition": "The identity store containing users, groups, applications, and related configuration in a tenant." },
+    { "term": "UPN", "definition": "User principal name, the sign-in-style account name in a tenant domain." },
+    { "term": "Object ID", "definition": "The identifier of a particular directory object, not merely its display name." },
+    { "term": "Source of authority", "definition": "The system responsible for managing a particular identity or property." },
+    { "term": "UserType", "definition": "The Member or Guest relationship classification, distinct from authentication provider and administrative role." },
+    { "term": "Security group", "definition": "A collection of supported principals used by services to manage access and related assignments." },
+    { "term": "Microsoft 365 group", "definition": "A user collaboration group associated with Microsoft 365 services, not a device or nested-group container." },
+    { "term": "Dynamic membership", "definition": "Membership computed from an approved attribute rule rather than manual member additions." },
+    { "term": "Usage location", "definition": "A user's location input used to determine applicable product licensing availability." },
+    { "term": "Service plan", "definition": "An individual service capability included within a product license." },
+    { "term": "Inherited license", "definition": "A user license assignment derived from eligible membership in a licensed group." },
+    { "term": "B2B collaboration", "definition": "Business-to-business access using an external identity represented in a resource tenant." },
+    { "term": "Redemption", "definition": "The invitee's authentication and acceptance process that establishes the invited collaboration relationship." },
+    { "term": "SSPR", "definition": "Self-service password reset, allowing eligible users to verify identity and recover their password through supported methods." },
+    { "term": "MFA", "definition": "Multifactor authentication, requiring multiple authentication factors rather than merely multiple repeated prompts." },
+    { "term": "Password writeback", "definition": "A supported cloud-to-on-premises integration that updates an authoritative AD DS password after an eligible change or reset." }
+  ],
+  "sources": [
+    { "id": "identity-subscription-trust", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/how-subscriptions-associated-directory", "title": "Associate or add an Azure subscription to your Microsoft Entra tenant", "supports": "One-directory trust per subscription, multiple subscriptions per tenant, directory versus subscription authority, and multi-directory participation." },
+    { "id": "identity-user-create", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/how-to-create-delete-users", "title": "How to create, invite, and delete users", "supports": "Current user creation workflow and fields, relevant administrative roles, user deletion and 30-day recovery. Dedicated B2B identity-provider sources qualify the generic guest-password wording." },
+    { "id": "identity-profile", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/how-to-manage-user-profile-info", "title": "Add or update a user's profile information and settings", "supports": "User properties, ordinary synchronized source-of-authority behavior, and cloud-managed usage-location distinction." },
+    { "id": "identity-external-properties", "url": "https://learn.microsoft.com/en-us/entra/external-id/user-properties", "title": "Understand and manage the properties of B2B guest users", "supports": "UserType versus identity-provider distinction, internal/external Member/Guest combinations, resource-tenant guest objects, and invitation state." },
+    { "id": "identity-group-types", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/concept-learn-about-groups", "title": "Learn about group types, membership types, and access management", "supports": "Security versus Microsoft 365 group purposes and allowed membership, assigned versus dynamic choices, and consuming-service qualifications." },
+    { "id": "identity-group-manage", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/how-to-manage-groups", "title": "Manage Microsoft Entra groups and group membership", "supports": "Group creation and properties, owners versus members, fixed group type/object ID, and role-assignable group constraints." },
+    { "id": "identity-dynamic", "url": "https://learn.microsoft.com/en-us/entra/identity/users/groups-dynamic-membership", "title": "Manage rules for dynamic membership groups in Microsoft Entra ID", "supports": "Dynamic rule behavior, no manual membership exceptions, user/device separation, attribute trust, and unique-user P1 or Intune for Education entitlement requirements." },
+    { "id": "identity-license-users", "url": "https://learn.microsoft.com/en-us/microsoft-365/admin/manage/assign-licenses-to-users?view=o365-worldwide", "title": "Assign or unassign licenses for users in the Microsoft 365 admin center", "supports": "Current Billing/Licenses UI, user or group assignment, roles, direct/inherited visibility, service-plan errors and reprocessing; replaces older Entra licensing assignment routes." },
+    { "id": "identity-license-groups", "url": "https://learn.microsoft.com/en-us/microsoft-365/admin/manage/manage-group-licenses?view=o365-worldwide", "title": "Assign or unassign licenses to a group in the Microsoft 365 admin center", "supports": "Current supported group types, direct-user processing rather than nested groups, usage-location fallback, available seats, asynchronous assignment, and error handling. This current guide does not enumerate a universal premium-SKU prerequisite for the assignment engine." },
+    { "id": "identity-guest-invite", "url": "https://learn.microsoft.com/en-us/entra/external-id/b2b-quickstart-add-guest-users-portal", "title": "Quickstart: Add a guest user and send an invitation", "supports": "Authorized invitation, guest creation, acceptance, and the need for separately assigned application or resource access." },
+    { "id": "identity-guest-redemption", "url": "https://learn.microsoft.com/en-us/entra/external-id/redemption-experience", "title": "B2B collaboration invitation redemption", "supports": "Invitation and direct-link redemption, authentication-provider choices, email one-time-passcode fallback, and qualified external credential ownership." },
+    { "id": "identity-sspr-enable", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/tutorial-enable-sspr", "title": "Enable users to unlock their account or reset passwords using Microsoft Entra SSPR", "supports": "Authentication Policy Administrator, None/Selected/All scope, current single selected group, registration, and nonadministrator testing." },
+    { "id": "identity-sspr-how", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-howitworks", "title": "How it works: Microsoft Entra self-service password reset", "supports": "Recovery flow, nested-group SSPR scope, registered-method requirements, and ordinary-user method count. Dedicated administrator policy takes precedence over conflicting broad administrator-default wording here." },
+    { "id": "identity-sspr-policy", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-policy", "title": "Password policies and account restrictions in Microsoft Entra ID", "supports": "Administrator default-enabled stronger policy, two-gate behavior and limited exceptions, prohibited security questions, and trial/free voice restrictions." },
+    { "id": "identity-sspr-licensing", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-licensing", "title": "Licensing requirements for Microsoft Entra self-service password reset", "supports": "Scenario-specific known-password change, cloud-only forgotten-password reset, hybrid writeback, qualifying examples, and per-beneficiary licensing. Used instead of ambiguous broad Free feature labels." },
+    { "id": "identity-methods-policy", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-methods-manage", "title": "Manage authentication methods for Microsoft Entra ID", "supports": "Authentication methods policy, legacy MFA/SSPR method-policy retirement, retained SSPR settings, and security-question exception." },
+    { "id": "identity-methods-matrix", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/overview-authentication", "title": "Microsoft Entra authentication overview", "supports": "Current SSPR versus MFA/passwordless method matrix and hardware OATH preview qualification; passkeys and TAP are not assumed SSPR verification methods." },
+    { "id": "identity-sspr-writeback", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-writeback", "title": "How does self-service password reset writeback work in Microsoft Entra ID?", "supports": "Supported hybrid integration, synchronous on-premises policy enforcement, outbound connectivity, protected-account and reset-entry-point limitations." },
+    { "id": "identity-sms-retirement", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement", "title": "Passkeys by default and retirement of Microsoft-provided SMS and voice authentication", "supports": "September 16, 2026 guidance: September rollout and planned February/July 2027 native SMS/voice retirement, with administrator and external-user populations distinguished. Announcement does not prove universal rollout completion." },
+    { "id": "identity-sms-retirement-faq", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement-faq", "title": "Frequently asked questions about SMS and voice retirement", "supports": "Retirement includes SSPR and is scoped to public cloud; internal guests differ from externally authenticated B2B users, while Azure AD B2C and External ID external tenants are outside this announcement." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: a small identity and recovery pilot",
+    "purpose": "Inspect an approved test identity, maintain an assigned security group, and optionally verify cloud-only SSPR without touching real student accounts or deploying Azure resources.",
+    "prerequisites": [
+      "An explicitly approved training tenant and dedicated existing nonadministrator test account, with an authorized user/group operator and a recorded baseline.",
+      "Separate Authentication Policy Administrator authority if the optional SSPR branch is approved. Do not use the only working administrator account as the test subject.",
+      "For SSPR, confirmed qualifying entitlement, at least the required supported recovery methods under the current method policy, and access to those test methods.",
+      "For any licensing inspection, appropriate read or licensing administration rights in the Microsoft 365 admin center. No purchase, trial, real external invitation, or hybrid writeback change is part of this exercise."
+    ],
+    "costWarning": "Directory metadata inspection and an assigned group do not require paid Azure compute or storage. Product licenses, dynamic membership, and SSPR can require paid entitlements. Use only already approved capacity; do not purchase a product or enable a trial to complete the exercise. No email invitation is sent and no infrastructure is provisioned by this lesson.",
+    "steps": [
+      "Verify the active tenant and the test user's object ID, UserType, source of authority, enabled state, and usage location. Do not assume an external or synchronized account is cloud-managed.",
+      "Create a clearly named ordinary assigned security group for the exercise with an approved owner, or use an explicitly designated existing test group. Do not make it role-assignable.",
+      "Add the test user, inspect membership, and update only the group's description with a nonsensitive purpose and review date. Record that no application, license, or Azure role is granted merely by creating the group.",
+      "In the current Microsoft 365 Billing/Licenses view, inspect direct and group assignment sources and available error information without changing product assignments.",
+      "Optional approved SSPR branch: target the dedicated nonadministrator pilot group, configure supported methods and the intended reset count, and register sufficient methods using only the test user's recovery channels.",
+      "Use the supported reset experience for the test account, choose a compliant new password, and verify sign-in and reset activity. Never record passwords or verification codes in the report.",
+      "If the SSPR branch is unavailable or unlicensed, complete the worked example on paper and record that recovery was not tested. Do not weaken production policy or grant broad roles to bypass prerequisites."
+    ],
+    "expectedResults": [
+      "The learner distinguishes identity authority and UserType from subscriptions, roles, and product licenses.",
+      "The assigned group's membership and description reflect the approved changes, without unintended access grants.",
+      "An optional licensed cloud-only pilot completes the configured verification steps; it makes no claim about administrator recovery or hybrid writeback."
+    ],
+    "cleanup": [
+      "Restore only the recorded test membership and description changes, and delete only the exercise-created group after confirming it has no other assignments or dependencies.",
+      "Have the policy owner restore approved SSPR pilot changes without altering unrelated method populations or removing the only recovery methods for an administrator.",
+      "Sign out of the test account and retain no passwords or codes. Leave preexisting users, licenses, subscriptions, and real collaboration relationships intact."
+    ]
+  }
+}
