@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "audience": "A PC-literate Romanian 12th-grade student. Explain in clear English from foundations, not compressed certification jargon.",
+  "style": [
+    "Original teaching, not copied Microsoft lesson text or leaked exam material.",
+    "Never use an em dash, its HTML entity or numeric entity.",
+    "Introduce each concept and acronym before relying on it. State what problem it solves, how it works, when to choose it, and what it does not do.",
+    "Use the existing fictional school application where helpful: school people, web application, private database, document archive and office.",
+    "Use concrete names, addresses and calculations with explicit assumptions. No real credentials, tenants or subscriptions.",
+    "Separate management-plane authorization, data-plane authorization, network reachability and application authentication.",
+    "Avoid filler, repetitive boilerplate, invented exam probabilities and unsupported guarantees."
+  ],
+  "moduleContract": "Use AuthoredModuleSchema in src/domain/course.ts. New IDs are listed in curriculum.json; while the framework branch is pending, validate with an otherwise identical schema that extends only the id enum. No new module/lesson fields are needed for authors.",
+  "lessonRequirements": [
+    "Use exactly the allocated lesson IDs and order. Four to twelve meaningful sections per lesson, normally at least 900 words of explanatory content; satisfy the curriculum's module minimum without padding.",
+    "Every lesson has a genuine worked example with action/why steps, a prediction with explained reveal, and an exam-context distinction.",
+    "Every lesson has three to five original scored checkpoints, normally four, with an explanation for every correct and incorrect option.",
+    "Use at least one explanatory diagram per module. Declared nodes must fit the existing 3 by 3 renderer.",
+    "Keep checkpoint answers unambiguous under stated assumptions. Include precise SKU, region or preview qualifications when necessary.",
+    "Required knowledge must be taught in the lesson, not outsourced to a linked document or optional Azure lab.",
+    "Include optional manual labs with prerequisites, potential charges, observable outcomes and narrow cleanup. Never execute Azure provisioning."
+  ],
+  "sourceRequirements": [
+    "Ground claims in current first-party Microsoft documentation and use documentation search/fetch rather than memory alone.",
+    "Use the official code-sample search before adding ARM, Bicep, Azure CLI, PowerShell or KQL examples.",
+    "Read high-risk feature/SKU/limit prerequisites in full. Confirm whether a feature is GA, preview, retired or changed.",
+    "Module source URL and lesson IDs must match curriculum.json. Source entries identify the exact claims they support.",
+    "Source availability is not factual validation. Independently trace the worked reasoning and checkpoint keys.",
+    "If documentation conflicts or varies by deployment type, state the scope explicitly rather than invent certainty."
+  ],
+  "coverageContract": {
+    "directory": "content/az104/coverage",
+    "filePerDomain": "<domain-id>.json",
+    "shape": {
+      "schemaVersion": 1,
+      "domainId": "<domain-id>",
+      "reviewedAt": "2026-09-20",
+      "objectives": [
+        {
+          "objectiveId": "<id from objectives.json>",
+          "lessons": [
+            {
+              "moduleId": "<module id>",
+              "lessonId": "<lesson id>",
+              "sectionIds": ["<substantive teaching section id>"],
+              "checkpointIds": ["<relevant scored checkpoint id>"],
+              "evidence": "Explain how the cited sections teach the objective and what the learner can actually reason through or do."
+            }
+          ]
+        }
+      ]
+    },
+    "rules": [
+      "Cover each objective assigned to the domain exactly once at the objective-entry level.",
+      "Targets can include multiple lessons. Each referenced section/checkpoint must exist in the correct module/lesson.",
+      "Each objective needs at least one substantial worked application across its targets, not just a mention or glossary item.",
+      "At least one checkpoint per objective is preferred; explain an empty checkpoint list if the objective is assessed in a shared practical scenario.",
+      "Monitoring objective mo-06 can reference the existing networking Network Watcher module in addition to new monitoring lessons."
+    ]
+  },
+  "reviewApprovals": "Authors do not approve their own work. The coordinator binds independently reviewed module digests in per-domain approval files after the review.",
+  "commitPolicy": "Commit only owned source/coverage files in your child branch with a clear domain-sized message and the required Copilot coauthor trailer. Do not push main, create a pull request or deploy. The coordinator integrates, reviews, pushes and publishes."
+}

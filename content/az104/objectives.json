@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "examCode": "AZ-104",
+  "guideUrl": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104",
+  "effectiveDate": "2026-04-17",
+  "checkedAt": "2026-09-20",
+  "coverageMeaning": "Every listed objective must have substantive lesson sections and a worked application. Mapping is not a guarantee of exam coverage or perfect accuracy; the official bullets are illustrative and related topics can appear.",
+  "domains": [
+    {
+      "id": "identity-governance",
+      "title": "Manage Azure identities and governance",
+      "weight": { "min": 20, "max": 25 },
+      "groups": [
+        { "id": "entra-users-groups", "title": "Manage Microsoft Entra users and groups", "objectives": [
+          { "id": "ig-01", "label": "Create users and groups" },
+          { "id": "ig-02", "label": "Manage user and group properties" },
+          { "id": "ig-03", "label": "Manage licenses in Microsoft Entra ID" },
+          { "id": "ig-04", "label": "Manage external users" },
+          { "id": "ig-05", "label": "Configure self-service password reset" }
+        ] },
+        { "id": "access-rbac", "title": "Manage access to Azure resources", "objectives": [
+          { "id": "ig-06", "label": "Manage built-in Azure roles" },
+          { "id": "ig-07", "label": "Assign roles at different scopes" },
+          { "id": "ig-08", "label": "Interpret access assignments" }
+        ] },
+        { "id": "governance", "title": "Manage Azure subscriptions and governance", "objectives": [
+          { "id": "ig-09", "label": "Implement and manage Azure Policy" },
+          { "id": "ig-10", "label": "Configure resource locks" },
+          { "id": "ig-11", "label": "Apply and manage tags on resources" },
+          { "id": "ig-12", "label": "Manage resource groups" },
+          { "id": "ig-13", "label": "Manage subscriptions" },
+          { "id": "ig-14", "label": "Manage costs with alerts, budgets and Azure Advisor recommendations" },
+          { "id": "ig-15", "label": "Configure management groups" }
+        ] }
+      ]
+    },
+    {
+      "id": "storage",
+      "title": "Implement and manage storage",
+      "weight": { "min": 15, "max": 20 },
+      "groups": [
+        { "id": "storage-access", "title": "Configure access to storage", "objectives": [
+          { "id": "st-01", "label": "Configure Azure Storage firewalls and virtual networks" },
+          { "id": "st-02", "label": "Create and use shared access signature tokens" },
+          { "id": "st-03", "label": "Configure stored access policies" },
+          { "id": "st-04", "label": "Manage access keys" },
+          { "id": "st-05", "label": "Configure identity-based access for Azure Files" }
+        ] },
+        { "id": "storage-accounts", "title": "Configure and manage storage accounts", "objectives": [
+          { "id": "st-06", "label": "Create and configure storage accounts" },
+          { "id": "st-07", "label": "Configure Azure Storage redundancy" },
+          { "id": "st-08", "label": "Configure object replication" },
+          { "id": "st-09", "label": "Configure storage account encryption" },
+          { "id": "st-10", "label": "Manage data with Azure Storage Explorer and AzCopy" }
+        ] },
+        { "id": "files-blobs", "title": "Configure Azure Files and Azure Blob Storage", "objectives": [
+          { "id": "st-11", "label": "Create and configure an Azure Files share" },
+          { "id": "st-12", "label": "Create and configure an Azure Blob Storage container" },
+          { "id": "st-13", "label": "Configure storage tiers" },
+          { "id": "st-14", "label": "Configure soft delete for blobs and containers" },
+          { "id": "st-15", "label": "Configure snapshots and soft delete for Azure Files" },
+          { "id": "st-16", "label": "Configure blob lifecycle management" },
+          { "id": "st-17", "label": "Configure blob versioning" }
+        ] }
+      ]
+    },
+    {
+      "id": "compute",
+      "title": "Deploy and manage Azure compute resources",
+      "weight": { "min": 20, "max": 25 },
+      "groups": [
+        { "id": "arm-bicep", "title": "Automate deployment with ARM templates or Bicep", "objectives": [
+          { "id": "co-01", "label": "Interpret an ARM template or Bicep file" },
+          { "id": "co-02", "label": "Modify an existing ARM template" },
+          { "id": "co-03", "label": "Modify an existing Bicep file" },
+          { "id": "co-04", "label": "Deploy resources using an ARM template or Bicep file" },
+          { "id": "co-05", "label": "Export an ARM template or convert an ARM template to Bicep" }
+        ] },
+        { "id": "virtual-machines", "title": "Create and configure virtual machines", "objectives": [
+          { "id": "co-06", "label": "Create a virtual machine" },
+          { "id": "co-07", "label": "Configure encryption at host for Azure VMs" },
+          { "id": "co-08", "label": "Move a VM to another resource group, subscription or region" },
+          { "id": "co-09", "label": "Manage VM sizes" },
+          { "id": "co-10", "label": "Manage VM disks" },
+          { "id": "co-11", "label": "Deploy VMs to availability zones and availability sets" },
+          { "id": "co-12", "label": "Deploy and configure Virtual Machine Scale Sets" }
+        ] },
+        { "id": "containers", "title": "Provision and manage containers in the Azure portal", "objectives": [
+          { "id": "co-13", "label": "Create and manage an Azure Container Registry" },
+          { "id": "co-14", "label": "Provision a container with Azure Container Instances" },
+          { "id": "co-15", "label": "Provision a container with Azure Container Apps" },
+          { "id": "co-16", "label": "Manage sizing and scaling for Container Instances and Container Apps" }
+        ] },
+        { "id": "app-service", "title": "Create and configure Azure App Service", "objectives": [
+          { "id": "co-17", "label": "Provision an App Service plan" },
+          { "id": "co-18", "label": "Configure App Service plan scaling" },
+          { "id": "co-19", "label": "Create an App Service" },
+          { "id": "co-20", "label": "Configure certificates and TLS for App Service" },
+          { "id": "co-21", "label": "Map an existing custom DNS name to App Service" },
+          { "id": "co-22", "label": "Configure App Service backup" },
+          { "id": "co-23", "label": "Configure App Service networking" },
+          { "id": "co-24", "label": "Configure App Service deployment slots" }
+        ] }
+      ]
+    },
+    {
+      "id": "networking",
+      "title": "Implement and manage virtual networking",
+      "weight": { "min": 15, "max": 20 },
+      "groups": [
+        { "id": "virtual-networks", "title": "Configure and manage virtual networks", "objectives": [
+          { "id": "nw-01", "label": "Create and configure virtual networks and subnets" },
+          { "id": "nw-02", "label": "Create and configure virtual network peering" },
+          { "id": "nw-03", "label": "Configure public IP addresses" },
+          { "id": "nw-04", "label": "Configure user-defined routes" },
+          { "id": "nw-05", "label": "Troubleshoot network connectivity" }
+        ] },
+        { "id": "network-security", "title": "Configure secure access to virtual networks", "objectives": [
+          { "id": "nw-06", "label": "Create and configure NSGs and application security groups" },
+          { "id": "nw-07", "label": "Evaluate effective NSG security rules" },
+          { "id": "nw-08", "label": "Implement Azure Bastion" },
+          { "id": "nw-09", "label": "Configure service endpoints for Azure PaaS" },
+          { "id": "nw-10", "label": "Configure private endpoints for Azure PaaS" }
+        ] },
+        { "id": "dns-load-balancing", "title": "Configure name resolution and load balancing", "objectives": [
+          { "id": "nw-11", "label": "Configure Azure DNS" },
+          { "id": "nw-12", "label": "Configure an internal or public load balancer" },
+          { "id": "nw-13", "label": "Troubleshoot load balancing" }
+        ] }
+      ]
+    },
+    {
+      "id": "monitoring-recovery",
+      "title": "Monitor and maintain Azure resources",
+      "weight": { "min": 10, "max": 15 },
+      "groups": [
+        { "id": "monitoring", "title": "Monitor resources in Azure", "objectives": [
+          { "id": "mo-01", "label": "Interpret metrics in Azure Monitor" },
+          { "id": "mo-02", "label": "Configure Azure Monitor log settings" },
+          { "id": "mo-03", "label": "Query and analyze Azure Monitor logs" },
+          { "id": "mo-04", "label": "Set up alert rules, action groups and alert processing rules" },
+          { "id": "mo-05", "label": "Configure and interpret VM, storage and network monitoring with Azure Monitor Insights" },
+          { "id": "mo-06", "label": "Use Azure Network Watcher and Connection Monitor" }
+        ] },
+        { "id": "backup-recovery", "title": "Implement backup and recovery", "objectives": [
+          { "id": "mo-07", "label": "Create a Recovery Services vault" },
+          { "id": "mo-08", "label": "Create an Azure Backup vault" },
+          { "id": "mo-09", "label": "Create and configure a backup policy" },
+          { "id": "mo-10", "label": "Perform backup and restore operations with Azure Backup" },
+          { "id": "mo-11", "label": "Configure Azure Site Recovery for Azure resources" },
+          { "id": "mo-12", "label": "Perform a Site Recovery failover to a secondary region" },
+          { "id": "mo-13", "label": "Configure and interpret backup reports and alerts" }
+        ] }
+      ]
+    }
+  ]
+}
