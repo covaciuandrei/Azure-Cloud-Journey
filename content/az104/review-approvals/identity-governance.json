@@ -1,0 +1,17 @@
+[
+  {
+    "id": "entra-identities",
+    "digest": "aee74a60bf2f147718c0fa2c0261780d2c156218437a8a8a04b120d6e462681c",
+    "note": "Independent reviewer read every lesson, source and twelve keys, including current M365 licensing surfaces, external-user authority, dynamic groups, SSPR licensing/admin policies and the dated September 2026 phone-method retirement announcement. Parent reviewed corrections for source-aware group maintenance and allowed recovery choices versus required proofs. Product seats, feature entitlement and future rollout are not conflated."
+  },
+  {
+    "id": "azure-access-control",
+    "digest": "d283796c3b2d10ac601be251e2282ccfa0d028935a027c53b0f8774f09fe2aff",
+    "note": "Independent full review found no substantive correction needed. Entra roles versus Azure RBAC, principal/role/scope, inheritance, additive grants, control/data actions, NotActions versus denial and current privileged-role definitions were checked against current first-party sources. All eight keys and the nine-row effective-access reasoning table were independently traced."
+  },
+  {
+    "id": "azure-governance",
+    "digest": "329abd66a50ad3e0090459ad512b9b238682a69c0842e9e5ffd3e5d5be8342f0",
+    "note": "Independent reviewer checked all twelve keys, hierarchy and move scenarios, directory-transfer consequences, Policy identity/remediation, resource tags versus cost inheritance, budgets and Advisor qualifications. Parent reviewed the explicit whole-resource-group deletion block from a locked child and its distinction from a general rollback guarantee. Budget arithmetic was retraced; alerts are not presented as spending caps."
+  }
+]
