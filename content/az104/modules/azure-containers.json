@@ -1,0 +1,1440 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-containers",
+  "title": "Azure containers: store an image, run a task, scale an application",
+  "summary": "Follow a fictional school's timetable website and document-processing worker from packaged images to Azure Container Registry, Container Instances, and Container Apps. Make deliberate portal, identity, sizing, networking, and scaling choices.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 guide effective April 17, 2026 explicitly includes creating and managing a registry, provisioning Container Instances and Container Apps in the portal, and managing container sizing and scaling. Core identifies teaching priority, not predicted exam frequency.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/container-apps/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Create and manage an Azure Container Registry.",
+    "Provision a container by using Azure Container Instances.",
+    "Provision a container by using Azure Container Apps.",
+    "Manage sizing and scaling for containers, including Azure Container Instances and Azure Container Apps."
+  ],
+  "lessons": [
+    {
+      "id": "containers-images-and-registry",
+      "title": "An image is a package, not a running website",
+      "summary": "Understand images, containers, tags, and digests, then create and manage a registry with a suitable tier and narrowly scoped image-pull permissions.",
+      "objectives": [
+        "Distinguish an image, running container, registry, repository, tag, and digest.",
+        "Choose an Azure Container Registry tier and region from stated requirements.",
+        "Explain a portal workflow for registry creation, inspection, and maintenance.",
+        "Select managed identity permissions according to the registry's RBAC or ABAC permission mode."
+      ],
+      "sections": [
+        {
+          "id": "image-and-running-container",
+          "title": "Package the timetable program, then run a copy",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The fictional school's timetable website needs its program files, a language runtime, and compatible libraries. A runtime is software that executes the program, such as the environment needed by a JavaScript application. Installing these pieces separately on every computer can produce differences: one machine has an older library, while another lacks a required file. A container image packages the application and its required user-space files into a versioned artifact. An artifact is an output of a build that can be stored and distributed."
+            },
+            {
+              "type": "paragraph",
+              "text": "A container is a running instance created from that image. Think of an image as the prepared installation package and a container as the executing program with allocated processor time and memory. The analogy has limits: containers use operating-system isolation and a compatible host kernel rather than each carrying a complete independently booted operating system. The host kernel is the operating system's core. An image built for an unsupported operating system or processor architecture does not become compatible merely because you upload it to Azure."
+            },
+            {
+              "type": "paragraph",
+              "text": "One image can start several containers. Each has its own running processes and temporary state, so adding a second timetable container does not automatically copy a student's session from the first. Store durable timetable data in an appropriate external database and documents in persistent storage. Do not put passwords or real pupil records inside an image. A registry distributes the package to authorized consumers; it does not serve the timetable page, preserve a running container's memory, or decide which pupils may sign in."
+            }
+          ]
+        },
+        {
+          "id": "registry-repository-tags-digests",
+          "title": "Give the package an address and an identifiable version",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure Container Registry, abbreviated ACR, stores container images and related artifacts. Inside it, a repository groups artifacts under one name, such as school/timetable. The slash is a naming convention, not a separate Azure resource group. A tag is a readable label attached to an artifact, such as release-20260920. An image reference combines the registry's login server, repository, and tag. For example, a fictional reference could end in /school/timetable:release-20260920. Always copy the actual Login server value from the registry instead of reconstructing it from its resource name."
+            },
+            {
+              "type": "paragraph",
+              "text": "Tags can move. If a build replaces the image associated with latest, a future pull can retrieve different content under the same readable name. Latest is not a promise of the newest approved school release. A manifest describes the image's layers and configuration. Its digest is a content-derived identifier, normally expressed with SHA-256, a cryptographic hash algorithm. Referencing the recorded manifest digest identifies that exact artifact even if somebody later moves a tag. The digest establishes identity of content, not whether the program is safe or correct."
+            },
+            {
+              "type": "paragraph",
+              "text": "A push uploads an artifact to a registry; a pull retrieves it. Reusable layers mean two images can share stored content rather than duplicating every file. Deleting only a tag does not necessarily delete its manifest or free the shared layers. Conversely, deleting a needed manifest can break future deployments even while existing containers keep running. Before cleanup, record which digests active deployments and rollback versions need. An empty registry is a valid newly created resource, but it contains no application until an authorized build or import supplies an image."
+            }
+          ]
+        },
+        {
+          "id": "registry-tier-and-region",
+          "title": "Choose features first, then enough capacity",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A SKU is a product tier with particular features and limits. ACR currently offers Basic, Standard, and Premium. Basic suits a small learning registry with modest usage. Standard increases included storage and image throughput for busier use. Premium adds features such as private endpoints and geo-replication. A private endpoint gives the registry a private network entry point. Geo-replication distributes a Premium registry across selected regions. These solve different problems from adding more running timetable containers."
+            },
+            {
+              "type": "table",
+              "caption": "ACR choices reviewed September 20, 2026; included storage is not a free registry",
+              "headers": [
+                "Tier",
+                "Included storage",
+                "Reason to choose"
+              ],
+              "rows": [
+                [
+                  "Basic",
+                  "10 GiB",
+                  "Low image volume and modest pull demand without Premium-only network features."
+                ],
+                [
+                  "Standard",
+                  "100 GiB",
+                  "More included storage and throughput without requiring private endpoints or geo-replication."
+                ],
+                [
+                  "Premium",
+                  "500 GiB",
+                  "Private endpoints, geo-replication, or higher concurrent image-distribution demands."
+                ]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "GiB means gibibytes, a binary unit of storage or memory. Included storage is part of the tier's price, not a statement that all usage is free. Additional stored data, replication, and transfer can change the bill. Place the registry near the compute that pulls images, subject to the school's approved regions and data-location requirements. This can reduce geographic transfer distance and startup delay, but no tier guarantees a particular startup time. Feature availability and actual service capacity must also suit the selected region."
+            },
+            {
+              "type": "paragraph",
+              "text": "Do not carry an old rule that zone redundancy requires Premium into a new design. Current ACR documentation states that all three tiers have zone redundancy by default in supported regions. Zone redundancy concerns failures within one region; geo-replication remains a Premium feature for distributing images across regions. Also, every tier supports Microsoft Entra repository permissions with ABAC. A need for repository-specific authorization alone is therefore not a reason to buy Premium. A need for a private endpoint is."
+            }
+          ]
+        },
+        {
+          "id": "registry-portal-create-manage",
+          "title": "Create the registry and inspect what actually exists",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "In the portal, search for Container registries and choose Create. Confirm the authorized subscription and resource group, then enter a globally unique registry name containing 5 to 50 alphanumeric characters without hyphens. Choose the approved region and pricing plan. Review Domain name label scope: protected scopes add a hash to the login server to reduce name-reuse risks. This scope is permanent after creation, which is another reason to copy the displayed Login server rather than assume a naming pattern."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose the role assignment permissions mode deliberately. RBAC Registry Permissions uses the older registry-wide role model. RBAC Registry + ABAC Repository Permissions supports newer repository data roles and optional repository conditions. Review networking and all settings before selecting Review + create and, only in an approved real deployment, Create. After deployment, inspect Overview for region, pricing plan, and login server. Open Repositories to inspect an already supplied image's tags and manifest digest. Resource creation success does not prove that any image was uploaded or that a workload can pull it."
+            },
+            {
+              "type": "paragraph",
+              "text": "For ongoing management, use Properties to inspect the pricing plan and permissions mode, Access control (IAM) to inspect role assignments, and Access keys to check whether the broad admin account is disabled. IAM means identity and access management. Review registry storage usage before changing tiers. Moving down from Premium can require removing incompatible features such as geo-replicas first. Do not downgrade a registry used by a private application merely because today's stored image total fits Basic."
+            }
+          ]
+        },
+        {
+          "id": "registry-managed-identity-and-roles",
+          "title": "Separate the person deploying from the identity pulling",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The administrator's permission to create a container app is a management-plane permission: it changes Azure resources. Image retrieval is a data-plane operation against the registry. The program's later database login is a third permission boundary. A managed identity gives an Azure resource an identity whose credentials Azure manages. A user-assigned identity is a separate reusable resource; a system-assigned identity belongs to its parent resource and is removed with it. Enabling either identity does not automatically authorize image pulls."
+            },
+            {
+              "type": "paragraph",
+              "text": "RBAC means role-based access control: a role specifies allowed operations at a scope for an identity. On a registry using RBAC Registry Permissions, AcrPull is the pull-only role. On a registry using RBAC Registry + ABAC Repository Permissions, legacy AcrPull, AcrPush, and AcrDelete are not honored. Use Container Registry Repository Reader for pulling instead. ABAC means attribute-based access control: a condition on the role assignment can restrict repository access, for example to school/timetable. The assignment is made at registry scope; the condition narrows its repository reach."
+            },
+            {
+              "type": "paragraph",
+              "text": "Repository Reader without a condition covers all repositories in the assignment's scope. It does not include listing the registry's repository catalog. Container Registry Repository Catalog Lister is a separate role when that listing is genuinely required. A workload pulling a known image does not need catalog browsing merely to make a portal picker convenient. Likewise, Contributor in ABAC-enabled mode manages the registry resource but does not grant repository image access. Identify the actual caller and operation before adding permissions."
+            },
+            {
+              "type": "paragraph",
+              "text": "The registry admin account is different: it uses shared credentials and has broad push and pull access. It is disabled by default and is not a least-privilege production solution. Some portal shortcuts require it, but Container Apps has a documented managed-identity workflow. Do not enable admin credentials just because a picker cannot list images. Independently verify registry network reachability, the selected pull identity, its mode-appropriate data role, and the existence of the requested image. A valid role cannot bypass a blocked network path."
+            }
+          ]
+        },
+        {
+          "id": "registry-worked-private-pull",
+          "title": "Worked example: a timetable identity that can read one repository",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Build the access decision before clicking through",
+              "scenario": "The school has an approved Container Apps environment and an existing user-assigned identity called timetable-pull. An authorized publisher has already uploaded the reviewed timetable image. The registry uses ABAC-enabled mode, is network-reachable from the environment, and the administrator can assign roles.",
+              "steps": [
+                {
+                  "action": "Select Standard for modest image distribution with no private-endpoint or geo-replication requirement, and choose the approved region near the environment.",
+                  "why": "The stated requirement needs repository authorization, which is available without Premium. If private networking later becomes required, reassess the tier and network design together."
+                },
+                {
+                  "action": "In the registry's Access control (IAM), add Container Registry Repository Reader for timetable-pull.",
+                  "why": "The caller needing image content is the managed identity, not the person opening the portal. AcrPull would be the wrong data role in this permissions mode."
+                },
+                {
+                  "action": "In Conditions, constrain the Reader actions using Repository name equal to school/timetable, then review and assign.",
+                  "why": "Selecting a role alone would grant wider registry access. The repository condition expresses the school's actual boundary without granting push or delete."
+                },
+                {
+                  "action": "Attach timetable-pull to the container app and select it for registry authentication when editing the app's private image configuration.",
+                  "why": "A role assigned to an identity that the image-pull configuration never uses cannot authorize the actual request. Attachment and selection are separate checks."
+                },
+                {
+                  "action": "Record the image digest and inspect the new revision's image-pull and startup results. Allow for role propagation before concluding the assignment failed.",
+                  "why": "A successful resource deployment is not the same as retrieving and starting the intended artifact. The digest connects the approved release with the deployed package."
+                }
+              ],
+              "result": "The app has a narrowly scoped read identity, not a registry-wide password. Student sign-in and access to the timetable database still require their own authorization."
+            }
+          ]
+        },
+        {
+          "id": "registry-distribution-diagram",
+          "title": "The registry delivers software, not student requests",
+          "blocks": [
+            {
+              "type": "diagram",
+              "title": "Two paths with different permissions",
+              "description": "The publisher uploads the approved image into ACR. Container Apps uses its pull identity to obtain that image and start a replica. Students connect through application ingress to the running replica, not to ACR. Database access is a separate connection made by the running app.",
+              "nodes": [
+                {
+                  "id": "image-publisher",
+                  "label": "Publisher",
+                  "detail": "Authorized build output",
+                  "column": 0,
+                  "row": 0
+                },
+                {
+                  "id": "school-registry",
+                  "label": "ACR repository",
+                  "detail": "Image, tag, digest",
+                  "column": 1,
+                  "row": 0
+                },
+                {
+                  "id": "pull-identity",
+                  "label": "Pull identity",
+                  "detail": "Repository read role",
+                  "column": 2,
+                  "row": 0
+                },
+                {
+                  "id": "student-browser",
+                  "label": "Student browser",
+                  "detail": "Application request",
+                  "column": 0,
+                  "row": 1
+                },
+                {
+                  "id": "app-ingress",
+                  "label": "App ingress",
+                  "detail": "Routes web requests",
+                  "column": 1,
+                  "row": 1
+                },
+                {
+                  "id": "timetable-replica",
+                  "label": "Running replica",
+                  "detail": "CPU and memory",
+                  "column": 2,
+                  "row": 1
+                },
+                {
+                  "id": "school-database",
+                  "label": "Database",
+                  "detail": "Separate permissions",
+                  "column": 2,
+                  "row": 2
+                }
+              ],
+              "edges": [
+                {
+                  "from": "image-publisher",
+                  "to": "school-registry",
+                  "label": "Push image"
+                },
+                {
+                  "from": "pull-identity",
+                  "to": "school-registry",
+                  "label": "Authorize pull"
+                },
+                {
+                  "from": "school-registry",
+                  "to": "timetable-replica",
+                  "label": "Supply image"
+                },
+                {
+                  "from": "student-browser",
+                  "to": "app-ingress",
+                  "label": "HTTPS"
+                },
+                {
+                  "from": "app-ingress",
+                  "to": "timetable-replica",
+                  "label": "Forward request"
+                },
+                {
+                  "from": "timetable-replica",
+                  "to": "school-database",
+                  "label": "Read timetable"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "registry-change-prediction",
+          "title": "Predict the effect of changing labels and permission modes",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "predict-moving-image-tag",
+              "prompt": "The publisher moves release-current from digest A to digest B. An existing container was started from A. Does moving the tag replace that running process, and what might a later pull by tag retrieve?",
+              "answer": "Moving the tag does not replace the existing process. A later pull by that tag can retrieve B.",
+              "explanation": "Registry labels and running compute are separate objects. Record the approved digest or use controlled, unique release tags. Starting or updating a workload is an additional operation, and its image-pull behavior matters."
+            },
+            {
+              "type": "paragraph",
+              "text": "Changing an existing registry to ABAC-enabled mode is also a migration, not a cosmetic toggle. Prepare equivalent repository roles first, allow propagation, then switch during a controlled change. Credentials cached under the old mode become invalid and clients must obtain fresh credentials after the switch. Test pulls and pushes before removing legacy assignments. Simply adding a new role before switching does not prevent the cached-credential interruption."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the permission mode and the resource",
+              "text": "ACR stores images; Container Instances and Container Apps run them. Premium registry features do not increase application replicas. For access questions, check the registry's stated mode before choosing AcrPull or Repository Reader. A management role, data role, reachable endpoint, and application login answer different questions."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "registry-digest-choice",
+          "kind": "single",
+          "prompt": "The school must redeploy the exact approved image even if its readable tag is changed later. Which recorded identifier best meets this requirement?",
+          "choices": [
+            {
+              "id": "manifest-digest",
+              "text": "The approved manifest digest together with its registry and repository",
+              "explanation": "The digest identifies the artifact content independently of a movable tag."
+            },
+            {
+              "id": "latest-tag",
+              "text": "The tag latest",
+              "explanation": "Latest is a label that can be reassigned. It does not identify a permanently fixed approved artifact."
+            },
+            {
+              "id": "registry-region",
+              "text": "The registry's region",
+              "explanation": "A region tells you where registry resources are located, not which image artifact to retrieve."
+            }
+          ],
+          "correctIds": [
+            "manifest-digest"
+          ],
+          "explanation": "Distinguish locating a registry, labeling a version, and identifying immutable content."
+        },
+        {
+          "id": "registry-private-endpoint-tier",
+          "kind": "single",
+          "prompt": "A new school registry must support a private endpoint. Storage demand is only 2 GiB. Which ACR tier meets the feature requirement?",
+          "choices": [
+            {
+              "id": "standard-auth",
+              "text": "Standard with Repository Reader assigned",
+              "explanation": "An identity role authorizes operations. It does not add a networking feature absent from the tier."
+            },
+            {
+              "id": "premium-required",
+              "text": "Premium",
+              "explanation": "Private endpoints are a Premium feature; the small image volume does not remove that prerequisite."
+            },
+            {
+              "id": "basic-small",
+              "text": "Basic because the images fit within 10 GiB",
+              "explanation": "Storage capacity alone is insufficient. Basic lacks the required private-endpoint feature."
+            }
+          ],
+          "correctIds": [
+            "premium-required"
+          ],
+          "explanation": "Choose a tier that satisfies required features before optimizing included capacity and price."
+        },
+        {
+          "id": "registry-abac-pull",
+          "kind": "single",
+          "prompt": "The network path works. A Container Apps user-assigned identity must pull only school/timetable from an ABAC-enabled registry. Which assignment matches the requirement?",
+          "choices": [
+            {
+              "id": "legacy-acrpull",
+              "text": "AcrPull at registry scope",
+              "explanation": "Legacy AcrPull is not honored when the registry uses RBAC Registry + ABAC Repository Permissions."
+            },
+            {
+              "id": "resource-contributor",
+              "text": "Contributor at registry scope",
+              "explanation": "In ABAC-enabled mode this manages the registry resource but does not grant the required repository data access."
+            },
+            {
+              "id": "unconditioned-reader",
+              "text": "Container Registry Repository Reader without a condition",
+              "explanation": "This can grant pull access, but across all repositories in scope rather than only school/timetable."
+            },
+            {
+              "id": "reader-conditioned",
+              "text": "Container Registry Repository Reader at registry scope with a condition limiting the Reader actions to school/timetable",
+              "explanation": "This is the supported read role for ABAC-enabled registries, narrowed to the required repository."
+            }
+          ],
+          "correctIds": [
+            "reader-conditioned"
+          ],
+          "explanation": "Both the role and its condition matter. The registry's authorization mode determines which role family applies."
+        },
+        {
+          "id": "registry-portal-management",
+          "kind": "multiple",
+          "prompt": "Which TWO actions are justified when managing a newly created registry?",
+          "choices": [
+            {
+              "id": "admin-for-all",
+              "text": "Enable the admin account for every workload so all users share one credential.",
+              "explanation": "The broad shared account removes per-workload least privilege and is not the recommended production default."
+            },
+            {
+              "id": "copy-login-server",
+              "text": "Copy its displayed Login server, including any domain-label protection hash.",
+              "explanation": "The resource name alone may not reproduce the actual registry hostname."
+            },
+            {
+              "id": "inspect-before-downgrade",
+              "text": "Inspect Premium feature dependencies before changing to a lower tier.",
+              "explanation": "Storage fitting a lower tier does not mean private endpoints or geo-replication remain supported."
+            },
+            {
+              "id": "creation-runs-app",
+              "text": "Treat deployment success as evidence that the timetable website is running.",
+              "explanation": "Registry creation stores no running application. A separate compute service must pull and execute an image."
+            }
+          ],
+          "correctIds": [
+            "copy-login-server",
+            "inspect-before-downgrade"
+          ],
+          "explanation": "Inspect the actual created resource and its dependencies instead of assuming names, capabilities, or runtime success."
+        }
+      ],
+      "takeaways": [
+        "An image is a stored package; a container is an executing instance with runtime state.",
+        "Tags can move, while a recorded manifest digest identifies an artifact.",
+        "Choose registry tier for required features, then capacity, and choose region deliberately.",
+        "Use the displayed login server and inspect repository content after resource creation.",
+        "Managed identity image pulls need a role compatible with the registry's permission mode.",
+        "Changing authorization mode requires planning for both role migration and credential refresh."
+      ],
+      "sourceIds": [
+        "exam-guide",
+        "acr-concepts",
+        "acr-skus",
+        "acr-portal",
+        "acr-abac",
+        "acr-auth",
+        "apps-pull"
+      ]
+    },
+    {
+      "id": "containers-instances",
+      "title": "Container Instances: run a group without managing a cluster",
+      "summary": "Provision a small container in the portal, reason about shared group networking and resource requests, and manage completion, restart, sizing, and billing boundaries.",
+      "objectives": [
+        "Choose Container Instances for a bounded task or simple isolated container workload.",
+        "Explain container-group networking, CPU and memory allocation, and restart policies.",
+        "Follow a portal provisioning and verification workflow without confusing it with managed-identity image-pull tooling.",
+        "Plan resource resizing and distinguish stopped compute from other continuing charges."
+      ],
+      "sections": [
+        {
+          "id": "aci-purpose-and-group",
+          "title": "A place to execute a container, not a full application platform",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure Container Instances, or ACI, runs containers without requiring you to create and patch their host virtual machines. Serverless here means the provider manages those servers, not that no servers exist or that execution is free. The school could use ACI for a document conversion task: read approved source documents, produce PDFs, write results to durable storage, and exit. A simple demonstration web container is another reasonable use. You still choose the image, resources, restart behavior, and network exposure."
+            },
+            {
+              "type": "paragraph",
+              "text": "ACI's top-level resource is a container group. Containers in one group are scheduled together on the same host and share a lifecycle, local network, and allocated resources. A small helper container, often called a sidecar, can support a main container, for example by forwarding its logs. Multi-container ACI groups currently support Linux; Windows groups support a single container. Current ACI image support is x64, also called AMD64, rather than ARM64-only images. Check both operating system and architecture when an image works on a laptop but fails in Azure."
+            },
+            {
+              "type": "paragraph",
+              "text": "ACI is not a managed Kubernetes cluster and does not automatically add application replicas when a queue grows. Kubernetes is an orchestration system that coordinates container placement and lifecycles across machines. ACI offers a group execution building block, not the same cluster interface or application autoscaler. Restarting a failed process is recovery, not scale-out. If the timetable needs managed web ingress and demand-driven replicas, Container Apps is usually a better match than trying to turn one ACI group into an autoscaling website."
+            }
+          ]
+        },
+        {
+          "id": "aci-shared-network-and-storage",
+          "title": "Shared networking changes how you connect containers",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Containers inside one group can reach each other through localhost, the name for their shared local network endpoint. Suppose a web container listens on port 8080 and a helper listens on 9000. They can communicate locally without exposing the helper to students. Because the network is shared, design listening ports deliberately instead of assuming that each container has an independent address and its own unrestricted copy of port 8080."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a publicly reachable group, configure the port both on the container and on the group's external IP address. A process listening internally is insufficient if the group does not expose that port. Conversely, exposing a port does not make a missing listener appear. A DNS label supplies a readable endpoint; it is not authentication or encryption. Copy the actual fully qualified domain name, or FQDN, from Overview because current naming protections can include an automatically generated hash."
+            },
+            {
+              "type": "paragraph",
+              "text": "Groups can also be deployed into an Azure virtual network for private connectivity. That requires a separate network design, including the dedicated ACI subnet, routing, and the destination service's permissions. Do not assume a public quickstart container can reach a database that is available only through a private network path. For persistent output, explicitly configure suitable external storage, such as a supported Azure Files volume. A writable container filesystem or an empty-directory volume is working space, not a promise of retention after group replacement or stopping."
+            }
+          ]
+        },
+        {
+          "id": "aci-resource-requests-and-limits",
+          "title": "Size the group by adding requests, not by guessing from image size",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "CPU is processor capacity; memory, or RAM, is working space for running programs. An image occupying 300 MB in a registry can still need several gigabytes of memory when it opens documents. A resource request states the CPU and memory allocated for a container. ACI derives group allocation by adding the containers' requests. The current minimum group allocation is 1 CPU and 1 GB of memory, although individual containers in a multi-container group can request less."
+            },
+            {
+              "type": "paragraph",
+              "text": "An optional resource limit permits a container to use more than its request if spare group resources are available. It must be at least the request and cannot exceed the group's allocation. Without an explicit higher limit, the request also determines that container's maximum usage. Limits do not create additional group capacity. Some group resources support the platform itself, so do not plan as if every allocated byte or processor fraction will be available to application code."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose a converter requests 1.5 CPUs and 2 GB while its helper requests 0.5 CPU and 1 GB. The group requests 2 CPUs and 3 GB, not 1.5 CPUs and not the larger memory request alone. If both containers need all their allocations simultaneously, a higher converter limit cannot make 2 CPUs behave like 4. Observe processor usage, memory usage, exit information, and workload completion time. Distinguish an undersized container from one waiting on a slow storage service."
+            },
+            {
+              "type": "paragraph",
+              "text": "Published maximums, subscription quotas, and available regional capacity are separate constraints. A request within a documented group maximum can still fail because of the subscription's remaining quota or regional capacity. General-purpose limits also differ from specialized offerings. Do not choose the old ACI GPU preview for a new design: current resource documentation marks that offering retired on July 14, 2025. This lesson's calculations concern ordinary CPU-based groups, not a promise that every listed size is immediately deployable everywhere."
+            }
+          ]
+        },
+        {
+          "id": "aci-restart-policies",
+          "title": "Decide what an exit means before running the task",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A container's main process eventually exits, either intentionally or because it fails. Exit code zero normally reports success; a nonzero code normally reports failure. ACI applies the group's restart policy to its containers. Always is the default and restarts containers after exit. That suits a process meant to keep serving requests, but can repeat a successful document conversion indefinitely. OnFailure restarts after failure while allowing successful completion to remain terminated."
+            },
+            {
+              "type": "table",
+              "caption": "Interpret ACI restart policies using the current documented failure caveat",
+              "headers": [
+                "Policy",
+                "Successful exit",
+                "Reasoning"
+              ],
+              "rows": [
+                [
+                  "Always",
+                  "Starts again",
+                  "Appropriate for a continuing service, not a successful one-off task."
+                ],
+                [
+                  "OnFailure",
+                  "Remains terminated",
+                  "Retries a failed process; the task must tolerate repeated execution."
+                ],
+                [
+                  "Never",
+                  "Remains terminated",
+                  "Current docs warn that a nonzero exit can still trigger platform recovery; this is not an exactly-once guarantee."
+                ]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Exactly-once means an operation's effect occurs once despite interruptions and retries. A restart setting alone cannot guarantee it. The converter should use a document identifier and check whether its final output already exists before repeating a side effect. This is an example of idempotent work: repeating the operation does not create a second conflicting result. Do not falsely mark real failures as successful just to suppress recovery. Preserve useful failure evidence and design the processing logic for retries."
+            }
+          ]
+        },
+        {
+          "id": "aci-portal-provision-and-observe",
+          "title": "Worked example: provision and verify a disposable web container",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "A public demonstration without pupil data or registry passwords",
+              "scenario": "Assume an authorized subscription, an approved region with ACI capacity, and a dedicated disposable resource group. This is a manual portal walkthrough, not an instruction executed by this course. Use the Microsoft ACI hello-world quickstart image, not the private timetable database.",
+              "steps": [
+                {
+                  "action": "Search for Container Instances, choose Create, and confirm subscription, disposable group, container name, region, and Linux operating system.",
+                  "why": "These choices establish ownership, placement, and image compatibility. Do not accept a previously selected production group by accident."
+                },
+                {
+                  "action": "Choose Quickstart images and the Microsoft aci-helloworld Linux image. Inspect the size settings and select 1 CPU and 1.5 GB memory for this small demonstration.",
+                  "why": "The public sample isolates basic provisioning from private-registry authentication. Explicit sizing makes the resource allocation and potential cost visible."
+                },
+                {
+                  "action": "On Networking, select the public demonstration endpoint, a unique DNS label with an appropriate reuse scope, and TCP port 80.",
+                  "why": "The sample listens on port 80. Expose only its required port and keep sensitive school data out of this unencrypted demonstration endpoint."
+                },
+                {
+                  "action": "Review Advanced settings, including restart policy and environment variables. Use Always for this continuing web sample, then inspect Review + create before approving creation.",
+                  "why": "A web sample should continue serving rather than represent a completed batch job. Secrets must not be pasted into ordinary configuration fields or notes."
+                },
+                {
+                  "action": "After deployment, inspect Overview for Running status and the actual FQDN, open the sample page, then inspect Containers and Logs.",
+                  "why": "A running state is process evidence; the page response is application evidence. The sample's request log connects the test request with the container that handled it."
+                },
+                {
+                  "action": "Record the resource name, chosen allocation, exposed port, and observed response before deleting only this disposable instance when finished.",
+                  "why": "A repeatable exercise needs observable results and a narrow cleanup boundary, not an assumption that closing the browser stops billing."
+                }
+              ],
+              "result": "The administrator has checked configuration, execution, and an application response separately. This establishes no private database connectivity and grants no access to a private registry."
+            }
+          ]
+        },
+        {
+          "id": "aci-private-image-tool-boundary",
+          "title": "Do not invent a portal managed-identity shortcut",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The portal's direct ACR-to-ACI Run instance shortcut uses the registry admin account. That can be convenient for an explicitly approved disposable test, but it introduces a broadly privileged credential. It is not equivalent to a pull-only managed identity. Keep the account disabled for the public-image exercise above. For a production private image, plan the supported identity-based deployment method rather than claiming that every portal workflow offers the same authentication choices."
+            },
+            {
+              "type": "paragraph",
+              "text": "Current ACI image-pull documentation requires a user-assigned managed identity for ACR pulls; system-assigned image-pull authentication is not supported, regardless of container operating system. The documented managed-identity setup uses Azure CLI or an ARM/Bicep deployment, not the direct portal shortcut. This is distinct from using a managed identity inside an already running program. Select the registry-mode-appropriate pull role: AcrPull for RBAC-only, or Repository Reader for ABAC-enabled mode."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the documented private-endpoint design, use Premium ACR, enable its required trusted-services setting, and place its private endpoint on a different subnet from ACI's delegated subnet. ACI-delegated subnets are for container groups. Correct identity permissions alone do not fix invalid subnet placement or missing private connectivity. These prerequisites explain why the private-image production design is more than replacing a public image's name in the basic portal walkthrough."
+            }
+          ]
+        },
+        {
+          "id": "aci-worked-sizing-change",
+          "title": "Worked example: give a converter enough memory",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Resize deliberately instead of repeatedly restarting",
+              "scenario": "The school's Linux converter and helper use the 2-CPU, 3-GB group calculated earlier. Measurements show the converter needs approximately 2.6 GB during a particular document, while its request and limit are 2 GB. Assume the external storage path and permissions work.",
+              "steps": [
+                {
+                  "action": "Compare the observed 2.6-GB need with the converter's 2-GB ceiling and preserve its failure logs.",
+                  "why": "A restart repeats the same configuration and does not enlarge memory. Evidence distinguishes a resource problem from a missing image or denied storage request."
+                },
+                {
+                  "action": "Plan 3 GB for the converter and retain 1 GB for the helper, with the same 1.5 and 0.5 CPU requests.",
+                  "why": "The proposed group becomes 2 CPUs and 4 GB. The additional memory addresses the measured shortage; adding CPU alone would not."
+                },
+                {
+                  "action": "Check regional quota and capacity, preserve image references and external output, then plan controlled replacement with the new configuration.",
+                  "why": "ACI CPU or memory changes require deleting and recreating the group rather than live in-place resizing. Recreation can also change the IP address."
+                },
+                {
+                  "action": "Rerun the known input and compare completion, peak memory, and output with the previous attempt.",
+                  "why": "A larger allocation is only a hypothesis until the same workload succeeds without corrupting or duplicating its output."
+                }
+              ],
+              "result": "Sizing is a measured configuration change, not automatic horizontal scaling. If a queue repeatedly outgrows one worker, reassess the execution platform and concurrency design."
+            }
+          ]
+        },
+        {
+          "id": "aci-stop-billing-and-prediction",
+          "title": "Stopping the group is not pausing its memory or every bill",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Use the portal's Stop action when intentionally ending a running group's compute use, and verify the Stopped state. ACI terminates and recycles the containers, deallocates their resources, and stops billing for that group. It does not preserve their in-memory state. Starting the group later begins execution from its configured image and settings rather than resuming the old process at the same instruction. An updated image tag can lead to a different image being pulled."
+            },
+            {
+              "type": "paragraph",
+              "text": "A group that completed successfully or failed is not the same state as a manually stopped running group, and the Stop action does not change an already terminated group's state. Inspect each container's state and exit evidence, not just whether the browser loads. Also, the registry, external files, monitoring ingestion, and any separately provisioned networking resources have their own charging rules. Group compute stopping does not delete or stop these dependencies. For cleanup, identify the exact disposable resources and never delete a shared school resource group."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-aci-always-job",
+              "prompt": "A converter finishes successfully and exits with code zero, but its group uses Always. Will ACI leave that completed container stopped simply because no documents remain?",
+              "answer": "No. Always restarts the container after the successful exit.",
+              "explanation": "The restart policy does not inspect the school's business meaning of an empty input folder. For completion-oriented work, select suitable termination behavior and make repeated processing safe."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Recovery, resizing, and scaling are different actions",
+              "text": "A restart policy controls reactions to exit. CPU and memory requests size the group. Changing these ACI resources requires replacement, and adding groups needs a separate strategy. ACI does not gain Container Apps HTTP or event autoscaling by selecting Always."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "aci-group-allocation",
+          "kind": "single",
+          "prompt": "A Linux group contains a converter requesting 1.5 CPUs and 2 GB, plus a helper requesting 0.5 CPU and 1 GB. What is the group's requested allocation?",
+          "choices": [
+            {
+              "id": "two-machines",
+              "text": "Two independently addressed virtual machines, each with 2 CPUs",
+              "explanation": "ACI groups share a host and local network; they are not two automatically created independent VMs."
+            },
+            {
+              "id": "sum-requests",
+              "text": "2 CPUs and 3 GB",
+              "explanation": "Add the CPU requests and memory requests separately across containers."
+            },
+            {
+              "id": "largest-request",
+              "text": "1.5 CPUs and 2 GB",
+              "explanation": "Choosing only the larger container's request omits the helper's reserved resources."
+            }
+          ],
+          "correctIds": [
+            "sum-requests"
+          ],
+          "explanation": "Group resources come from summed requests. Optional limits allow use of available group capacity but do not create additional capacity."
+        },
+        {
+          "id": "aci-portal-verification",
+          "kind": "single",
+          "prompt": "The public ACI quickstart deployment succeeded. Which next check best verifies that the sample web application works, rather than only that Azure accepted the resource configuration?",
+          "choices": [
+            {
+              "id": "group-exists",
+              "text": "Confirm only that the resource group exists.",
+              "explanation": "The group can exist even if image retrieval or application startup failed."
+            },
+            {
+              "id": "increase-restart",
+              "text": "Change to Always and assume the application is healthy.",
+              "explanation": "Restart behavior is not a health result; a repeatedly failing process can keep restarting."
+            },
+            {
+              "id": "response-and-logs",
+              "text": "Check Running state, open the displayed FQDN on the configured port, and inspect the request logs.",
+              "explanation": "This combines process state, a real application response, and evidence from the container handling the request."
+            }
+          ],
+          "correctIds": [
+            "response-and-logs"
+          ],
+          "explanation": "Provisioning success, process execution, and the intended application outcome require different evidence."
+        },
+        {
+          "id": "aci-successful-batch-policy",
+          "kind": "single",
+          "prompt": "A retry-safe document task should restart on failure but remain terminated after a successful zero exit code. Which ACI restart policy expresses that intention?",
+          "choices": [
+            {
+              "id": "onfailure-task",
+              "text": "OnFailure",
+              "explanation": "It retries failure and allows the successful completed task to remain terminated."
+            },
+            {
+              "id": "always-task",
+              "text": "Always",
+              "explanation": "It restarts after successful exit as well, so it can repeat a task that is already complete."
+            },
+            {
+              "id": "never-exactly-once",
+              "text": "Never, because it guarantees exactly one execution even after failures",
+              "explanation": "The stated guarantee is false. Current docs allow platform recovery after nonzero exits, and application side effects still need retry-safe design."
+            }
+          ],
+          "correctIds": [
+            "onfailure-task"
+          ],
+          "explanation": "Choose the policy by exit behavior and separately design the task to tolerate retries."
+        },
+        {
+          "id": "aci-resize-and-cost",
+          "kind": "multiple",
+          "prompt": "Which TWO statements correctly guide changes to an ordinary ACI group and its costs?",
+          "choices": [
+            {
+              "id": "autoscale-always",
+              "text": "Always automatically adds groups as student traffic increases.",
+              "explanation": "Always controls restarts after exit. It is not an HTTP autoscaling rule."
+            },
+            {
+              "id": "stop-preserves-ram",
+              "text": "Stop preserves the program's memory so Start resumes its exact execution point.",
+              "explanation": "Stop recycles containers. A later start begins new execution with the configured image and settings."
+            },
+            {
+              "id": "replace-size",
+              "text": "Changing CPU or memory requires controlled group deletion and recreation.",
+              "explanation": "These properties are not supported as live in-place sizing changes. Preserve configuration and persistent output first."
+            },
+            {
+              "id": "stop-group-only",
+              "text": "A verified manually Stopped group no longer bills group compute, but its separate registry and storage can still cost money.",
+              "explanation": "ACI deallocates group resources; other services follow independent billing and retention lifecycles."
+            }
+          ],
+          "correctIds": [
+            "replace-size",
+            "stop-group-only"
+          ],
+          "explanation": "A resource lifecycle operation affects a defined boundary. It is not automatic scaling, a memory snapshot, or global subscription cleanup."
+        }
+      ],
+      "takeaways": [
+        "ACI runs container groups without a user-managed cluster, but supplies no built-in application demand autoscaler.",
+        "Group containers share local networking and lifecycle; expose only required external ports.",
+        "Add per-container CPU and memory requests and account for platform overhead and regional constraints.",
+        "Use restart policies that match a continuing service or a completion-oriented task.",
+        "ACI managed-identity ACR pulls currently require a user-assigned identity and supported non-shortcut deployment tooling.",
+        "Plan replacement for CPU or memory changes, and verify billing boundaries after stopping or deletion."
+      ],
+      "sourceIds": [
+        "aci-groups",
+        "aci-portal",
+        "aci-limits",
+        "aci-restarts",
+        "aci-stop",
+        "aci-update",
+        "aci-pull",
+        "acr-auth",
+        "acr-abac"
+      ]
+    },
+    {
+      "id": "containers-apps-scaling",
+      "title": "Container Apps: choose an environment, release a revision, and scale replicas",
+      "summary": "Build a current mental model of Container Apps environments and workload profiles, then provision and scale the timetable website and a queue-driven document worker.",
+      "objectives": [
+        "Distinguish environments, apps, revisions, replicas, and ingress.",
+        "Choose Consumption or Dedicated resources and recognize the separately qualified Flexible preview.",
+        "Apply environment-specific subnet requirements rather than treating legacy /23 guidance as universal.",
+        "Provision through the portal and reason about image identity, resource sizing, HTTP scaling, and event scaling.",
+        "Calculate desired replicas while accounting for limits, cold starts, and underlying capacity."
+      ],
+      "sections": [
+        {
+          "id": "apps-environments-revisions-ingress",
+          "title": "Locate the application, its release, and its running copies",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure Container Apps manages application container orchestration, including replicas, ingress, and demand-driven scaling, without giving you a Kubernetes cluster to administer. An environment groups related apps and jobs within shared networking and operational boundaries. The school might keep its public timetable and background document worker in one environment, but use a different environment for testing. A container app is the managed application resource. A revision records an immutable version of its container configuration, while a replica is a running instance of that revision."
+            },
+            {
+              "type": "paragraph",
+              "text": "Changing the image, container resources, or scale rules creates a new revision. Merely adding more replicas runs more copies of the same revision. Single revision mode is the normal simple choice: the old revision continues receiving traffic until the new one is ready. Multiple revision mode allows controlled simultaneous releases and traffic splitting, such as sending a small proportion of HTTP traffic to a new timetable release. Old active revisions can still consume resources. A revision rollback also cannot reverse an incompatible database change automatically."
+            },
+            {
+              "type": "paragraph",
+              "text": "Ingress is the managed entry path that accepts incoming connections and forwards them to the app's listening port. For HTTP ingress, a browser can use HTTPS while the configured target port is, for example, 8080 inside the container. Set the target to the application's actual listener, not automatically to 443. App ingress can accept traffic from outside its environment or only from within it. The environment's own external or internal network exposure still bounds who can reach that entry point."
+            }
+          ]
+        },
+        {
+          "id": "apps-current-workload-profiles",
+          "title": "A Consumption workload does not imply a legacy environment",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The default current environment type is a workload profiles environment. A workload profile determines what compute resources an app can use and how that capacity is managed. It includes a default Consumption profile and can support Dedicated profiles as needed. A legacy Consumption-only environment is a different environment type, not another name for choosing Consumption within a current workload profiles environment. This distinction affects network capabilities, subnet size, and per-replica resource limits."
+            },
+            {
+              "type": "paragraph",
+              "text": "Consumption provides serverless per-replica resource allocation and can scale eligible apps to zero. It is a useful starting point for an intermittent timetable service or document worker with changing demand. Dedicated allocates profile instances, also called nodes, that can host several apps. General-purpose D profiles and memory-optimized E profiles offer different CPU-to-memory balances. You pay for allocated Dedicated profile instances, with an environment management charge, rather than treating each app as an isolated Consumption bill. Steady combined workloads may use that pool efficiently."
+            },
+            {
+              "type": "paragraph",
+              "text": "The current workload-profiles page also documents Flexible, grouped as Flex and explicitly marked preview. It combines per-replica billing with a dedicated management fee and single-tenant compute, supports larger memory choices, requires at least a /25 subnet, and does not support scaling apps to zero. Availability is limited to its listed regions. Do not silently rename it as Consumption or apply a /27 assumption to it. For this school's basic worked examples, use the established general-purpose Consumption profile, not preview Flexible or a GPU profile."
+            },
+            {
+              "type": "callout",
+              "tone": "caution",
+              "title": "Read profile-specific documentation, not just a plan heading",
+              "text": "This material was reviewed September 20, 2026. Some overview pages summarize only Consumption and Dedicated, while the specific workload-profile page now includes Flexible preview. Treat the preview's region, subnet, and no-scale-to-zero requirements as separate qualifications, not as universal Container Apps behavior."
+            }
+          ]
+        },
+        {
+          "id": "apps-subnet-requirements",
+          "title": "Size the network for the environment you actually selected",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An environment can use an automatically supplied network or a customer-provided virtual network. Choose the latter when the school needs controlled private connectivity, such as reaching a private database. Plan this when creating the environment: switching the network type afterward is not a simple app setting. A supplied subnet is dedicated exclusively to that environment. Never place ordinary school VMs in the same reserved subnet, and plan ranges that do not overlap connected office networks or service-reserved ranges."
+            },
+            {
+              "type": "table",
+              "caption": "Customer-provided subnet requirements, qualified by environment or profile",
+              "headers": [
+                "Selection",
+                "Minimum subnet",
+                "Important distinction"
+              ],
+              "rows": [
+                [
+                  "Workload profiles environment using ordinary Consumption or Dedicated profiles",
+                  "/27",
+                  "Delegate the environment subnet to Microsoft.App/environments; capacity planning can require a larger subnet."
+                ],
+                [
+                  "Legacy Consumption-only environment",
+                  "/23",
+                  "Do not delegate the subnet to a service; this environment has different address consumption and networking limits."
+                ],
+                [
+                  "Flexible workload profile, preview",
+                  "/25",
+                  "Apply the profile-specific larger minimum and supported-region requirements; apps cannot scale to zero."
+                ]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "A /27 contains 32 total IPv4 addresses, but you cannot equate that to 32 application replicas. Azure and Container Apps reserve addresses, and workload-profile allocation differs between Dedicated nodes and Consumption replicas. Deploying a replacement revision can temporarily require additional capacity while old and new replicas overlap. The virtual-network documentation itself gives infrastructure reservation details and deployment allowances; use the complete current table for a real design rather than subtracting only the usual five Azure subnet addresses."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a small school workload with an approved, available 10.20.8.0/26 subnet, ordinary Consumption in a workload profiles environment satisfies the /27 minimum and provides more address room. That same /26 is too small for the legacy /23 requirement and the preview Flexible /25 requirement. Larger address blocks have smaller prefix numbers. Workload profiles environments also support network capabilities such as user-defined routing and NAT Gateway egress that legacy Consumption-only environments do not. Minimum valid size is a compatibility check, not a promise that all future scale targets fit."
+            }
+          ]
+        },
+        {
+          "id": "apps-portal-provision",
+          "title": "Worked example: create a small timetable application in the portal",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Prove the platform path before attaching private dependencies",
+              "scenario": "Assume an approved subscription, permission to create resources, the Microsoft.App resource provider registered, and a disposable group. A resource provider is the Azure service registration that enables its resource types. The first test uses the public quickstart image, no pupil data, and the platform-supplied network.",
+              "steps": [
+                {
+                  "action": "Search for Container Apps, choose Create and Container App, and select the intended subscription, group, name, region, and Container image deployment source.",
+                  "why": "The managed app and its regional environment must be placed deliberately. This example is not an Azure Functions app, so leave that optimization unselected."
+                },
+                {
+                  "action": "Create or select a workload profiles environment and use its default Consumption profile. Review logging destination and network settings before accepting the environment.",
+                  "why": "Consumption is the chosen workload profile, not a request for the legacy Consumption-only environment. Logging and network dependencies may have separate charges."
+                },
+                {
+                  "action": "On Container, choose the quickstart image and inspect the CPU and memory combination, such as 0.5 vCPU with 1 GiB.",
+                  "why": "A known public sample removes private-image permission problems from the first test. vCPU means a unit of virtual processor capacity, and the pair must be supported by the selected profile."
+                },
+                {
+                  "action": "Inspect HTTP ingress and confirm the sample's target port, external visibility, and HTTPS application endpoint before Review + create.",
+                  "why": "The platform must forward requests to the port the program actually listens on. A publicly reachable endpoint does not provide pupil authentication."
+                },
+                {
+                  "action": "After approved creation, inspect revision provisioning and running status, open the Application Url from Overview, and inspect logs for the expected response.",
+                  "why": "The first revision must start successfully before the URL can prove the application path. A resource record alone is not sufficient verification."
+                },
+                {
+                  "action": "For a later private timetable image, edit and deploy a revision with explicit image, identity, resource, and scale settings, then verify readiness before moving production traffic.",
+                  "why": "The sample proves the basic path, not the private registry, private database, or real workload's capacity. Those requirements need their own checks."
+                }
+              ],
+              "result": "The administrator has created a current environment and a working sample app through the portal, with a clear list of assumptions to replace before a real school release."
+            }
+          ]
+        },
+        {
+          "id": "apps-managed-identity-pull",
+          "title": "Connect a private image without distributing registry passwords",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the private timetable image, create an authorized user-assigned identity, attach it under the container app's Identity page, and grant its registry-mode-appropriate pull role. In the app's Containers or Revision management editing workflow, choose Azure Container Registry as the image source and Managed identity as authentication, then select that identity. Enter the exact image name and tag if a picker cannot enumerate them. The registry must permit Azure Resource Manager audience tokens for this managed-identity pull workflow; arrange verification of that prerequisite rather than treating an authentication failure as a reason to enable the admin password."
+            },
+            {
+              "type": "paragraph",
+              "text": "Container Apps supports both user-assigned and system-assigned image-pull identities, unlike the current ACI restriction. The documented portal workflow can first create a public-image app and then deploy a private-image revision after configuring identity. Older walkthroughs describe the portal attempting to add AcrPull automatically. Inspect what actually happened: the deployer might lack role-assignment permission, and an ABAC-enabled registry requires Repository Reader instead. Do not assume an automated legacy role assignment proves access."
+            },
+            {
+              "type": "paragraph",
+              "text": "Container Apps checks the image when starting a container, so a mutable tag can create confusing differences between starts. Use the approved image identity and controlled release process. If a new revision cannot become ready, examine image retrieval, startup, listening port, and readiness evidence before changing traffic. Student sign-in, the registry pull identity, the queue scaler identity, and the running application's database permissions can be different identities with different rights."
+            }
+          ]
+        },
+        {
+          "id": "apps-sizing-and-profile-capacity",
+          "title": "Size one replica before deciding how many to run",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For ordinary Consumption in a workload profiles environment, current supported per-replica totals range from 0.25 vCPU with 0.5 GiB to 4 vCPUs with 8 GiB, in the documented paired increments. Add all the replica's container allocations, including sidecars, before comparing with that table. The legacy Consumption-only environment instead limits the total to 2 vCPUs and 4 GiB. A requirement for 3 vCPUs and 6 GiB therefore does not fit legacy Consumption-only but can fit ordinary Consumption in a current workload profiles environment."
+            },
+            {
+              "type": "paragraph",
+              "text": "More replicas is horizontal scaling: several copies share work. Giving each copy more CPU or memory is a sizing change that requires a new configuration and revision, not an automatic vertical autoscaler. If a single document needs 3 GiB to process, adding ten replicas that each have only 1 GiB does not solve the per-document memory shortage. Conversely, a correctly sized replica can still be too slow for hundreds of independent requests, making horizontal scale useful."
+            },
+            {
+              "type": "paragraph",
+              "text": "Dedicated adds another capacity layer. A D4 profile instance advertises 4 vCPUs and 16 GiB, but the runtime reserves part of that allocation. You cannot safely pack four replicas requesting one full vCPU each onto it merely by dividing advertised values. Other apps also share the pool. Configure the profile's minimum and maximum instance counts separately from the app's replica limits, then verify usable capacity and quota. Raising an app maximum from four to eight cannot manufacture missing profile nodes or bypass environmental limits."
+            }
+          ]
+        },
+        {
+          "id": "apps-http-scaling-and-cold-start",
+          "title": "Scale the timetable using demand rather than clock guesses",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Container Apps uses KEDA, Kubernetes Event-driven Autoscaling, to support demand-based horizontal scaling. You configure a signal and thresholds rather than managing that orchestration system yourself. An HTTP scale rule responds to concurrent request demand, not simply a count of enrolled pupils. The rule's concurrency target should reflect measurements of the application's response time and resource use. A threshold is a scaling input, not a rate-limiter promise that each replica will accept exactly that number of requests."
+            },
+            {
+              "type": "paragraph",
+              "text": "In the portal, open Scale, choose Edit and deploy, select the replica range, and add an HTTP Scaling rule with a meaningful name and concurrency target. Saving the change deploys a new revision. A minimum of one keeps a desired ready replica instead of intentionally scaling completely idle. A minimum of zero allows eligible HTTP apps to scale to zero. A maximum bounds the configured scale target, but is not a spending cap and does not guarantee capacity. Platform maintenance can also temporarily produce extra replicas."
+            },
+            {
+              "type": "paragraph",
+              "text": "A cold start is the delay when new capacity must start, retrieve an image if needed, initialize the application, and pass checks before serving work. Minimum zero can reduce idle compute use, but the first request after quiet hours can wait longer. Minimum one trades continuing resource cost for less scale-from-zero exposure; it does not guarantee zero latency or prevent every restart. Other charges, including registry, logging, storage, and provisioned Dedicated capacity, do not disappear just because one application has no replicas."
+            }
+          ]
+        },
+        {
+          "id": "apps-event-scaling-and-authentication",
+          "title": "Give a background worker a signal that still exists at zero",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school's document worker does not need incoming browser traffic. A queue can hold conversion requests until a worker retrieves them. A custom event scale rule can observe the queue length and request replicas as messages accumulate. For a supported queue scaler, configure the correct queue and service metadata, a target messages-per-replica value, and authentication. The scaler's permission to observe the event source is distinct from the container's registry pull permission and the worker's permission to read or complete documents."
+            },
+            {
+              "type": "paragraph",
+              "text": "The portal supports adding a Custom scale rule and its metadata under Scale and Edit and deploy. Current scaling documentation says managed-identity authentication for custom scale rules is not supported in that portal workflow; the CLI or Resource Manager route is needed for that authentication choice. The portal supports secret-based scaler authentication. Do not confuse this limitation with managed-identity image pulls, which do have a portal workflow. For a production secretless worker, plan the supported deployment method instead of inventing a portal button."
+            },
+            {
+              "type": "paragraph",
+              "text": "Use single revision mode for non-HTTP event scale rules as the documentation directs. Otherwise, an old active worker revision can remain available with its own old rule. Make the worker safe against retries and competing consumers, and store completion state durably. The queue signal can remain observable when there are zero replicas, which enables activation. CPU or memory load alone cannot wake a workload from zero because no running replica exists to produce that utilization signal."
+            },
+            {
+              "type": "paragraph",
+              "text": "If ingress is disabled and there is no usable event rule, minimum zero can leave the app with no way to wake up. Either provide a valid trigger or keep at least one replica for a continuously running worker. Event polling and scale-down stabilization also introduce delay. Do not infer a broken rule from the replica count staying high for a few seconds after the queue drains. Check rule authentication, observed demand, configured limits, and elapsed stabilization time together."
+            }
+          ]
+        },
+        {
+          "id": "apps-worked-scaling-calculation",
+          "title": "Worked example: connect queue demand, replica limits, and resources",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Twenty-three documents do not imply twenty-three replicas",
+              "scenario": "Assume a correctly authenticated queue-length scaler, single revision mode, a general-purpose Consumption profile in a workload profiles environment, and sufficient quota and regional capacity. Each worker replica is measured to fit 0.5 vCPU and 1 GiB. The target is five queued messages per replica, with minimum zero and maximum four.",
+              "steps": [
+                {
+                  "action": "Read the current backlog of 23 messages and divide by the target of five messages per replica.",
+                  "why": "23 divided by 5 is 4.6. Round upward to a desired count of five because four target-sized shares account for only 20 messages. This is the target calculation, not an instant deployment guarantee."
+                },
+                {
+                  "action": "Apply the configured maximum of four to the desired count of five.",
+                  "why": "The resulting bounded target is four replicas. The remaining pressure is handled through continued processing and queueing, not by silently ignoring the maximum."
+                },
+                {
+                  "action": "Calculate four replicas times 0.5 vCPU and 1 GiB: 2 vCPUs and 4 GiB of requested app resources.",
+                  "why": "Horizontal scale multiplies the per-replica requirement. This total helps assess quota and cost, but it is not the same as usable Dedicated node capacity."
+                },
+                {
+                  "action": "Observe replica activation, queue depth, processing latency, and errors over time before increasing the maximum.",
+                  "why": "Scaling proceeds through polling, startup, and scaling steps. Extra workers help only if the application and document store can support additional concurrency."
+                },
+                {
+                  "action": "After the queue empties, allow scale-down stabilization and cooldown, then verify zero replicas if the rule and minimum permit it.",
+                  "why": "The last replica need not disappear immediately. Zero app replicas stop that app's resource consumption, not the costs of independent services."
+                }
+              ],
+              "result": "The administrator can explain why four replicas are the bounded target, how their allocations add up, and which measurements would justify a different maximum or per-replica size."
+            }
+          ]
+        },
+        {
+          "id": "apps-prediction-and-service-choice",
+          "title": "Choose a mode by the problem, not by a familiar service name",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "predict-worker-without-wakeup",
+              "prompt": "An ordinary Consumption worker has no ingress, minimum zero, and only a CPU-based scaling idea, with no working event trigger. After it reaches zero replicas, will a newly queued document itself wake the app?",
+              "answer": "No. A queue message is not an activation signal unless the app has a correctly configured rule that observes that queue.",
+              "explanation": "At zero replicas there is no CPU utilization to observe. Add a supported authenticated event trigger, or keep a suitable positive minimum for the intended continuous-worker design. Merely increasing the maximum does not supply a trigger."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the school, choose ACR to distribute reviewed images, ACI for a bounded independently managed task, and Container Apps for a web service or worker needing managed demand scaling. Within Container Apps, choose ordinary Consumption for suitable intermittent workloads, or Dedicated when its capacity and isolation model match measured requirements. Choose single revisions for a simple release path and non-HTTP event workers; use multiple revisions deliberately for controlled HTTP release comparisons. These choices solve different layers of the same application."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Keep environment, profile, revision, and replica decisions separate",
+              "text": "The /23 minimum belongs to legacy Consumption-only environments, not every Container Apps deployment. Ordinary workload profiles environments start at /27 for a supplied subnet, while Flexible preview has its own /25 requirement. Per-replica size, app replica limits, and Dedicated profile instance limits are three different controls. None alone guarantees application performance."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "apps-subnet-environment-choice",
+          "kind": "single",
+          "prompt": "The school has a free /26 subnet and wants ordinary Consumption in a workload profiles environment. Ignore future scale growth for this minimum-size check. Which statement is correct?",
+          "choices": [
+            {
+              "id": "all-need-twenty-three",
+              "text": "Every Container Apps environment needs /23, so the subnet is always invalid.",
+              "explanation": "That minimum applies to the legacy Consumption-only environment, not universally."
+            },
+            {
+              "id": "flexible-also-fits",
+              "text": "It also satisfies Flexible preview's /25 minimum.",
+              "explanation": "A /26 is smaller than /25. Flexible has a profile-specific larger minimum."
+            },
+            {
+              "id": "share-with-vms",
+              "text": "It fits only if the school's VMs share the same environment subnet.",
+              "explanation": "The environment subnet must be dedicated to the Container Apps environment, not shared with ordinary VMs."
+            },
+            {
+              "id": "current-profile-fits",
+              "text": "The /26 satisfies the workload profiles environment's /27 minimum; delegate it to Microsoft.App/environments and plan capacity separately.",
+              "explanation": "A /26 is larger than a /27. The selected current environment supports a Consumption profile without becoming legacy Consumption-only."
+            }
+          ],
+          "correctIds": [
+            "current-profile-fits"
+          ],
+          "explanation": "Read environment type and workload profile before applying subnet requirements. Passing a minimum-size check is not a full capacity assessment."
+        },
+        {
+          "id": "apps-revision-versus-replica",
+          "kind": "single",
+          "prompt": "The portal's Edit and deploy workflow changes the timetable image and HTTP scale rule. What distinguishes the resulting revision from extra replicas?",
+          "choices": [
+            {
+              "id": "new-config-snapshot",
+              "text": "The revision records a new immutable configuration; replicas are running instances of a revision.",
+              "explanation": "Image and scale-rule changes are revision-scope changes. Replicas execute that defined version."
+            },
+            {
+              "id": "replica-is-tag",
+              "text": "A replica is a new registry tag and does not consume compute.",
+              "explanation": "A replica is running compute with allocated resources, not a label in the image registry."
+            },
+            {
+              "id": "revision-is-vnet",
+              "text": "Every new revision creates a separate virtual network and environment.",
+              "explanation": "A revision belongs to the existing app in its environment; a new release does not inherently require a new network."
+            }
+          ],
+          "correctIds": [
+            "new-config-snapshot"
+          ],
+          "explanation": "Release configuration and execution count are separate axes: deploy a version, then run the required copies."
+        },
+        {
+          "id": "apps-queue-scale-calculation",
+          "kind": "single",
+          "prompt": "Under the worked example's healthy-scaler and sufficient-capacity assumptions, 23 messages are queued, the target is five per replica, and the maximum is four. What is the bounded target, not a promise of the instantaneous running count?",
+          "choices": [
+            {
+              "id": "four-bounded",
+              "text": "Four replicas",
+              "explanation": "Rounding 23/5 upward produces five desired replicas, then the configured maximum bounds the target to four."
+            },
+            {
+              "id": "five-unbounded",
+              "text": "Five replicas regardless of the maximum",
+              "explanation": "Five is the uncapped demand calculation. It ignores the explicitly configured maximum."
+            },
+            {
+              "id": "twenty-three-workers",
+              "text": "Twenty-three replicas",
+              "explanation": "The target is five queued messages per replica, not a rule requesting one replica for each message."
+            },
+            {
+              "id": "zero-minimum",
+              "text": "Zero replicas because the minimum is zero",
+              "explanation": "Minimum zero permits idle scale-to-zero. It does not force zero while a valid rule detects demand."
+            }
+          ],
+          "correctIds": [
+            "four-bounded"
+          ],
+          "explanation": "Compute demand, apply limits, then allow for polling, startup, and scaling behavior."
+        },
+        {
+          "id": "apps-sizing-and-wakeup",
+          "kind": "multiple",
+          "prompt": "Which TWO statements correctly guide the school's ordinary Consumption application design?",
+          "choices": [
+            {
+              "id": "profile-size-distinction",
+              "text": "A 3-vCPU, 6-GiB replica can fit current workload-profile Consumption limits but exceeds legacy Consumption-only limits.",
+              "explanation": "Current ordinary Consumption supports paired totals up to 4 vCPUs and 8 GiB; legacy Consumption-only is limited to 2 vCPUs and 4 GiB."
+            },
+            {
+              "id": "more-replicas-more-ram",
+              "text": "Ten 1-GiB replicas let one document-processing replica use 10 GiB.",
+              "explanation": "Each replica has its own allocation. Adding copies does not enlarge one process's memory ceiling."
+            },
+            {
+              "id": "minimum-one-guarantees",
+              "text": "Minimum one guarantees no request ever experiences startup delay.",
+              "explanation": "It reduces intentional scale-from-zero exposure, but updates, failures, new replicas, and other startup work can still affect requests."
+            },
+            {
+              "id": "event-wakes-zero",
+              "text": "A worker with no ingress needs a valid event rule to wake from zero, or a suitable positive minimum for continuous execution.",
+              "explanation": "A larger maximum alone provides no signal that can activate an idle worker."
+            }
+          ],
+          "correctIds": [
+            "event-wakes-zero",
+            "profile-size-distinction"
+          ],
+          "explanation": "Choose a valid per-replica size and a scale signal that matches the workload. Do not replace those decisions with unsupported performance guarantees."
+        }
+      ],
+      "takeaways": [
+        "An environment hosts apps; revisions define versions; replicas execute those versions; ingress routes incoming requests.",
+        "Current workload profiles environments can run Consumption and Dedicated workloads, unlike legacy Consumption-only environments.",
+        "Customer-provided subnet minimums depend on the environment and profile: ordinary workload profiles /27, legacy Consumption-only /23, and Flexible preview /25.",
+        "Ordinary Consumption resource pairs and legacy limits differ; size each replica before choosing horizontal scale.",
+        "HTTP and authenticated event signals can drive eligible apps from zero, while CPU or memory utilization alone cannot.",
+        "App replica limits, Dedicated profile capacity, cold starts, and continuing dependency charges need separate reasoning."
+      ],
+      "sourceIds": [
+        "apps-portal",
+        "apps-profiles",
+        "apps-network",
+        "apps-containers",
+        "apps-scale",
+        "apps-pull",
+        "apps-revisions",
+        "acr-abac",
+        "exam-guide"
+      ]
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Container image",
+      "definition": "A packaged application artifact containing files and configuration used to start a compatible container."
+    },
+    {
+      "term": "Container",
+      "definition": "An executing instance created from an image, with allocated resources and runtime state."
+    },
+    {
+      "term": "Registry",
+      "definition": "A service that stores and distributes container images and related artifacts."
+    },
+    {
+      "term": "Repository",
+      "definition": "A named collection of image artifacts in a registry, identified by tags or digests."
+    },
+    {
+      "term": "Tag",
+      "definition": "A readable artifact label that can be reassigned unless controlled by an explicit release policy."
+    },
+    {
+      "term": "Manifest digest",
+      "definition": "A content-derived identifier for an artifact's manifest, used to identify the exact artifact independently of a movable tag."
+    },
+    {
+      "term": "SKU",
+      "definition": "A named product tier that determines supported features and capacity limits."
+    },
+    {
+      "term": "Managed identity",
+      "definition": "An Azure-managed identity for a resource, avoiding an application-maintained identity credential while still requiring explicit permissions."
+    },
+    {
+      "term": "RBAC",
+      "definition": "Role-based access control: assigning an identity a role with specified permissions at a defined scope."
+    },
+    {
+      "term": "ABAC",
+      "definition": "Attribute-based access control: conditions on role assignments that can narrow access, such as to named ACR repositories."
+    },
+    {
+      "term": "Container group",
+      "definition": "ACI's top-level execution resource whose containers share a host, lifecycle, local network, and allocated resources."
+    },
+    {
+      "term": "Sidecar",
+      "definition": "A helper container deployed alongside a main container to perform a tightly related supporting function."
+    },
+    {
+      "term": "Resource request",
+      "definition": "The processor and memory allocation requested for a container, distinct from an optional upper usage limit."
+    },
+    {
+      "term": "Environment",
+      "definition": "A Container Apps boundary that groups related applications and jobs with shared network and operational settings."
+    },
+    {
+      "term": "Workload profile",
+      "definition": "A Container Apps compute choice that defines available resources, capacity management, and billing characteristics."
+    },
+    {
+      "term": "Revision",
+      "definition": "An immutable version of a container app's revision-scoped configuration, such as image and scale rules."
+    },
+    {
+      "term": "Replica",
+      "definition": "A running instance of a container app revision."
+    },
+    {
+      "term": "Ingress",
+      "definition": "The managed incoming-connection path that routes requests to a container app's target port."
+    },
+    {
+      "term": "KEDA",
+      "definition": "Kubernetes Event-driven Autoscaling, used by Container Apps to support demand-based replica scaling through configured signals."
+    },
+    {
+      "term": "Cold start",
+      "definition": "The delay while previously absent capacity starts, initializes, and becomes ready to process work."
+    }
+  ],
+  "sources": [
+    {
+      "id": "exam-guide",
+      "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104",
+      "title": "AZ-104 study guide",
+      "supports": "Guide effective April 17, 2026: portal provisioning and management of ACR, ACI, Container Apps, and container sizing and scaling."
+    },
+    {
+      "id": "acr-concepts",
+      "url": "https://learn.microsoft.com/en-us/azure/container-registry/container-registry-concepts",
+      "title": "About registries, repositories, and artifacts",
+      "supports": "Registry and repository concepts, image tags, shared layers, manifests, digest-based identification, login-server addressing, and untagged artifacts retaining storage."
+    },
+    {
+      "id": "acr-skus",
+      "url": "https://learn.microsoft.com/en-us/azure/container-registry/container-registry-skus",
+      "title": "Azure Container Registry SKU features and limits",
+      "supports": "Basic, Standard, Premium and included storage; Premium private endpoints and geo-replication; ABAC and default supported-region zone redundancy across tiers; regional distance and throughput considerations; usage inspection and downgrade dependencies."
+    },
+    {
+      "id": "acr-portal",
+      "url": "https://learn.microsoft.com/en-us/azure/container-registry/container-registry-get-started-portal",
+      "title": "Create an Azure container registry using the portal",
+      "supports": "Portal creation inputs, 5-50-character alphanumeric registry names, pricing and permission mode selection, immutable domain-label scope, hashed login servers, and inspection of repositories and image tags."
+    },
+    {
+      "id": "acr-abac",
+      "url": "https://learn.microsoft.com/en-us/azure/container-registry/container-registry-rbac-abac-repository-permissions",
+      "title": "Azure ABAC repository permissions in ACR",
+      "supports": "RBAC-only versus ABAC-enabled modes; legacy AcrPull not honored in ABAC mode; Repository Reader, optional repository conditions, separate Catalog Lister, management/data-plane separation, and migration with post-switch cached-credential invalidation."
+    },
+    {
+      "id": "acr-auth",
+      "url": "https://learn.microsoft.com/en-us/azure/container-registry/container-registry-authentication",
+      "title": "Authenticate with Azure Container Registry",
+      "supports": "Identity-based authentication versus the disabled-by-default broad admin account; admin push/pull permissions and credential risks; admin requirements for some direct portal deployment shortcuts."
+    },
+    {
+      "id": "aci-groups",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/container-instances-container-groups",
+      "title": "Container groups in Azure Container Instances",
+      "supports": "Shared host, lifecycle, resources, local networking and volumes; Linux multi-container limitation; localhost communication; exposed group/container ports; summed requests, optional limits, minimum 1 CPU and 1 GB, and infrastructure overhead."
+    },
+    {
+      "id": "aci-portal",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/container-instances-quickstart-portal",
+      "title": "Deploy a container instance using the Azure portal",
+      "supports": "Portal creation from the public Microsoft hello-world image, networking and DNS label settings, current hash-based DNS reuse protections, Running-state verification, browser testing, log inspection, and individual-instance deletion."
+    },
+    {
+      "id": "aci-limits",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/container-instances-quotas",
+      "title": "Resource availability and quota limits for ACI",
+      "supports": "x64 image architecture requirement, separate hard limits and quotas, deployment-region capacity caveats, specialized SKU differences, and ACI GPU preview retirement on July 14, 2025."
+    },
+    {
+      "id": "aci-restarts",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/container-instances-restart-policy",
+      "title": "Run containerized tasks with restart policies",
+      "supports": "Always default, OnFailure completion behavior, current Never-policy nonzero-exit recovery caveat, termination evidence, and persistent output considerations for run-to-completion tasks."
+    },
+    {
+      "id": "aci-stop",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/container-instances-stop-start",
+      "title": "Manually stop or start containers in ACI",
+      "supports": "Stopped groups recycle containers, deallocate resources, and stop group billing without preserving state; starts and restarts affect the whole group, can pull updated images, and can change the group's IP."
+    },
+    {
+      "id": "aci-update",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/container-instances-update",
+      "title": "Update containers in Azure Container Instances",
+      "supports": "CPU, memory, operating-system and restart-policy changes require group deletion and recreation; updates restart group containers, and IP retention is not guaranteed."
+    },
+    {
+      "id": "aci-pull",
+      "url": "https://learn.microsoft.com/en-us/azure/container-instances/using-azure-container-registry-mi",
+      "title": "Deploy ACI from ACR using a managed identity",
+      "supports": "Current user-assigned-only ACI image-pull identity support, CLI or ARM/Bicep configuration boundary, and the documented Premium/private-endpoint scenario's trusted-services and separate-subnet prerequisites. ACR ABAC documentation governs mode-specific roles over legacy AcrPull examples."
+    },
+    {
+      "id": "apps-portal",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/quickstart-portal",
+      "title": "Deploy a container app using the Azure portal",
+      "supports": "Microsoft.App registration prerequisite, portal application and environment creation inputs, public quickstart image selection, validation, deployment, and Application Url verification."
+    },
+    {
+      "id": "apps-profiles",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/workload-profiles-overview",
+      "title": "Workload profiles in Azure Container Apps",
+      "supports": "Consumption and Dedicated profile behavior and billing, default Consumption profile, Dedicated D/E capacity and runtime reservations, instance-count scaling, and current Flexible preview's limited regions, /25 minimum, management fee, and lack of scale-to-zero."
+    },
+    {
+      "id": "apps-network",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/custom-virtual-networks",
+      "title": "Virtual network configuration in Container Apps",
+      "supports": "Dedicated customer subnet, workload-profile /27 minimum with Microsoft.App/environments delegation, legacy Consumption-only /23 without delegation, address reservations and revision-overlap capacity, network restrictions, NAT integration, and separately charged managed network resources."
+    },
+    {
+      "id": "apps-containers",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/containers",
+      "title": "Containers in Azure Container Apps",
+      "supports": "Container configuration and revisions, supported ordinary Consumption CPU/memory pairs through 4 vCPU and 8 GiB, legacy Consumption-only 2-vCPU/4-GiB maximum, aggregate container sizing, sidecar sharing, image version practices, and platform-managed orchestration."
+    },
+    {
+      "id": "apps-scale",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/scale-app",
+      "title": "Scaling in Azure Container Apps",
+      "supports": "KEDA demand scaling, HTTP and event rules, portal rule editing, single revisions for non-HTTP rules, secret versus managed-identity scaler configuration boundaries, minimum/maximum limits, event polling and cooldown, rounded desired-replica calculation, no-trigger scale-zero trap, and target counts rather than guarantees."
+    },
+    {
+      "id": "apps-pull",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull",
+      "title": "Container Apps image pull with managed identity",
+      "supports": "User- and system-assigned image-pull identities, user-assigned preference, portal public-image bootstrap and private-image revision workflow, identity attachment, ARM audience-token prerequisite, and image checking at container start. ACR's ABAC guide qualifies its older automatic AcrPull assignment instructions."
+    },
+    {
+      "id": "apps-revisions",
+      "url": "https://learn.microsoft.com/en-us/azure/container-apps/revisions",
+      "title": "Update and deploy changes in Azure Container Apps",
+      "supports": "Immutable revisions, revision lifecycle and readiness, single versus multiple revision operation, controlled traffic splitting, revision-scope image/resource/scale changes, and application-scope settings."
+    }
+  ],
+  "lab": {
+    "title": "Optional manual lab: compare one container instance with one container app",
+    "purpose": "Inspect a new empty registry and compare execution and scaling settings using public Microsoft sample images. The written lessons already teach every required objective. No Azure action runs automatically, and real pupil data is prohibited.",
+    "prerequisites": [
+      "An authorized subscription owner has approved the exercise, spending, region, and public demonstration endpoints.",
+      "Permission to create a new dedicated disposable resource group, a Basic registry, one ordinary ACI group, and a Container Apps environment and app; Microsoft.App must be registered.",
+      "Record a unique prefix for every lab resource and confirm that the selected group contains no shared or production resources.",
+      "Review current pricing and available regional quota. Use the portal's public Microsoft quickstart images so the lab needs no private registry credentials or image-building tools."
+    ],
+    "costWarning": "This lab can incur registry, container compute, HTTP request, logging, storage, and network-related charges. Free allowances are not a promise of zero cost. Do not add Dedicated or Flexible profiles, private endpoints, NAT Gateway, or other paid additions for this basic exercise. An ACI Stop action ends group compute billing only after deallocation; stopping or scaling one workload does not remove registry or logging charges.",
+    "steps": [
+      "Create the approved dedicated disposable resource group and record its exact name. Create a Basic ACR in it with admin credentials disabled, an intentional permission mode, and a protected domain-label scope.",
+      "Inspect the registry's Overview, Login server, Properties, and Repositories. An empty repository list is expected because this lab does not upload an image. Do not enable the admin account to make the empty registry seem useful.",
+      "Follow the ACI worked example using the public Microsoft aci-helloworld quickstart image, Linux, 1 CPU, 1.5 GB, Always, and only its required public TCP port. Record the displayed FQDN, not a guessed name.",
+      "Verify ACI Running status, the sample page, and its request log. Stop the instance and confirm Stopped. Record that its process state was not preserved and its registry resource still exists.",
+      "Create one Container App with the public quickstart image in a new workload profiles environment using ordinary Consumption and the platform-supplied network. Inspect logging choices and avoid adding a Dedicated profile.",
+      "Open the Application Url and inspect revision and replica status. In Scale, inspect or deliberately set a small approved HTTP range, such as minimum zero and maximum two, and note that saving a changed rule creates a revision.",
+      "Stop sending requests, inspect replica behavior after scale-down stabilization, and compare a later first request with subsequent requests. Treat timing as an observation rather than a guaranteed cold-start duration; monitoring traffic and current rules can affect the result.",
+      "Record resource names, image references, resource sizes, revision identities, configured scale limits, and observations, then perform the narrow cleanup below."
+    ],
+    "expectedResults": [
+      "The registry exists without running application compute, and its actual login server may include a protection hash.",
+      "The ACI sample responds while running, and verified Stop deallocates its group resources without deleting the separate registry.",
+      "The Container App exposes its sample through the application URL and shows a revision with replica and scale settings.",
+      "Changing an app scale rule creates a revision, while subsequent scaling changes how many copies of a revision run; observed timing need not be instantaneous."
+    ],
+    "cleanup": [
+      "Inspect the exact recorded disposable group and every resource before deletion. If anything is shared or unrelated, do not delete the group; identify only the named lab resources.",
+      "Delete the lab ACI group, Container App, and its exclusively lab-owned environment, plus the lab registry and any exclusively lab-owned logging resource. Never delete an environment or workspace used by other apps.",
+      "If the recorded group is confirmed to contain only this lab, deleting that group is an alternative. Do not manually alter platform-managed infrastructure resource groups; remove owned parent resources through their supported lifecycle.",
+      "Verify the named resources are gone and review Cost Management after usage records arrive. A closed browser, a stopped ACI group, or a Container App at zero replicas is not proof that all lab-related charges ended."
+    ]
+  }
+}

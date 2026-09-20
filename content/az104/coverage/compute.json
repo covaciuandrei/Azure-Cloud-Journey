@@ -1,0 +1,492 @@
+{
+  "schemaVersion": 1,
+  "domainId": "compute",
+  "reviewedAt": "2026-09-20",
+  "objectives": [
+    {
+      "objectiveId": "co-01",
+      "lessons": [
+        {
+          "moduleId": "infrastructure-as-code",
+          "lessonId": "iac-arm-and-bicep-model",
+          "sectionIds": [
+            "desired-state-not-click-history",
+            "read-complete-arm-network",
+            "read-equivalent-bicep-network",
+            "scope-region-and-dependencies",
+            "trace-a-repeatable-deployment"
+          ],
+          "checkpointIds": [
+            "iac-interpret-resource-names",
+            "iac-interpret-dependency",
+            "iac-idempotent-scope",
+            "iac-version-and-scope"
+          ],
+          "evidence": "The learner traces complete equivalent ARM JSON and Bicep examples through parameters, computed names, API contracts, scope, resources, outputs, and explicit versus implicit dependencies. The worked school network explains repeated deployment and the difference between changing an authoring symbol and changing resource identity."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-02",
+      "lessons": [
+        {
+          "moduleId": "infrastructure-as-code",
+          "lessonId": "iac-modify-and-deploy",
+          "sectionIds": [
+            "define-a-bounded-change",
+            "modify-arm-json-fields",
+            "stacks-and-change-reasoning"
+          ],
+          "checkpointIds": [
+            "iac-modify-arm-consumer"
+          ],
+          "evidence": "The learner changes two exact locations in the earlier complete ARM template using parseable replacement objects, preserves required properties and dependencies, and follows both values to consuming resource properties. The worked approval case applies those edits to a calculated subnet capacity requirement and shared tags without accidental resource replacement."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-03",
+      "lessons": [
+        {
+          "moduleId": "infrastructure-as-code",
+          "lessonId": "iac-modify-and-deploy",
+          "sectionIds": [
+            "define-a-bounded-change",
+            "modify-bicep-fields",
+            "stacks-and-change-reasoning"
+          ],
+          "checkpointIds": [
+            "iac-modify-bicep-prefix"
+          ],
+          "evidence": "The learner replaces actual Bicep parameter and variable declarations while retaining the resource consumers, symbolic references, and scope. The worked case calculates 59 ordinary assignable addresses for a /26, rejects a /27 for 50 required addresses, and explains why a changed symbol or unused parameter would not implement the request."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-04",
+      "lessons": [
+        {
+          "moduleId": "infrastructure-as-code",
+          "lessonId": "iac-modify-and-deploy",
+          "sectionIds": [
+            "validate-preview-and-apply",
+            "incremental-is-not-property-patching",
+            "stacks-and-change-reasoning"
+          ],
+          "checkpointIds": [
+            "iac-deployment-scope-and-preview",
+            "iac-resource-lifecycle"
+          ],
+          "evidence": "Scoped CLI examples teach local compilation, live validation, what-if, explicit parameters, permissions, and confirmed deployment of either authoring format. The worked change review keeps preview and apply inputs identical. Main teaching separates incremental resource preservation from omitted properties, explains legacy complete-mode risk, and uses current stack lifecycle guidance."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-05",
+      "lessons": [
+        {
+          "moduleId": "infrastructure-as-code",
+          "lessonId": "iac-export-and-decompile",
+          "sectionIds": [
+            "two-exports-two-questions",
+            "export-boundaries-and-secrets",
+            "bounded-export-decompile-workflow",
+            "repair-recovered-intent",
+            "recover-the-school-template"
+          ],
+          "checkpointIds": [
+            "iac-export-current-or-history",
+            "iac-decompile-and-build",
+            "iac-export-not-backup",
+            "iac-export-missing-resource"
+          ],
+          "evidence": "Portal and CLI procedures distinguish current-resource export from deployment history, then decompile into a separate Bicep file and compile locally without deploying. The worked recovery compares original /24 intent with current /26 state, checks resource and dependency gaps, protects secrets, and rejects both data-backup and exact-round-trip assumptions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-06",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-create-size-and-connect",
+          "sectionIds": [
+            "select-vm-components",
+            "quota-and-capacity",
+            "create-vm-worked-plan",
+            "access-three-gates"
+          ],
+          "checkpointIds": [
+            "vm-create-compatible-components",
+            "vm-family-quota-arithmetic",
+            "vm-private-access-gates"
+          ],
+          "evidence": "The learner selects compatible image, architecture, size, region, disks, NIC, and authentication; calculates both regional and family quota headroom; and follows a worked private Linux creation procedure. The application acceptance checks separate Azure management rights, network reachability, and guest authentication."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-07",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-disks-and-host-encryption",
+          "sectionIds": [
+            "encryption-boundaries",
+            "host-encryption-worked-example",
+            "encryption-restrictions-and-retirement"
+          ],
+          "checkpointIds": [
+            "vm-host-encryption-eligibility",
+            "vm-ade-retirement-response"
+          ],
+          "evidence": "The learner distinguishes persistent storage SSE, host/cache encryption, and guest ADE, then follows a worked host-encryption configuration with subscription registration, supported size, deallocation, reallocation, and verification. Eligibility checks reject incompatible ADE histories and explain the dated retirement and disk-format restrictions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-08",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-moves-and-regional-planning",
+          "sectionIds": [
+            "three-different-moves",
+            "resource-move-preflight",
+            "resource-group-move-worked",
+            "moved-identities-and-rbac",
+            "regional-move-constraints",
+            "regional-move-worked"
+          ],
+          "checkpointIds": [
+            "vm-move-scope-versus-region",
+            "vm-subscription-move-dependencies",
+            "vm-move-identity-validation",
+            "vm-regional-move-acceptance"
+          ],
+          "evidence": "Distinct worked plans cover resource-group, subscription, and regional moves rather than treating a management-scope change as relocation. The learner consolidates dependencies, validates destination compatibility, updates changed resource IDs and access, checks managed identities, and performs regional target acceptance before commit and narrow source cleanup."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-09",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-create-size-and-connect",
+          "sectionIds": [
+            "measure-before-resizing",
+            "resize-worked-maintenance"
+          ],
+          "checkpointIds": [
+            "vm-resize-durability"
+          ],
+          "evidence": "The learner diagnoses the actual resource bottleneck and follows a worked Windows resize that checks architecture, disk-interface and temporary-storage compatibility, quota, and maintenance requirements. The procedure protects persistent data, treats temporary scratch as disposable, and verifies actual running allocation instead of trusting the model's requested size."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-10",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-disks-and-host-encryption",
+          "sectionIds": [
+            "disk-roles-and-persistence",
+            "guest-storage-responsibilities",
+            "attach-disk-worked-example",
+            "expand-and-detach-disks"
+          ],
+          "checkpointIds": [
+            "vm-disk-role-choice",
+            "vm-disk-expand-guest"
+          ],
+          "evidence": "The learner distinguishes managed OS and data disks, temporary storage, and ephemeral OS disks. A worked attachment identifies the correct empty device, initializes and formats its guest volume, grants service access, and checks recovery and deletion settings; expansion teaching separately extends the guest filesystem and explains deallocation boundaries."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-11",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-availability-and-scale-sets",
+          "sectionIds": [
+            "availability-failure-boundaries",
+            "zone-set-worked-placement"
+          ],
+          "checkpointIds": [
+            "vm-zone-versus-set",
+            "vm-domain-reasoning"
+          ],
+          "evidence": "A worked frontend design chooses two-zone placement for a zone-failure requirement, verifies compatible regional components, and checks surviving application capacity. An availability-set alternative is explicitly limited to its narrower fault boundary, with fault-domain and update-domain counts and behavior explained rather than promising automatic application availability."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-12",
+      "lessons": [
+        {
+          "moduleId": "virtual-machines",
+          "lessonId": "vm-availability-and-scale-sets",
+          "sectionIds": [
+            "scale-set-orchestration",
+            "scale-set-deployment-plan",
+            "autoscale-metric-arithmetic",
+            "rolling-upgrades-and-health"
+          ],
+          "checkpointIds": [
+            "vmss-autoscale-calculation",
+            "vmss-flexible-upgrade-health"
+          ],
+          "evidence": "The learner compares Flexible and Uniform orchestration, then follows a worked Flexible fleet deployment with compatible placement, network paths, repeatable workers, and application-health prerequisites. Explicit CPU, queue, batch, cooldown, and count calculations distinguish autoscale from health-gated rolling upgrades and from availability placement."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-13",
+      "lessons": [
+        {
+          "moduleId": "azure-containers",
+          "lessonId": "containers-images-and-registry",
+          "sectionIds": [
+            "registry-tier-and-region",
+            "registry-portal-create-manage",
+            "registry-managed-identity-and-roles",
+            "registry-worked-private-pull"
+          ],
+          "checkpointIds": [
+            "registry-private-endpoint-tier",
+            "registry-abac-pull",
+            "registry-portal-management"
+          ],
+          "evidence": "The learner chooses a registry tier and region, follows portal creation and management, and inspects artifact identities and lifecycle. The worked private-image case assigns Repository Reader with a repository condition to the actual pull identity, distinguishing ABAC-enabled roles, legacy AcrPull, broad admin credentials, and network reachability."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-14",
+      "lessons": [
+        {
+          "moduleId": "azure-containers",
+          "lessonId": "containers-instances",
+          "sectionIds": [
+            "aci-shared-network-and-storage",
+            "aci-portal-provision-and-observe",
+            "aci-private-image-tool-boundary"
+          ],
+          "checkpointIds": [
+            "aci-portal-verification"
+          ],
+          "evidence": "The worked ACI portal deployment selects a compatible public image, explicit CPU and memory, restart behavior, and limited network exposure, then verifies running state, endpoint response, and request logs. Main content separately explains shared group networking, durable output, and why private-image managed identity is not the admin-account portal shortcut."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-15",
+      "lessons": [
+        {
+          "moduleId": "azure-containers",
+          "lessonId": "containers-apps-scaling",
+          "sectionIds": [
+            "apps-current-workload-profiles",
+            "apps-subnet-requirements",
+            "apps-portal-provision",
+            "apps-managed-identity-pull"
+          ],
+          "checkpointIds": [
+            "apps-subnet-environment-choice",
+            "apps-revision-versus-replica"
+          ],
+          "evidence": "The learner distinguishes current workload profiles, legacy Consumption-only environments, and qualified Flexible preview, including their different subnet requirements. A worked portal procedure creates the environment and application, selects ingress and resources, verifies the revision and response, and explains a subsequent private-image identity configuration."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-16",
+      "lessons": [
+        {
+          "moduleId": "azure-containers",
+          "lessonId": "containers-instances",
+          "sectionIds": [
+            "aci-resource-requests-and-limits",
+            "aci-worked-sizing-change",
+            "aci-stop-billing-and-prediction"
+          ],
+          "checkpointIds": [
+            "aci-group-allocation",
+            "aci-resize-and-cost"
+          ],
+          "evidence": "The learner adds per-container CPU and memory requests to obtain group allocation, diagnoses a measured converter memory shortage, and calculates a replacement configuration. The worked procedure preserves output before required recreation and distinguishes stopped group-compute billing from persistent dependency costs."
+        },
+        {
+          "moduleId": "azure-containers",
+          "lessonId": "containers-apps-scaling",
+          "sectionIds": [
+            "apps-sizing-and-profile-capacity",
+            "apps-http-scaling-and-cold-start",
+            "apps-event-scaling-and-authentication",
+            "apps-worked-scaling-calculation"
+          ],
+          "checkpointIds": [
+            "apps-queue-scale-calculation",
+            "apps-sizing-and-wakeup"
+          ],
+          "evidence": "The learner separates per-replica sizing from Dedicated profile-instance capacity, HTTP demand, and authenticated event signals. A worked twenty-three-message backlog calculates a bounded four-replica target and aggregate resources, while min/max settings, scale-to-zero activation, cold starts, and allocation limits qualify the result."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-17",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-plans-and-scaling",
+          "sectionIds": [
+            "app-versus-plan",
+            "region-os-sku",
+            "create-school-web-app"
+          ],
+          "checkpointIds": [
+            "plan-provisioning-choice"
+          ],
+          "evidence": "The learner distinguishes an app from its shared worker plan and provisions a Linux Standard S1 plan in a worked portal procedure. Region, operating system, tier features, instance capacity, and separate application configuration are selected from explicit school requirements rather than treated as interchangeable settings."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-18",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-plans-and-scaling",
+          "sectionIds": [
+            "scale-up-versus-out",
+            "monitor-autoscale-worked",
+            "automatic-scaling-selection"
+          ],
+          "checkpointIds": [
+            "shared-plan-scaling",
+            "automatic-or-monitor"
+          ],
+          "evidence": "The worked Azure Monitor autoscale example configures plan-instance bounds, CPU scale-out and scale-in rules, cooldowns, and a recurring schedule. Teaching contrasts this with scale-up and qualifying Premium per-app HTTP automatic scaling, including the shared-plan effect and the difference between requested capacity and service guarantees."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-19",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-plans-and-scaling",
+          "sectionIds": [
+            "create-school-web-app",
+            "runtime-identity-and-data"
+          ],
+          "checkpointIds": [
+            "plan-provisioning-choice",
+            "create-identity-grant"
+          ],
+          "evidence": "The learner follows a worked creation procedure for a compatible App Service web app, checks deployed content instead of relying on resource status, and configures its runtime identity. A separate worked managed-identity grant permits narrowly scoped document reads without confusing management Contributor access with data authorization."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-20",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-tls-dns-and-networking",
+          "sectionIds": [
+            "tls-and-certificate-binding",
+            "certificate-choice-renewal-scope",
+            "custom-domain-worked"
+          ],
+          "checkpointIds": [
+            "tls-sni-selection",
+            "certificate-renewal-boundaries"
+          ],
+          "evidence": "Worked hostname and certificate procedures select an appropriate certificate and SNI binding, verify HTTPS, and replace an uploaded certificate without first removing its live binding. Teaching explains current managed-certificate validation and renewal prerequisites, uploaded-certificate responsibility, and shared private-certificate scope."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-21",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-tls-dns-and-networking",
+          "sectionIds": [
+            "dns-ownership-routing-binding",
+            "custom-domain-worked"
+          ],
+          "checkpointIds": [
+            "domain-record-reasoning"
+          ],
+          "evidence": "The worked custom-domain case creates ownership-verification TXT and routing CNAME records, validates and adds the App Service hostname, and binds TLS separately. The learner can distinguish authoritative DNS routing, proof of ownership, hostname recognition, and browser certificate behavior."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-22",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-slots-and-backups",
+          "sectionIds": [
+            "backup-types-and-limits",
+            "custom-backup-worked",
+            "linked-databases-current-boundaries",
+            "restore-worked-and-exclusions"
+          ],
+          "checkpointIds": [
+            "backup-size-and-schedule",
+            "backup-network-authorization",
+            "restore-boundaries"
+          ],
+          "evidence": "Worked backup and restore procedures configure a size-compliant Standard-plan custom backup with SAS-authorized storage, deliberate scheduling, and retention, then rehearse restoration to an isolated target. Main content covers Basic production-slot support, automatic versus custom limits, network prerequisites, excluded resources, and already-removed new linked-database options with separate native database protection."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-23",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-tls-dns-and-networking",
+          "sectionIds": [
+            "inbound-public-and-private",
+            "outbound-vnet-integration",
+            "private-path-worked",
+            "diagnose-layer-by-layer"
+          ],
+          "checkpointIds": [
+            "network-directions-choice",
+            "network-versus-data-failure"
+          ],
+          "evidence": "The worked private-path design configures distinct integration and private-endpoint subnets, controls public inbound access, establishes app and SCM private DNS, and tests private database reachability. Teaching separates inbound access restrictions and private endpoints from outbound VNet integration, then distinguishes network success from application and data authorization."
+        }
+      ]
+    },
+    {
+      "objectiveId": "co-24",
+      "lessons": [
+        {
+          "moduleId": "azure-app-service",
+          "lessonId": "app-service-slots-and-backups",
+          "sectionIds": [
+            "slots-are-live-apps",
+            "sticky-and-unswapped-settings",
+            "slot-swap-worked",
+            "warmup-auth-and-rollback"
+          ],
+          "checkpointIds": [
+            "slot-sticky-targets",
+            "slot-safety-and-rollback"
+          ],
+          "evidence": "The worked release procedure creates and secures a staging slot, deploys a candidate, configures sticky dependency settings, checks source and target warm-up requirements, and swaps into production. Identity and networking that do not swap, authentication restrictions, and database-compatibility limits prevent treating a slot swap as complete application rollback."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1542 @@
+{
+  "schemaVersion": 1,
+  "id": "azure-app-service",
+  "title": "App Service: operate a website without operating its servers",
+  "summary": "Build a reasoned hosting plan for a fictional Romanian school's timetable website. Separate capacity, identity, DNS, certificates and network paths, then practise safe releases and recovery without assuming that a managed platform manages every dependency.",
+  "priority": "core",
+  "priorityReason": "The AZ-104 study guide effective 2026-04-17 explicitly includes App Service plans, scaling, app creation, certificates, custom DNS names, backups, networking and deployment slots. These lessons teach co-17 through co-24 rather than predict how often a topic appears on an exam.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/app-service/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Provision an App Service plan.",
+    "Configure App Service plan scaling.",
+    "Create an App Service.",
+    "Configure certificates and TLS for App Service.",
+    "Map an existing custom DNS name to App Service.",
+    "Configure App Service backup.",
+    "Configure App Service networking.",
+    "Configure App Service deployment slots."
+  ],
+  "lessons": [
+    {
+      "id": "app-service-plans-and-scaling",
+      "title": "Choose the hosting resources before adding more copies",
+      "summary": "Create a web app and its plan, give the running app a narrowly authorized identity, and distinguish larger workers, more workers, metric rules and HTTP-driven automatic scaling.",
+      "objectives": [
+        "Distinguish an App Service app from the plan supplying its compute resources.",
+        "Choose an operating system, region and pricing tier using workload and feature requirements.",
+        "Describe a portal creation flow and separate deployment from application readiness.",
+        "Grant a managed identity data access without confusing it with administrator permissions.",
+        "Select and configure the appropriate scale-up or scale-out mechanism."
+      ],
+      "sections": [
+        {
+          "id": "app-versus-plan",
+          "title": "The website and the computers running it are different resources",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The fictional school already has a timetable program that can answer web requests. It needs somewhere to run continuously, not only on a teacher's laptop. Azure App Service supplies managed hosting for web applications and application programming interfaces, or APIs. An API is an interface through which another program requests data or work. App Service manages the underlying hosting infrastructure and supported platform runtimes. The school still owns its code, dependencies, data permissions, settings and recovery decisions. Managed hosting does not repair an incorrect database query or authorize a student to see a teacher's private documents."
+            },
+            {
+              "type": "paragraph",
+              "text": "An App Service app is the deployed application resource: its hostname, application settings, runtime configuration, identity and deployment targets. An App Service plan describes the compute resources that run one or more apps. A worker is one of the virtual machine instances supplying those resources. The plan chooses the region, operating system, worker size, instance count and pricing tier. Think of the app as the timetable program and the plan as the rented computing capacity. Deleting or stopping one program is not the same operation as giving up the rented capacity."
+            },
+            {
+              "type": "paragraph",
+              "text": "With ordinary plan-wide scaling, each app runs on the plan's workers. If timetable-web and documents-web share a two-worker Standard plan, each app uses those same two workers, not two exclusive workers each. Their CPU and memory demands compete. Deployment slots, logging and background work can also consume plan resources. Dedicated compute means dedicated to this plan rather than other customers, not dedicated to each app within it. A separate plan is useful when the document conversion job must not compete with the morning timetable rush. Stopping a paid app does not stop the plan's allocated-worker charges."
+            }
+          ]
+        },
+        {
+          "id": "region-os-sku",
+          "title": "Turn requirements into a plan choice",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A region is the Azure geographic deployment area for the plan. The app runs in that region on its plan; the resource group's location does not relocate the workers. Choose a region considering the users, database, organizational rules and available capacity. For our example, assume West Europe supports the selected tier and the school's approved private database is there. That is an explicit scenario assumption, not a promise that every subscription can create every size there. A different region or operating system normally means planning a different compatible plan and redeploying, not pressing Scale out."
+            },
+            {
+              "type": "paragraph",
+              "text": "The operating system, or OS, must suit the application. A cross-platform web runtime may work on Linux or Windows; an application requiring the classic Windows-only .NET Framework needs Windows. Select a currently supported runtime version rather than copying an old tutorial's version. A SKU, meaning stock keeping unit, is the product-size label such as S1 within a pricing tier. Its size affects worker resources; its tier also unlocks features. These lessons use ordinary multitenant App Service plans, not the separate Managed Instance hosting option or an App Service Environment."
+            },
+            {
+              "type": "table",
+              "caption": "Feature requirements used in the school examples",
+              "headers": [
+                "Tier choice",
+                "What it means here",
+                "Important boundary"
+              ],
+              "rows": [
+                [
+                  "Free or Shared",
+                  "Apps use shared infrastructure with per-app CPU quotas.",
+                  "No scale-out. Free has no custom domains; Shared supports custom domains but not custom-domain TLS bindings."
+                ],
+                [
+                  "Basic",
+                  "Dedicated plan workers, custom-domain TLS and manual scale-out.",
+                  "Up to three workers; no deployment slots or Azure Monitor autoscale."
+                ],
+                [
+                  "Standard",
+                  "Metric or scheduled autoscale, deployment slots and the backup workflow used below.",
+                  "Up to ten workers and five staging slots per app; these are limits, not recommended starting counts."
+                ],
+                [
+                  "Premium v2, v3 or v4",
+                  "More sizing options and eligibility for App Service HTTP-driven automatic scaling.",
+                  "Availability depends on OS, region and capacity. Automatic scaling has additional restrictions."
+                ]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Quotas are not all measured in the same way. Free has a daily CPU-time allowance of 60 minutes, Shared 240 minutes per app, and short-period limits also apply. CPU time is processing consumption, not the time a student leaves a browser open. Dedicated tiers are still bounded by worker resources and feature limits. Storage limits generally apply across apps in a plan, not as a new independent allowance for each app. Check the exact SKU limits and subscription availability before selecting it. A plan supporting unlimited apps in a table does not provide unlimited memory."
+            }
+          ]
+        },
+        {
+          "id": "create-school-web-app",
+          "title": "Worked example: create a compatible plan and app",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Provision the timetable host, then prove what is running",
+              "scenario": "Assume an approved practice subscription, permission to create App Service resources, a tested cross-platform school application and no real pupil data. The school requires a staging slot and scheduled scaling, so choose Standard S1 on Linux in West Europe if that combination is available.",
+              "steps": [
+                {
+                  "action": "In the portal, open Create a resource, choose Web App, and select the intended subscription and a dedicated practice resource group.",
+                  "why": "Subscription controls billing and quotas; the resource group gives a clear management and cleanup boundary. Neither is a runtime identity or database permission."
+                },
+                {
+                  "action": "Choose an available app name, Publish as Code, a supported runtime matching the tested program, Linux and West Europe.",
+                  "why": "These choices determine how App Service starts the program. Choosing Container instead would require a compatible image and image-pull configuration, not just the same source files."
+                },
+                {
+                  "action": "Under App Service plan, create school-web-plan and explicitly select Standard S1. Alternatively select an existing compatible plan only after reviewing its other apps and load.",
+                  "why": "Creating the app can provision the plan in the same wizard, but they remain separate resources. Standard is chosen for required slots and autoscale, not because every website needs it."
+                },
+                {
+                  "action": "Review the networking, deployment and monitoring choices, then review the estimated cost before Create. Record the resulting plan and app resource names.",
+                  "why": "An automatically added monitoring resource can have its own charges. Resource creation success only confirms the platform configuration was accepted."
+                },
+                {
+                  "action": "Deploy the school's approved artifact through its authorized deployment process, then open the default domain copied from Overview and inspect startup logs if necessary.",
+                  "why": "An empty platform welcome page is not the timetable application. New apps may have a hash and region in their default hostname, so construct neither DNS records nor test URLs by guessing the name."
+                }
+              ],
+              "result": "The app and plan are visible separately. A successful timetable request must show the expected application version and data, not merely an Azure resource with a Running status. Database and document access are configured as separate following steps."
+            },
+            {
+              "type": "paragraph",
+              "text": "Deployment authorization is permission to publish code or update the resource. Application authentication is how a teacher signs into the website. These do not automatically authorize the running program to read the private database. Keep nonsecret settings, such as an environment name or database hostname, in the app's environment variables. Treat credentials as secrets rather than putting them in source code. After changing runtime settings, expect and plan for possible restarts, then retest a real request. Do not infer application correctness from a successful management operation."
+            }
+          ]
+        },
+        {
+          "id": "runtime-identity-and-data",
+          "title": "Give the application its own narrowly authorized identity",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A managed identity is an identity in Microsoft Entra ID whose credentials Azure manages. A system-assigned identity belongs to the app and is deleted with it. A user-assigned identity is a separate resource that can outlive or be attached to several apps. The app can obtain an access token, a time-limited credential addressed to a target service, without storing an account password. That token represents the application, not automatically the teacher using its website. The program must still implement the school's user-level authorization rules."
+            },
+            {
+              "type": "example",
+              "title": "Allow reading timetable documents, not editing the whole subscription",
+              "scenario": "The school keeps published PDF documents in a Blob Storage container named timetables. Assume the application's code already supports managed-identity authentication and its outbound storage path is allowed.",
+              "steps": [
+                {
+                  "action": "On the app, open Identity, set System assigned to On and save; record the resulting principal identity.",
+                  "why": "This creates an identity for the running app. It does not itself grant any container or database permission."
+                },
+                {
+                  "action": "Have an authorized administrator add Storage Blob Data Reader for that identity at the timetables container's scope using Access control (IAM).",
+                  "why": "The task is reading this container's data. A broad Contributor role manages resources and is not a substitute for an explicit least-privilege blob data role."
+                },
+                {
+                  "action": "Make a document request through the app after allowing permission changes to propagate, and verify that writes remain unauthorized.",
+                  "why": "Testing the app's identity proves more than the administrator opening a document in their own portal session. Delays in role propagation or token caches can explain a temporarily stale result."
+                }
+              ],
+              "result": "The app can read authorized documents without receiving subscription-wide administrative power. A database separately needs its own supported identity mapping and database grants; a blob role cannot authorize a SQL query."
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep four questions separate: can the administrator configure the resource, can the app reach the destination, can the app authenticate to it, and is the requested data operation permitted? The administrator assigning roles also needs role-assignment permission at the target scope. Network integration does not create that permission, and an access token does not open a firewall. This distinction will explain why an app can start normally while its first document or database request fails."
+            }
+          ]
+        },
+        {
+          "id": "scale-up-versus-out",
+          "title": "Choose larger workers or more workers for the actual bottleneck",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Scale up changes the plan's size or tier, for example S1 to S2 for more resources per worker, or Basic to Standard for a required feature. Scale out changes the number of worker instances. Two workers can process different requests concurrently, but they do not combine their memory into one giant process. If generating one timetable requires more memory than one worker has, adding another equally small worker may not help. If many independent requests saturate CPU across the website, additional workers may help, provided the database can keep up."
+            },
+            {
+              "type": "paragraph",
+              "text": "In the portal, Scale up selects a supported pricing size; Scale out controls instance counts or scaling modes. Under ordinary plan-wide scaling, both operations affect the resources available to every app sharing the plan. Scaling the web plan does not scale Azure SQL Database or Blob Storage. Check response time, errors, CPU, memory and database limits before choosing. A database that permits only a limited number of simultaneous queries might become less stable when more web workers send requests. More workers also increase charges while allocated."
+            },
+            {
+              "type": "paragraph",
+              "text": "Design for requests reaching different workers. If a student's session exists only in one worker's memory, another worker may not know it. Session affinity can keep a browser associated with one worker, but it does not turn that memory into durable shared data. Prefer an appropriate external state store and idempotent background work. Idempotent means repeating an operation does not incorrectly duplicate its effect, such as sending the same notification twice. Scale-out improves capacity only when application and dependency behavior can use the extra copies."
+            }
+          ]
+        },
+        {
+          "id": "monitor-autoscale-worked",
+          "title": "Worked example: scale the shared plan with measurable rules",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Prepare for students opening the timetable before lessons",
+              "scenario": "The Standard plan normally runs two workers. Testing shows that the app is CPU-bound and the database has enough capacity for four workers. The following thresholds are a school design choice, not universal recommendations.",
+              "steps": [
+                {
+                  "action": "Open the plan's Scale out page or Azure Monitor Autoscale, choose Custom autoscale, and set minimum 2, default 2 and maximum 4 instances.",
+                  "why": "A scaling rule cannot grow beyond its maximum. The minimum prevents routine scale-in below the chosen baseline; the default is a fallback setting rather than the maximum."
+                },
+                {
+                  "action": "Create a rule that increases count by one when average plan CPU exceeds 70 percent for ten minutes. Configure a five-minute cooldown.",
+                  "why": "A sustained average is less sensitive to a momentary spike. A cooldown gives that rule time after a scaling action before it can act again."
+                },
+                {
+                  "action": "Create a scale-in rule for average CPU below 30 percent over ten minutes, also with a cooldown, then save.",
+                  "why": "A lower scale-in threshold leaves a gap between opposite actions. Identical thresholds can cause repeated scale-out and scale-in as capacity changes the measured CPU load."
+                },
+                {
+                  "action": "For a known Monday morning surge, add a recurring scheduled condition with an appropriate baseline and verify its selected time zone.",
+                  "why": "A schedule can prepare capacity before a predictable event. Romanian local time and a schedule using another time zone are not interchangeable, especially around daylight-saving changes."
+                },
+                {
+                  "action": "Observe metrics, actual instance count and autoscale run history during a controlled test.",
+                  "why": "A saved rule is only configuration. The run history shows whether the measured conditions and limits actually resulted in the intended capacity change."
+                }
+              ],
+              "result": "Azure Monitor evaluates metric or schedule conditions for the whole plan. The school's document app shares the resulting workers too, so its load and costs must be included in the review."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-autoscale-ceiling",
+              "prompt": "The CPU rule is satisfied, but someone left minimum, default and maximum all set to two. Will autoscale create a third worker?",
+              "answer": "No. The configured maximum prevents it.",
+              "explanation": "A trigger requests a capacity change within the plan's configured bounds. Correct the maximum, then check quotas and observed scaling; changing DNS or redeploying identical code cannot remove that bound."
+            }
+          ]
+        },
+        {
+          "id": "automatic-scaling-selection",
+          "title": "Automatic scaling is not another name for Azure Monitor autoscale",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "App Service automatic scaling is a separate HTTP-traffic-driven scale-out mode. As reviewed here, it supports Premium v2 through v4 plans and Windows or Linux apps deployed as code or containers. It does not scale deployment-slot traffic and is not the mechanism for Azure Functions apps. Mixing Functions and web apps in this plan disables automatic scaling. Use only one scaling method for a plan. Choose Azure Monitor autoscale when you need CPU, memory or scheduled rules; choose automatic scaling when you want App Service to make HTTP-demand decisions without writing those rules."
+            },
+            {
+              "type": "paragraph",
+              "text": "Automatic scaling is enabled on the plan but gives individual web apps their own always-ready minimum and maximum scale limit. The plan's maximum burst bounds total available capacity, currently up to 30 instances for supported Premium v2, v3 and v4 plans. Always-ready instances have a minimum of one, so this is not a promise to scale to zero. Prewarmed instances provide a ready buffer as traffic activates scaling. Allocated prewarmed instances are billable too. The apps still share the plan's resources when their demands overlap."
+            },
+            {
+              "type": "paragraph",
+              "text": "For example, on an eligible Premium plan, select Automatic under Scale out and save a maximum burst of six. Configure timetable-web with two always-ready instances and enforce its per-app maximum of four; give documents-web a maximum of two after checking its needs. Four is a protection limit for timetable-web, not a reservation of four exclusive workers. Inspect actual instance metrics and downstream performance. Review and disable session affinity for this mode so requests can use available workers; externalize any session state instead of relying on affinity to hide a stateful design."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match the mechanism, scope and prerequisite",
+              "text": "Larger memory per process points to scale up. More concurrent copies points to scale out. Scheduled or CPU-driven growth on Standard points to Azure Monitor autoscale for the plan. Rule-free HTTP-driven growth with per-app limits points to App Service automatic scaling on eligible Premium v2-v4 plans. None of these choices automatically scales or authorizes the private database."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "plan-provisioning-choice",
+          "kind": "single",
+          "prompt": "The school needs a Linux code app in West Europe with deployment slots and CPU-based autoscale. Assume S1 is available there. Which creation choice meets these requirements without selecting an unnecessary higher tier?",
+          "choices": [
+            {
+              "id": "standard-plan",
+              "text": "Create a compatible Linux Standard S1 plan in West Europe and place the app in it.",
+              "explanation": "Standard supports deployment slots and Azure Monitor autoscale. Region and OS are properties of the compatible hosting plan."
+            },
+            {
+              "id": "free-app",
+              "text": "Create a Free plan and add a paid custom domain.",
+              "explanation": "Buying a domain does not change the plan's tier. Free lacks the required slots and autoscale."
+            },
+            {
+              "id": "basic-workers",
+              "text": "Create three Basic workers and treat one as a staging slot.",
+              "explanation": "Workers are compute instances, not independently deployable slots. Basic does not provide the required slot or autoscale features."
+            }
+          ],
+          "correctIds": [
+            "standard-plan"
+          ],
+          "explanation": "Select by runtime compatibility and feature prerequisites before choosing instance count. Creating the app and creating its plan are related but distinct decisions."
+        },
+        {
+          "id": "shared-plan-scaling",
+          "kind": "single",
+          "prompt": "Two apps share a Standard plan with ordinary plan-wide scaling. An Azure Monitor rule raises its count from two workers to three. What follows?",
+          "choices": [
+            {
+              "id": "larger-process",
+              "text": "The memory available to each individual process triples.",
+              "explanation": "Scale-out adds copies on workers rather than merging their memory. Larger per-worker memory is a scale-up concern."
+            },
+            {
+              "id": "shared-capacity",
+              "text": "Both apps use the plan's three workers, while their separate database is unchanged.",
+              "explanation": "Plan-wide scaling changes shared compute capacity for all its apps. It does not scale another Azure service."
+            },
+            {
+              "id": "six-exclusive",
+              "text": "Each app receives three exclusive workers, giving six billed workers.",
+              "explanation": "The two apps share the plan's three workers; dedicated compute is not a separate allocation per app."
+            }
+          ],
+          "correctIds": [
+            "shared-capacity"
+          ],
+          "explanation": "Count the plan's workers and consider all its apps. Do not confuse horizontal capacity with a larger machine or database scaling."
+        },
+        {
+          "id": "automatic-or-monitor",
+          "kind": "single",
+          "prompt": "An eligible Premium v3 plan contains only web apps. The school requires capacity to rise before a fixed Monday event even if no HTTP traffic has arrived. Which method directly expresses that requirement?",
+          "choices": [
+            {
+              "id": "http-automatic",
+              "text": "App Service automatic scaling alone.",
+              "explanation": "Automatic scaling reacts to HTTP demand and provides per-app limits, but it does not support the required schedule."
+            },
+            {
+              "id": "certificate-renewal",
+              "text": "Managed certificate automatic renewal.",
+              "explanation": "Certificate renewal maintains a TLS credential, not compute instance counts or schedules."
+            },
+            {
+              "id": "scheduled-monitor",
+              "text": "Azure Monitor autoscale with a scheduled condition.",
+              "explanation": "Azure Monitor autoscale supports time-based conditions at plan scope, including preparation before traffic arrives."
+            }
+          ],
+          "correctIds": [
+            "scheduled-monitor"
+          ],
+          "explanation": "The word automatic is insufficient. The requested signal is time, which distinguishes Azure Monitor autoscale from HTTP-driven App Service automatic scaling."
+        },
+        {
+          "id": "create-identity-grant",
+          "kind": "multiple",
+          "prompt": "The new app's code uses managed-identity authentication. Its storage path is reachable. Which TWO actions give it read-only access to the timetables blob container without granting broader administration?",
+          "choices": [
+            {
+              "id": "scale-extra-worker",
+              "text": "Scale the plan to another worker.",
+              "explanation": "Capacity does not create an identity or data permission."
+            },
+            {
+              "id": "enable-runtime-identity",
+              "text": "Enable its system-assigned managed identity and identify that principal.",
+              "explanation": "The running app needs an identity from which it can obtain a token. The administrator's own identity is not inherited."
+            },
+            {
+              "id": "grant-container-reader",
+              "text": "Assign Storage Blob Data Reader to that principal at the container scope.",
+              "explanation": "This directly authorizes reading the intended blob data at a limited scope."
+            },
+            {
+              "id": "assign-subscription-owner",
+              "text": "Give the app Owner over the subscription.",
+              "explanation": "This is excessive administrative authority and is not the stated least-privilege data-access design."
+            }
+          ],
+          "correctIds": [
+            "enable-runtime-identity",
+            "grant-container-reader"
+          ],
+          "explanation": "App creation, runtime identity and target data authorization are separate steps. A reachable storage endpoint does not itself authorize a read."
+        }
+      ],
+      "takeaways": [
+        "The app carries code and configuration; the plan supplies shared hosting capacity in one region and operating system.",
+        "A SKU must satisfy runtime, feature, capacity and budget requirements before additional workers are useful.",
+        "Scale up changes worker size or tier; scale out changes the number of workers.",
+        "Azure Monitor autoscale uses plan-level metrics and schedules; App Service automatic scaling uses HTTP demand with eligible-plan and per-app constraints.",
+        "A managed identity removes application credential management, not the need for data grants, network access or user authorization."
+      ],
+      "sourceIds": [
+        "app-overview",
+        "app-plans",
+        "app-limits",
+        "app-create",
+        "app-identities",
+        "blob-data-roles",
+        "scale-up",
+        "monitor-autoscale",
+        "automatic-scaling",
+        "exam-guide"
+      ]
+    },
+    {
+      "id": "app-service-tls-dns-and-networking",
+      "title": "Make names, certificates and network directions agree",
+      "summary": "Give the public timetable site a verified custom name and TLS binding, then distinguish filtering its entrance from reaching a private database or providing a private app endpoint.",
+      "objectives": [
+        "Separate domain ownership verification, DNS routing, app hostname binding and TLS binding.",
+        "Choose and maintain an appropriate certificate, including managed-certificate limitations.",
+        "Distinguish public access restrictions, private endpoints and outbound virtual network integration.",
+        "Trace DNS resolution, packet paths and permissions independently.",
+        "Plan supported network settings for the public website and a private staff application."
+      ],
+      "sections": [
+        {
+          "id": "dns-ownership-routing-binding",
+          "title": "A familiar name has several separate jobs",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A student should type timetable.classroom.example rather than remember an Azure-generated hostname. That is a fictional documentation name, not a domain to register or deploy. In a real exercise, use a domain you own or have permission to manage. DNS, the Domain Name System, answers questions about names. An A record supplies an IPv4 address; a CNAME record points one name to another. A TXT record holds text and can prove domain control. These records have different purposes even when they are all edited on the same DNS provider's page."
+            },
+            {
+              "type": "paragraph",
+              "text": "First, App Service must establish that you control the custom name. The portal provides a domain verification ID for a TXT record such as asuid.timetable in the classroom.example zone. Second, a CNAME for timetable directs clients to the app's actual default hostname. Third, you add the hostname to the app so its hosting front end knows which app should answer requests for it. Finally, a certificate and TLS binding secure HTTPS for that hostname. Ownership, traffic routing, application binding and encrypted transport are not one operation, even if a portal wizard helps configure several."
+            },
+            {
+              "type": "paragraph",
+              "text": "Custom domains require a paid App Service tier. Shared can host a custom domain, but custom-domain TLS requires Basic or higher. The default Azure hostname already has platform-provided HTTPS, which does not automatically cover classroom.example. A root or apex domain, classroom.example itself, normally uses an A record with the app's displayed inbound IP and an asuid TXT record. A subdomain normally uses a CNAME and asuid.subdomain TXT. Copy current values from the portal because default hostname formats and inbound IP addresses can change."
+            }
+          ]
+        },
+        {
+          "id": "custom-domain-worked",
+          "title": "Worked example: attach the school name without confusing verification with routing",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Map the public timetable subdomain",
+              "scenario": "Assume the app runs on Standard, the real equivalent of classroom.example has an editable public DNS zone, and no existing production website depends on the proposed subdomain.",
+              "steps": [
+                {
+                  "action": "Open Custom domains, Add custom domain, choose the external domain provider option and enter timetable.classroom.example as the fictional equivalent of the real name.",
+                  "why": "This identifies the hostname to bind. Purchasing an App Service domain is unnecessary when the school already controls its domain."
+                },
+                {
+                  "action": "At the authoritative DNS provider, add CNAME timetable pointing directly to the default domain copied from App Service Overview, and TXT asuid.timetable with the displayed verification ID.",
+                  "why": "The CNAME routes name resolution; the TXT establishes control and helps protect against another app claiming a dangling name. A verification TXT record does not route browser traffic."
+                },
+                {
+                  "action": "Return to the portal, validate the records and add the hostname. Investigate incorrect zone names or cached old records if validation or browsing disagrees.",
+                  "why": "A record edited in a DNS zone that is not authoritative is not useful to public clients. Cached records may also survive an edit until their time to live expires."
+                },
+                {
+                  "action": "Create or import the intended certificate and add an SNI TLS binding for this hostname, then open the HTTPS URL and inspect the browser's certificate information.",
+                  "why": "Hostname mapping without a valid certificate binding can still produce a browser warning. Test the real custom name, not only the default Azure name."
+                }
+              ],
+              "result": "The browser resolves the intended host, App Service recognizes the hostname, and the TLS certificate covers that exact name. Keep the verification record and remove obsolete routing records when retiring the app rather than leaving a dangling CNAME."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a migration, a TXT-only validation can establish control before the A or CNAME sends traffic to the new app. That is useful staging, not proof that users already arrive there. Compare the public lookup with the expected target and separately test the new binding. If DNS is correct but the website returns an unexpected page, inspect the app hostname binding and deployed content instead of changing unrelated database permissions."
+            }
+          ]
+        },
+        {
+          "id": "tls-and-certificate-binding",
+          "title": "TLS protects the connection, not the application's decisions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Transport Layer Security, or TLS, authenticates the server name to the browser and protects data in transit. HTTPS is HTTP carried over TLS. A server certificate contains a public key and signed identity information; the server also needs the corresponding private key. The browser checks the name, validity dates and trust chain to an accepted certificate authority. A certificate for documents.classroom.example is not automatically valid for timetable.classroom.example. Encryption does not decide whether a signed-in student may download a staff document."
+            },
+            {
+              "type": "paragraph",
+              "text": "A TLS binding associates a hostname and certificate with the app's HTTPS endpoint. Server Name Indication, or SNI, lets modern clients name the destination during the TLS handshake so several certificates can share an IP address. It is the normal school choice. IP-based TLS uses a dedicated public IP, requires Standard or higher, and can require updating an A record when the address changes. It is not supported with App Service private endpoints. Do not purchase or configure a dedicated IP merely because a custom domain needs HTTPS."
+            },
+            {
+              "type": "paragraph",
+              "text": "In Custom domains, add or update the binding, choose the certificate covering the name and select SNI SSL. The portal retains some older SSL wording although modern connections use TLS. Review HTTPS Only and the minimum TLS version in the app's general settings; confirm at least TLS 1.2 and the clients' compatibility. A Secured label confirms a binding exists, not that every browser will trust an expired or otherwise unsuitable certificate. App Service terminates inbound TLS at its front end; an outbound database connection needs its own supported encryption configuration."
+            }
+          ]
+        },
+        {
+          "id": "certificate-choice-renewal-scope",
+          "title": "Choose a certificate lifecycle that can keep working",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The free App Service managed certificate is appropriate for an eligible publicly validated custom hostname on Basic or higher. App Service renews it and updates associated bindings while the prerequisites continue to hold. It is not the same product as a purchased App Service Certificate. The free certificate cannot be exported, does not support wildcard names or private DNS, and is not supported in an App Service Environment. It also has a 64-character custom-domain limit and restricted hostname characters. A wildcard requirement such as every subdomain under classroom.example therefore needs another certificate option."
+            },
+            {
+              "type": "paragraph",
+              "text": "For the free managed certificate, a subdomain must map directly by CNAME to the supported App Service hostname, or to a supported Traffic Manager arrangement; an intermediate CNAME prevents issuance and renewal. The certificate guide describes an apex A record pointing at the app and excludes its Traffic Manager apex arrangement. Restrictive Certificate Authority Authorization, or CAA, DNS records must allow the documented issuer, DigiCert. Keep the supported public DNS configuration true after issuance. A later DNS or proxy change can break renewal without immediately breaking today's still-valid certificate."
+            },
+            {
+              "type": "paragraph",
+              "text": "The July 2025 change moved managed-certificate issuance and renewal to HTTP token validation. The November 2025 section and FAQ in the current Learn update supersede its older July public-access warning: App Service now serves DigiCert's validation token at the front end even when normal app requests are blocked by public-access settings, IP restrictions, App Service authentication, private endpoints or client-certificate requirements. Validation does not reach the application workers, and customers do not need to allowlist DigiCert IPs. Therefore, do not teach that disabling public access alone always prevents managed renewal, or loosen the staff site's access policy just for that reason."
+            },
+            {
+              "type": "paragraph",
+              "text": "The November update still requires public DNS: a private-DNS-only custom name cannot be validated. Traffic Manager configurations must use Azure endpoints, not Nested or External endpoints, and certificates for trafficmanager.net domains are unsupported. Review these exact conditions when choosing a private site's certificate. A private endpoint with an eligible publicly validated name is different from a private-only DNS name. Use another certificate option for private-DNS-only names, wildcard coverage or export requirements. Avoid pinning clients to the free certificate's thumbprint, keys or issuer chain because Azure can change them at renewal. Verify the actual renewal result after configuration changes."
+            },
+            {
+              "type": "paragraph",
+              "text": "An uploaded private certificate must be a password-protected PFX, a Personal Information Exchange file containing the private key and certificate chain, including intermediate and root certificates. For custom-domain TLS it must support server authentication and be signed by a trusted authority. Importing from Key Vault is another option, but the App Service resource provider needs the documented vault permissions and reachable supported configuration. Granting the web app's runtime identity secret access is not automatically the same as authorizing that platform certificate import."
+            },
+            {
+              "type": "example",
+              "title": "Renew an uploaded certificate without removing the working binding first",
+              "scenario": "The school's uploaded certificate expires next month. The replacement covers the same hostname and meets App Service's private-certificate requirements.",
+              "steps": [
+                {
+                  "action": "Upload the replacement certificate, then choose Update binding for the custom domain and select the replacement.",
+                  "why": "An uploaded certificate does not automatically renew or update its binding. Replacing the binding in place avoids unnecessarily removing the live HTTPS configuration."
+                },
+                {
+                  "action": "Verify the served certificate and HTTPS behavior, then remove the obsolete certificate only after checking its other uses.",
+                  "why": "Uploaded or imported private certificates are shared within the webspace defined by the plan's resource group, region and OS combination. They are not necessarily private to one app or one plan."
+                }
+              ],
+              "result": "The live hostname serves the replacement certificate. A certificate imported from Key Vault instead normally synchronizes renewed versions and applicable bindings within 24 hours, assuming its permissions remain intact; verify synchronization rather than assuming immediate replacement."
+            }
+          ]
+        },
+        {
+          "id": "inbound-public-and-private",
+          "title": "Choose how clients enter the app",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Inbound means a client initiates a connection to the app. Access restrictions filter requests arriving at the app's public entry point. Rules are evaluated by priority, with lower numbers first, and can allow or deny addresses or supported service-endpoint subnets. Set the unmatched-rule action deliberately. Adding a rule without an explicit unmatched action normally introduces an implicit deny for unmatched requests. A denied public request typically receives HTTP 403. These restrictions are not user sign-in rules and do not create a private IP address."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a public staging app that only school administrators should test, add an allow rule for the office's actual public egress address, followed by an explicit unmatched Deny. The office's internal 192.168 address is not the source seen after internet address translation. Test from the allowed office and an unrelated network. The source control management, or SCM, site used for publishing and the Kudu diagnostic console has separate access rules or can inherit the main site's restrictions. Allow the authorized deployment system too, rather than discovering after a release that its publishing route is blocked."
+            },
+            {
+              "type": "paragraph",
+              "text": "A private endpoint instead gives the app an inbound private IP in a VNet through Azure Private Link. A virtual network, or VNet, is the school's Azure private network. For App Service web apps, the documented supported plans include Basic, Standard, Premium v2-v4 and Isolated v2, with additional App Service Environment configuration for Isolated. Windows, Linux and compatible container apps are supported. Adding a private endpoint does not necessarily disable the public endpoint: explicitly disable public network access when private-only access is the requirement. Public access restriction rules are not evaluated for traffic arriving through the private endpoint."
+            }
+          ]
+        },
+        {
+          "id": "outbound-vnet-integration",
+          "title": "Let the app start connections to its private database",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Outbound means the app starts a connection, for example to its database or document storage. Regional VNet integration sends selected outbound traffic through a subnet in a VNet in the same region as the app. It does not place an inbound private entrance on the app, and a private endpoint for the app does not supply this outbound path. Basic and the documented higher dedicated tiers support integration; Free and Shared do not. The integration subnet must be delegated to Microsoft.Web/serverFarms and reserved for supported integration use, not used as the app's private-endpoint subnet."
+            },
+            {
+              "type": "paragraph",
+              "text": "An existing integration subnet must be at least /28; portal creation during integration requires at least /27. For this school, reserve a separate /26, giving 64 total addresses before Azure's five reserved addresses. Each ordinary plan worker needs an address and changes of worker size can temporarily require additional addresses. This provides growth room rather than selecting the smallest subnet that barely works today. Windows containers and multiple plans sharing a subnet have additional address requirements, so do not reuse this simple calculation for them without recalculating."
+            },
+            {
+              "type": "paragraph",
+              "text": "In the app's Networking page, configure VNet integration to the intended same-region subnet. Private-address traffic then uses that integration; sending all outbound application traffic into the VNet is a separate routing choice. Network security group outbound rules and user-defined routes apply to traffic actually sent through integration. Their inbound rules do not control the website's public entrance. Operations such as container image pulls and custom backup traffic have their own configuration-routing settings. A blanket internet-deny rule can also block necessary identity or certificate-check dependencies, so trace the required paths before tightening it."
+            },
+            {
+              "type": "paragraph",
+              "text": "The integrated app uses the VNet's DNS configuration, including linked private zones when Azure-provided DNS is used. A database private endpoint needs a name resolving to that private address from the app's environment, an allowed network path and a database identity with appropriate grants. Testing only from an administrator's laptop can miss the app's different DNS view. A DNS fix, a route fix and a permission fix solve different failure types."
+            }
+          ]
+        },
+        {
+          "id": "private-path-worked",
+          "title": "Worked example: private staff access and private database access",
+          "blocks": [
+            {
+              "type": "diagram",
+              "title": "Inbound and outbound use different App Service features",
+              "description": "The staff browser connects through the office's configured private network path to the app private endpoint. The app independently initiates its database connection through VNet integration in a different subnet. Private DNS must give the appropriate destinations, and application and database permissions are still required. The diagram represents request direction, not movement of the app into the private-endpoint subnet.",
+              "nodes": [
+                {
+                  "id": "staff-browser",
+                  "label": "Staff browser",
+                  "detail": "Office with configured VPN access",
+                  "column": 0,
+                  "row": 0
+                },
+                {
+                  "id": "app-private-endpoint",
+                  "label": "App private endpoint",
+                  "detail": "Inbound subnet: 10.20.4.0/24",
+                  "column": 1,
+                  "row": 0
+                },
+                {
+                  "id": "school-web-app",
+                  "label": "Staff App Service app",
+                  "detail": "Public network access disabled",
+                  "column": 2,
+                  "row": 0
+                },
+                {
+                  "id": "integration-subnet",
+                  "label": "VNet integration",
+                  "detail": "Outbound subnet: 10.20.3.0/26",
+                  "column": 2,
+                  "row": 1
+                },
+                {
+                  "id": "private-database",
+                  "label": "Private database",
+                  "detail": "Private DNS, path and grants",
+                  "column": 1,
+                  "row": 1
+                }
+              ],
+              "edges": [
+                {
+                  "from": "staff-browser",
+                  "to": "app-private-endpoint",
+                  "label": "Inbound HTTPS"
+                },
+                {
+                  "from": "app-private-endpoint",
+                  "to": "school-web-app",
+                  "label": "Private Link"
+                },
+                {
+                  "from": "school-web-app",
+                  "to": "integration-subnet",
+                  "label": "App initiates"
+                },
+                {
+                  "from": "integration-subnet",
+                  "to": "private-database",
+                  "label": "Database request"
+                }
+              ]
+            },
+            {
+              "type": "example",
+              "title": "Build each direction and verify it independently",
+              "scenario": "The public student timetable stays public. A separate Standard staff app must be reachable only through the office's already configured VPN connection and must query a private database in the school VNet. Both app and VNet are in West Europe.",
+              "steps": [
+                {
+                  "action": "Configure the staff app's VNet integration with 10.20.3.0/26 and verify the database name resolves privately from the app.",
+                  "why": "This establishes and tests the outbound direction. A successful browser connection says nothing about the app's database resolver."
+                },
+                {
+                  "action": "Create and approve the app's private endpoint in 10.20.4.0/24, then disable public network access on this staff app.",
+                  "why": "A separate subnet is required for the endpoint and integration. Disabling public access closes the alternative public entrance rather than assuming endpoint creation did so."
+                },
+                {
+                  "action": "Configure the app's records in privatelink.azurewebsites.net and arrange office DNS resolution through the existing private DNS design.",
+                  "why": "The default app name must resolve to the private endpoint for office clients. Public resolution alone can still lead to the public front end and a 403."
+                },
+                {
+                  "action": "Include the app's SCM private DNS record and verify that the authorized deployment runner also has a private path.",
+                  "why": "A browser-only success does not prove publishing and diagnostics can reach their separate hostname."
+                },
+                {
+                  "action": "Test the default HTTPS hostname from the office, then test a database read using the app's identity and confirm that public clients cannot enter.",
+                  "why": "The original hostname preserves certificate-name matching. Using a bare private IP is not an equivalent HTTPS test, and network reachability still does not grant database data access."
+                }
+              ],
+              "result": "The staff app has a private inbound route and a separate private outbound route. A custom staff hostname would additionally need public ownership validation, internal DNS routing and an appropriate certificate; private DNS alone does not prove public domain ownership."
+            }
+          ]
+        },
+        {
+          "id": "diagnose-layer-by-layer",
+          "title": "Predict which change could actually fix the failure",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "predict-integration-not-private-site",
+              "prompt": "The public timetable app receives VNet integration and can now reach the private database. Public network access remains enabled and no inbound restriction was added. Has the website become private?",
+              "answer": "No. It still has its configured public entrance.",
+              "explanation": "VNet integration changes the app's outbound access. Private inbound access requires an appropriate private endpoint and DNS path, plus explicitly disabling public access when that is the goal. Applying an inbound network security group rule to the integration subnet does not replace those controls."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose the staff browser resolves the correct private IP and reaches a login screen, but a teacher sees a forbidden document message after signing in. Preserve the working DNS and network path while investigating the application's authorization. Conversely, if the app resolves the database name to an unwanted public address, adding broader database permissions cannot correct that destination. Record each test's vantage point, hostname, expected address, connection result and identity. This makes troubleshooting reproducible instead of collecting unrelated successful screenshots."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Name the boundary before selecting a feature",
+              "text": "Custom DNS maps and verifies a name; TLS authenticates and encrypts a connection; access restrictions filter the public app entrance; a private endpoint supplies private inbound connectivity; VNet integration supplies outbound connectivity. None grants the teacher application rights or the app database data rights. An app can need all of these controls at once."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "domain-record-reasoning",
+          "kind": "single",
+          "prompt": "A TXT record successfully verifies timetable.classroom.example, but no A or CNAME routing record has been added. What can the administrator conclude?",
+          "choices": [
+            {
+              "id": "private-database-ready",
+              "text": "The app can now reach its private database.",
+              "explanation": "Public custom-domain validation does not configure the app's outbound DNS, routing or database access."
+            },
+            {
+              "id": "ownership-only",
+              "text": "Domain control can be validated, but clients are not thereby directed to the app.",
+              "explanation": "TXT validation and traffic routing have different purposes. Migration scenarios deliberately separate them."
+            },
+            {
+              "id": "tls-complete",
+              "text": "HTTPS for the name is now complete.",
+              "explanation": "A valid certificate and binding are still required; a verification TXT record is not a TLS credential."
+            }
+          ],
+          "correctIds": [
+            "ownership-only"
+          ],
+          "explanation": "Determine which task each record performs. Do not infer routing or encryption merely from successful ownership verification."
+        },
+        {
+          "id": "tls-sni-selection",
+          "kind": "single",
+          "prompt": "A Standard app serves one custom hostname to modern browsers. Its DNS mapping works, and a valid uploaded certificate covers that hostname. Which action enables the intended custom-domain HTTPS without a dedicated public IP?",
+          "choices": [
+            {
+              "id": "ip-required",
+              "text": "Buy a dedicated public IP because custom names cannot share one.",
+              "explanation": "That is precisely the limitation SNI avoids. IP-based TLS is not required here."
+            },
+            {
+              "id": "txt-certificate",
+              "text": "Put the private key into the domain verification TXT record.",
+              "explanation": "A TXT verification record proves domain control, not TLS possession. Publishing a private key would expose the credential."
+            },
+            {
+              "id": "sni-binding",
+              "text": "Add an SNI TLS binding between the hostname and that certificate.",
+              "explanation": "SNI supports hostname-based certificate selection on a shared IP and meets the stated browser requirement."
+            }
+          ],
+          "correctIds": [
+            "sni-binding"
+          ],
+          "explanation": "DNS points at the app; the TLS binding selects the correct server certificate for the custom name."
+        },
+        {
+          "id": "certificate-renewal-boundaries",
+          "kind": "multiple",
+          "prompt": "Which TWO statements correctly guide the school's certificate maintenance?",
+          "choices": [
+            {
+              "id": "upload-rebind",
+              "text": "A renewed manually uploaded certificate must be selected in the hostname's binding.",
+              "explanation": "Uploading a replacement does not automatically change the existing binding. Update it and test the served certificate."
+            },
+            {
+              "id": "private-webspace",
+              "text": "An imported private certificate may be available to other apps in the same resource-group, region and OS webspace.",
+              "explanation": "Private certificate scope is the documented deployment unit, not an assumption of one-app isolation."
+            },
+            {
+              "id": "free-private-wildcard",
+              "text": "The free managed certificate is an exportable wildcard certificate for private DNS.",
+              "explanation": "It supports neither wildcard certificates, export nor private DNS."
+            },
+            {
+              "id": "forever-validated",
+              "text": "Once issuance succeeds, later DNS or access restriction changes cannot affect managed renewal.",
+              "explanation": "The validation prerequisites must continue to hold, and the documentation flags changes to managed-certificate issuance and renewal."
+            }
+          ],
+          "correctIds": [
+            "upload-rebind",
+            "private-webspace"
+          ],
+          "explanation": "Certificate selection includes renewal ownership, ongoing validation and resource scope, not just the first successful HTTPS request."
+        },
+        {
+          "id": "network-directions-choice",
+          "kind": "multiple",
+          "prompt": "The Standard staff app must be private to an already connected office and must initiate requests to a private database. Which TWO feature configurations directly address the two directions?",
+          "choices": [
+            {
+              "id": "inbound-nsg-only",
+              "text": "An inbound deny rule on the integration subnet as the only website access control.",
+              "explanation": "Integration is outbound-only; its inbound NSG rules do not control public App Service requests."
+            },
+            {
+              "id": "database-role-only",
+              "text": "A database data role instead of either network configuration.",
+              "explanation": "Data authorization is still necessary, but it creates neither inbound nor outbound network connectivity."
+            },
+            {
+              "id": "endpoint-inbound",
+              "text": "An app private endpoint with correct client DNS and public network access disabled.",
+              "explanation": "This provides the private inbound entrance and removes the public alternative."
+            },
+            {
+              "id": "integration-outbound",
+              "text": "Regional VNet integration through a separate delegated subnet, with database DNS and routing verified.",
+              "explanation": "This supplies the app's outbound private path. The endpoint subnet cannot also serve as the integration subnet."
+            }
+          ],
+          "correctIds": [
+            "endpoint-inbound",
+            "integration-outbound"
+          ],
+          "explanation": "Inbound client-to-app and outbound app-to-database are distinct paths with different App Service features."
+        },
+        {
+          "id": "network-versus-data-failure",
+          "kind": "single",
+          "prompt": "The app resolves the private database name correctly, connects and authenticates successfully, but the database explicitly denies the timetable SELECT operation. What should be investigated next?",
+          "choices": [
+            {
+              "id": "new-public-address",
+              "text": "Assign a public database address.",
+              "explanation": "The intended private path already works. Public exposure does not supply the missing query permission."
+            },
+            {
+              "id": "new-cname",
+              "text": "Change the browser-facing custom-domain CNAME.",
+              "explanation": "That record concerns inbound website naming and cannot grant a database query."
+            },
+            {
+              "id": "database-grants",
+              "text": "The authenticated app identity's database permissions.",
+              "explanation": "The stated denial is for a data operation after successful connectivity and authentication."
+            }
+          ],
+          "correctIds": [
+            "database-grants"
+          ],
+          "explanation": "Use the observed failure stage. Correct naming and a successful connection are evidence to preserve, not reasons to redesign unrelated networking."
+        }
+      ],
+      "takeaways": [
+        "Verification TXT records, routing A or CNAME records, app hostname bindings and TLS bindings perform separate jobs.",
+        "SNI is the normal modern-browser TLS choice; certificate renewal must preserve validation prerequisites and the correct binding.",
+        "A free managed certificate is not an exportable wildcard or private-DNS certificate.",
+        "Private certificates uploaded or imported into App Service have webspace scope, so review other apps before removal.",
+        "Private endpoints handle inbound access; VNet integration handles outbound access through a different subnet.",
+        "Diagnose DNS, packet paths, authentication and data authorization from the relevant client's viewpoint."
+      ],
+      "sourceIds": [
+        "custom-domains",
+        "app-certificates",
+        "managed-certificate-update",
+        "tls-bindings",
+        "access-restrictions",
+        "vnet-integration",
+        "private-endpoints",
+        "app-identities",
+        "exam-guide"
+      ]
+    },
+    {
+      "id": "app-service-slots-and-backups",
+      "title": "Release cautiously and recover the right things",
+      "summary": "Use slots for tested releases without confusing a swap with data rollback, then configure current App Service backups with realistic size, schedule, storage, network and restore boundaries.",
+      "objectives": [
+        "Create a deployment slot and identify content and settings that do or do not swap.",
+        "Plan warm-up, source-slot security and compatible rollback.",
+        "Distinguish automatic and custom backups using current supported tiers and limits.",
+        "Configure a Standard-plan custom backup to authorized reachable storage.",
+        "Plan a tested restore without assuming databases, identities or network resources are recreated."
+      ],
+      "sections": [
+        {
+          "id": "slots-are-live-apps",
+          "title": "A staging slot is live, not a folder of inactive files",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A deployment slot is a separately addressable live version of an app. Production is the version serving normal users; a staging slot can run a candidate release before that release receives production traffic. Slots require Standard, Premium or Isolated. Standard supports five staging slots per app. Slots share the parent app's App Service plan workers, so a heavy staging test can compete with production. There is no separate slot feature charge, but enough paid plan capacity is still required. A slot is not a new isolated plan, a separate region or a backup."
+            },
+            {
+              "type": "paragraph",
+              "text": "On the app's Deployment slots page, select Add, name the slot staging, and choose whether to clone configuration from another slot. Cloning configuration does not copy deployed content, and a private endpoint is not cloned. Deploy the candidate build to the slot explicitly and use the slot URL displayed in its own Overview page. A newly created slot receives zero percent of automatically routed production traffic, but its own hostname is still an entrance. Zero percent is not a firewall and does not stop someone who knows the staging URL from trying it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Before deploying, set staging-specific network restrictions and application authentication. Restrict its publishing endpoint as well, while preserving access for authorized deployment agents. If private endpoints are used, configure each slot separately; endpoints cannot be shared between slots. Likewise, configure that slot's own VNet integration and managed identity where needed. Copying production's settings can accidentally point a test build at production dependencies, so inspect connection targets before letting it start background work."
+            }
+          ]
+        },
+        {
+          "id": "sticky-and-unswapped-settings",
+          "title": "Decide what travels with the release and what belongs to the environment",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A swap exchanges deployed app content and swappable configuration between source and target slots while switching their routing. Some configuration follows the code, while other configuration remains associated with a slot. An app setting or connection string marked Deployment slot setting is often called sticky: its environment-specific value stays with that slot after the swap. Set the checkbox in the slot's environment-variable or connection-string editor and save. Use it for a database target or environment-specific feature flag, not indiscriminately for every setting."
+            },
+            {
+              "type": "table",
+              "caption": "Normal slot behavior without legacy stickiness overrides",
+              "headers": [
+                "Item",
+                "Normal behavior",
+                "School decision"
+              ],
+              "rows": [
+                [
+                  "Deployed content and runtime framework settings",
+                  "Swap with the release.",
+                  "Test that the new build and runtime are compatible before release."
+                ],
+                [
+                  "Ordinary app settings and connection strings",
+                  "Swap unless explicitly marked slot-specific.",
+                  "Mark environment-specific database and document targets as deployment slot settings."
+                ],
+                [
+                  "Custom hostnames, nonpublic certificates and TLS bindings",
+                  "Do not swap.",
+                  "Keep the public school hostname and its HTTPS binding on production."
+                ],
+                [
+                  "Managed identities and VNet integration",
+                  "Do not swap.",
+                  "Configure and authorize the source and target slot environments separately."
+                ],
+                [
+                  "Scale settings and publishing endpoints",
+                  "Do not swap.",
+                  "A swap does not create new capacity or exchange deployment URLs."
+                ],
+                [
+                  "IP restrictions, HTTPS/TLS protocol settings and Always On",
+                  "Normally do not swap.",
+                  "Review both slots explicitly; do not enable the legacy override to hide a configuration mistake."
+                ]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "Sticky describes the final slot association, not a guarantee that the staging process never sees production values. During preparation, App Service applies target slot-specific settings to the source so the candidate can start with its future configuration. A candidate that runs database migrations or sends emails at startup may therefore affect production before traffic is switched. That is why a harmless test page and a genuinely safe release are different standards."
+            }
+          ]
+        },
+        {
+          "id": "slot-swap-worked",
+          "title": "Worked example: release the new timetable layout",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Use staging as source and production as target",
+              "scenario": "Production serves build 12; staging will receive build 13. Both builds use the same backward-compatible database schema. Initially staging uses a test database and test documents. No startup task writes or sends notifications without an explicit job-control decision.",
+              "steps": [
+                {
+                  "action": "Create staging, deploy build 13, and mark the database and document target settings as slot-specific in the intended configuration.",
+                  "why": "The code should move into production, while production's final data targets remain production's. A cloned configuration alone would not supply build 13."
+                },
+                {
+                  "action": "Test the staging URL with permitted test users, including a timetable read and a deliberately denied staff-document request.",
+                  "why": "Testing both expected success and expected denial checks behavior beyond whether the home page loads."
+                },
+                {
+                  "action": "Review source and target network paths, managed identities, grants and authentication callbacks before opening Swap.",
+                  "why": "These boundaries do not all travel with the code. The candidate must be safe during source-side preparation and functional after it uses production's identity and network configuration."
+                },
+                {
+                  "action": "Select staging as Source and production as Target, and inspect both sets of setting changes shown by the portal.",
+                  "why": "The source is restarted and warmed while the target remains serving. Reversing the intended roles undermines this preparation model."
+                },
+                {
+                  "action": "Use swap with preview only when supported and site authentication is not enabled in either slot; otherwise perform the supported ordinary swap after equivalent pre-release checks.",
+                  "why": "Preview pauses after applying target settings to the source for validation. It is not available with site authentication enabled in a slot, so disabling required authentication just to obtain preview would be the wrong trade-off."
+                },
+                {
+                  "action": "After completion, check build 13 through the production hostname, inspect errors and confirm its data access. Keep the old build in staging until the release is accepted.",
+                  "why": "The hosting switch is not an acceptance test. Retaining the old build permits an immediate reverse swap if the failure is in compatible application code."
+                }
+              ],
+              "result": "Production has build 13 and its intended environment-specific configuration. Staging holds the previous production build. The database itself was not swapped, and the release process has not created a database recovery point."
+            }
+          ]
+        },
+        {
+          "id": "warmup-auth-and-rollback",
+          "title": "Warm-up is a readiness check, not a guarantee of safe business behavior",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "App Service prepares the source with target-specific settings, restarts it and waits for warm-up before the routing switch. With default warm-up behavior, any HTTP response can count as a response, including one that does not prove the timetable database works. Use a carefully designed readiness path when appropriate. The app settings WEBSITE_SWAP_WARMUP_PING_PATH and WEBSITE_SWAP_WARMUP_PING_STATUSES can select a path and acceptable status codes, such as only 200. A readiness endpoint should be quick, non-destructive and expose no private data. It should verify necessary dependencies without sending emails or changing timetables."
+            },
+            {
+              "type": "paragraph",
+              "text": "During preparation the source may run with production connection settings while it still has the source slot's identity and network environment. Confirm that this combination is authorized for the specific required checks, not by casually granting staging broad production write access. Restrict public access to staging and inspect authentication configuration for both source and target, including redirect hostnames. App Service authentication settings participate in preparation, so treat a test slot exposed to the internet as a real security boundary. If the desired isolation prevents safe preparation, redesign the release checks rather than bypassing that isolation."
+            },
+            {
+              "type": "paragraph",
+              "text": "Auto swap is another feature: it automatically swaps after deployment and warm-up. It is not supported for Linux web apps or Web App for Containers. Our Linux school example uses a reviewed manual swap. A completed swap is reversible by swapping the same two slots again, provided the previous build remains available and compatible. This restores the previous application release, not database rows, uploaded external documents or messages already sent. A schema migration that removed a column used by build 12 can make reverse swapping fail too. Plan backward-compatible changes and independent data recovery."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-slot-data-rollback",
+              "prompt": "Build 13 accidentally deletes timetable rows from the production database after a successful swap. The team immediately swaps build 12 back. Are the rows restored?",
+              "answer": "No. Reversing the application swap does not undo external database writes.",
+              "explanation": "The old code returns to production, but it sees the database's current state. Data recovery needs the database's own tested backup or point-in-time restore process, plus a decision about legitimate changes made after the chosen recovery point."
+            }
+          ]
+        },
+        {
+          "id": "backup-types-and-limits",
+          "title": "Choose between platform recovery points and configured custom backups",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An app backup is a recoverable copy of supported app files and configuration. It is not necessarily a copy of every service the app depends on. Current App Service backup and restore support includes Basic, Standard, Premium and Isolated. On Basic, only the production slot is supported. Automatic backups are platform-created without an account you configure; custom backups require configuration and store downloadable artifacts in your storage account. Both have content and restore limitations, so first identify where the school's real data lives."
+            },
+            {
+              "type": "table",
+              "caption": "Current backup behavior, with custom scheduling scoped to the lesson's Standard plan",
+              "headers": [
+                "Question",
+                "Automatic backups",
+                "Custom backups"
+              ],
+              "rows": [
+                [
+                  "Maximum backup size",
+                  "30 GB; automatic backups exceeding the limit cannot be restored.",
+                  "10 GB total, including at most 4 GB of a supported legacy linked database."
+                ],
+                [
+                  "Frequency",
+                  "Hourly and not configurable.",
+                  "Standard: no more often than every two hours; at most 12 backups per day including manual plus scheduled."
+                ],
+                [
+                  "Retention",
+                  "30 days, fixed, with progressively fewer retained points.",
+                  "Scheduled retention is configurable from 0-30 days or indefinite; on-demand backups are retained indefinitely."
+                ],
+                [
+                  "Retained automatic points",
+                  "Days 1-3 retain hourly points; days 4-14 retain every third hourly point; days 15-30 retain every sixth hourly point.",
+                  "Inspect the configured schedule and retention rather than assuming the automatic policy applies."
+                ],
+                [
+                  "Storage and downloads",
+                  "No customer storage account required; not downloadable.",
+                  "A configured Azure Storage account and container hold ZIP data and XML metadata."
+                ],
+                [
+                  "Scope extensions",
+                  "No partial backup selection or linked database backup.",
+                  "Partial backups are supported; linked database support has major restrictions and retirement changes."
+                ],
+                [
+                  "Network option",
+                  "No backup-over-VNet option.",
+                  "Backup and restore over VNet integration are supported when explicitly configured and reachable."
+                ]
+              ]
+            },
+            {
+              "type": "paragraph",
+              "text": "There is a documentation difference worth handling precisely. The backup article gives a general custom schedule of every two hours and 12 daily backups. The central App Service limits table lists one-hour schedules and 50 daily backups for Premium and Isolated. The Standard examples and checkpoints here use the agreed two-hour and 12-per-day limits. Do not generalize that Standard limit to all tiers or promise a higher-tier cadence without checking the current tier-specific documentation and configuration."
+            },
+            {
+              "type": "paragraph",
+              "text": "Automatic backups cover supported persistent app content under the Windows HOME or Linux /home location, not arbitrary data everywhere. They do not include run-from-ZIP package contents or content in custom-mounted Azure storage such as an Azure Files share. Container recovery therefore also depends on preserving its image and deployment artifacts. Automatic backups are stored in the same datacenter as the app and should not be the school's entire regional disaster recovery plan. A recovery point's existence is not proof that every dependency can be restored."
+            }
+          ]
+        },
+        {
+          "id": "custom-backup-worked",
+          "title": "Worked example: configure a Standard-plan backup with a usable restore path",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Protect six gigabytes of app content separately from the database",
+              "scenario": "The Standard school app has 6 GB of supported content, no linked database in its App Service backup, and a same-subscription storage account approved for SAS-based backup authorization. Its database and external document archive have separate protection.",
+              "steps": [
+                {
+                  "action": "Open Backups, Configure custom backups, and select the dedicated storage account and blob container in the same subscription.",
+                  "why": "Custom backups need a storage destination. App Service backup and restore use supported shared access signature, or SAS, authorization, not the app's managed identity."
+                },
+                {
+                  "action": "If storage is firewall-protected, verify the app's VNet integration, the storage network allowance and DNS path, then select Backup/restore over virtual network integration.",
+                  "why": "The storage token and network route are separate prerequisites. A valid SAS cannot bypass the firewall. Configure the option separately for each slot that will back up or restore."
+                },
+                {
+                  "action": "Set a six-hour schedule and an explicit seven-day scheduled retention, then save and trigger one controlled Backup Now operation.",
+                  "why": "Four scheduled backups per day plus one manual test stay within Standard's 12-per-day total. Seven days is our chosen policy, not an assumed platform default; the manual backup itself is retained indefinitely."
+                },
+                {
+                  "action": "Check the operation's status and error details, and locate the matching ZIP and XML artifacts without modifying them.",
+                  "why": "A schedule that saves can still fail because of expired SAS authorization, inaccessible storage, size or other errors. Editing backup artifacts can make them unusable."
+                },
+                {
+                  "action": "Plan and perform a restore rehearsal into an isolated test target with the same OS platform and a working storage path.",
+                  "why": "A completed backup proves capture; the rehearsal tests whether the chosen destination can actually read, restore and run the protected content."
+                }
+              ],
+              "result": "The configured backup fits the Standard size and daily-count limits, has a deliberate retention policy and has an independently verified recovery path. Monitoring must continue because later storage firewall, SAS or routing changes can break future operations."
+            },
+            {
+              "type": "paragraph",
+              "text": "If app content grows beyond 10 GB, custom backup does not silently protect only the first 10 GB. It fails. A _backup.filter file can exclude selected files from custom backups, for example reproducible logs, but it is not supported for automatic backups. Excluding the only copy of important documents defeats the purpose. Partial-backup restore also preserves destination paths named by the filter rather than deleting everything there. Document those exceptions so a rehearsal does not mistake old leftover files for restored data."
+            }
+          ]
+        },
+        {
+          "id": "linked-databases-current-boundaries",
+          "title": "Do not design new database protection around a retiring checkbox",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Historically, a custom App Service backup could include certain linked databases selected from the app's configured connection strings. That was never equivalent to backing up every reachable database. The combined backup limit is 10 GB and the linked database portion may not exceed 4 GB. Azure Database for MySQL Flexible Server and PostgreSQL Flexible Server are not supported by this linked-backup feature. Backups over VNet integration cannot include a linked database. Thus the school's private database needs its own service-native protection even though the web app can query it."
+            },
+            {
+              "type": "paragraph",
+              "text": "As of this module's September 20, 2026 review, new custom backup configurations no longer offer linked MySQL or PostgreSQL databases, following the November 2025 removal, or linked Azure SQL and SQL Server databases, following the April 2026 removal. Existing custom configurations that already include supported linked databases can continue until March 31, 2028, when App Service linked-database backup support ends, subject to the existing limitations before then. These dates explain why the older compatibility table is not permission to configure a new linked-database backup today. Use those legacy limits to assess an inherited system, and use native database protection for a new design."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a concrete legacy assessment, a 7 GB website plus a 3.5 GB eligible linked database totals 10.5 GB, exceeding the combined limit even though the database alone is below 4 GB. Reduce the protected app content appropriately or use separate protection; do not round down. For a new private school database, use the database service's own tested backup and restore process and coordinate recovery times with the app release. The document archive in a storage account also needs its own retention and recovery settings. An app connection string references data; it does not contain that data."
+            }
+          ]
+        },
+        {
+          "id": "restore-worked-and-exclusions",
+          "title": "Worked example: restore safely and prove what was recovered",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Restoring stops the target app or target slot while the operation runs. Restoring to an existing target normally erases and replaces its filesystem content; partial-backup filters modify that behavior. Use an isolated new app or staging slot first when the supported tier permits it. On Basic there is no staging slot option, so plan an appropriate separate app or an accepted production interruption. Select the correct timestamp and decide whether to restore site configuration as well as content. Record what legitimate changes occurred after that point."
+            },
+            {
+              "type": "example",
+              "title": "Recover a damaged static timetable page without overwriting healthy production data",
+              "scenario": "A file deployment damaged the website, but the private database and document archive are healthy. A successful custom app backup exists from before the deployment. The team has approved a same-OS test destination and does not intend to restore external data.",
+              "steps": [
+                {
+                  "action": "In Backups, select the successful recovery point and Restore, then select the isolated test app or eligible slot as the destination.",
+                  "why": "Restoring there keeps the currently serving production target out of the destructive restore operation. A target must be reachable and have compatible platform prerequisites."
+                },
+                {
+                  "action": "Review the content and configuration options, network access to backup storage, and any hostname effects before confirming.",
+                  "why": "A custom backup's XML manifest can add available custom domains to the destination and remove destination domains not in that manifest. Do not unexpectedly alter a useful test hostname or production binding."
+                },
+                {
+                  "action": "Re-establish the required target identity, data grants, network configuration, authentication and TLS configuration as needed.",
+                  "why": "An app backup is not an infrastructure template. These dependencies are not automatically reconstructed into a complete functioning environment."
+                },
+                {
+                  "action": "Verify the restored build, a timetable read, a document permission denial and application logs, then choose a separately reviewed release or swap into production.",
+                  "why": "A successful restore operation confirms file restoration, not correct identity, safe access or functional behavior. The final switch must respect the slot rules already learned."
+                }
+              ],
+              "result": "The team has evidence that the restored app works with its intended current dependencies. Healthy database records were not rolled back merely because website files needed repair."
+            },
+            {
+              "type": "paragraph",
+              "text": "Automatic backup configuration restoration does not recreate private endpoints, VNet integration, managed identities, authentication, custom domains, TLS bindings, scale-out settings or associated slots. It also does not recreate Azure Monitor diagnostic settings, alerts or backup configuration. Custom backups include the supported app scope and have the separately documented custom-domain manifest behavior, so do not assume they are byte-for-byte infrastructure clones either. Preserve your configuration inventory, source artifacts and separate data protection alongside the backup artifacts."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "A slot, a backup and a database restore answer different questions",
+              "text": "Use slots to validate and exchange application releases. Use an App Service backup to recover its supported files and configuration. Use a database or storage service's own recovery controls for external data. Check target interruption, tier, size, network path, authorization and exclusions before selecting a recovery action. No one success status guarantees recovery of the whole school system."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "slot-sticky-targets",
+          "kind": "single",
+          "prompt": "Build 13 should move from staging to production, but production must retain its intended database target after the swap. What is the appropriate configuration?",
+          "choices": [
+            {
+              "id": "sticky-connection",
+              "text": "Mark the environment-specific database connection setting as a deployment slot setting and review both values.",
+              "explanation": "Slot-specific settings keep their final association with their respective environments. Preparation still applies target settings to the source, so startup must be safe."
+            },
+            {
+              "id": "ordinary-connection",
+              "text": "Leave the setting ordinary because connection strings never swap.",
+              "explanation": "Connection strings normally swap unless marked slot-specific. Assuming all are sticky can send production to the wrong database."
+            },
+            {
+              "id": "swap-database-resource",
+              "text": "Expect the database resource itself to swap along with the app.",
+              "explanation": "The swap changes app content and designated settings, not external database resources or records."
+            }
+          ],
+          "correctIds": [
+            "sticky-connection"
+          ],
+          "explanation": "Choose settings by whether they belong to the release or environment, and account for source-side preparation rather than only the final state."
+        },
+        {
+          "id": "slot-safety-and-rollback",
+          "kind": "multiple",
+          "prompt": "The Linux school app has App Service site authentication enabled in production. Which TWO release statements are correct under the documented slot behavior?",
+          "choices": [
+            {
+              "id": "preview-unavailable",
+              "text": "Swap with preview is not available while site authentication is enabled in either slot.",
+              "explanation": "This is a documented preview limitation. Retain required authentication and use an appropriate supported release flow."
+            },
+            {
+              "id": "reverse-not-data",
+              "text": "A reverse swap can restore compatible previous code but not database rows deleted by the new code.",
+              "explanation": "External data operations are not reversed by changing which application release serves production."
+            },
+            {
+              "id": "zero-private",
+              "text": "Zero percent production traffic makes the staging hostname inaccessible to the internet.",
+              "explanation": "The slot remains a live app with its own URL. Configure access restrictions or private connectivity separately."
+            },
+            {
+              "id": "linux-auto-swap",
+              "text": "Enable auto swap because it is supported for all Linux code apps.",
+              "explanation": "Auto swap is not supported for Linux web apps or Web App for Containers."
+            }
+          ],
+          "correctIds": [
+            "preview-unavailable",
+            "reverse-not-data"
+          ],
+          "explanation": "Feature prerequisites and external side effects constrain an otherwise useful swap. Neither zero traffic nor an old build is a complete safety plan."
+        },
+        {
+          "id": "backup-size-and-schedule",
+          "kind": "single",
+          "prompt": "A Standard app needs custom backups of 6 GB of supported app content, no linked database, every six hours, plus one manual backup today. Which assessment is correct?",
+          "choices": [
+            {
+              "id": "automatic-thirty",
+              "text": "It uses the automatic 30 GB limit because the schedule is automatic.",
+              "explanation": "A scheduled custom backup remains a custom backup. Automatic platform backups are a different backup type."
+            },
+            {
+              "id": "manual-not-counted",
+              "text": "Manual backups never count toward the custom daily limit.",
+              "explanation": "The Standard daily limit includes manual and scheduled backups together."
+            },
+            {
+              "id": "fits-standard",
+              "text": "It fits the 10 GB custom size limit and totals five daily backups, within Standard's 12-per-day allowance.",
+              "explanation": "Four scheduled runs plus one manual run equals five. The scenario also stays above the two-hour minimum schedule interval."
+            }
+          ],
+          "correctIds": [
+            "fits-standard"
+          ],
+          "explanation": "First identify the backup type and tier, then calculate its content size and combined daily operations."
+        },
+        {
+          "id": "backup-network-authorization",
+          "kind": "single",
+          "prompt": "The school's new custom app backup targets firewall-protected storage through VNet integration. It also has a private database. Which plan matches current limitations?",
+          "choices": [
+            {
+              "id": "sas-path-separate-data",
+              "text": "Configure supported SAS authorization and the backup-over-VNet option with an allowed storage path, and protect the database separately.",
+              "explanation": "Custom backup authorization and connectivity are both required. Linked database backup is not supported over VNet integration, and the new linked-database configuration options were already removed before this September 2026 review."
+            },
+            {
+              "id": "identity-enough",
+              "text": "Use only the app's managed identity because that is supported for App Service backup storage operations.",
+              "explanation": "App Service backup and restore require supported SAS-based storage authorization; managed-identity authorization is not supported for those operations."
+            },
+            {
+              "id": "network-includes-db",
+              "text": "VNet integration automatically includes every reachable database in the backup.",
+              "explanation": "Connectivity is not backup scope. The linked-database feature excludes backup over VNet integration and has additional retirement and size restrictions."
+            }
+          ],
+          "correctIds": [
+            "sas-path-separate-data"
+          ],
+          "explanation": "A private path does not remove storage authorization requirements or expand the backup's protected data scope."
+        },
+        {
+          "id": "restore-boundaries",
+          "kind": "single",
+          "prompt": "The team restores an automatic App Service backup into an isolated new target. Which follow-up is necessary before claiming that the school system is recovered?",
+          "choices": [
+            {
+              "id": "restore-never-stops",
+              "text": "Restore directly onto production because restores never stop their target.",
+              "explanation": "App Service stops the target app or slot during restoration. An isolated rehearsal reduces risk before a separately planned production change."
+            },
+            {
+              "id": "rebuild-and-verify",
+              "text": "Reconfigure excluded dependencies such as identity, networking and TLS, then test the application with separately protected data.",
+              "explanation": "Automatic backups do not recreate those resources or external data. A functional and authorization test is needed after file restoration."
+            },
+            {
+              "id": "all-recreated",
+              "text": "Assume private endpoints, managed identities, certificates and all databases were restored with the content.",
+              "explanation": "These are documented exclusions or external dependencies, not automatically reconstructed parts of an app backup."
+            }
+          ],
+          "correctIds": [
+            "rebuild-and-verify"
+          ],
+          "explanation": "Recovery means the intended system works safely, not simply that one restore operation completed."
+        }
+      ],
+      "takeaways": [
+        "Slots are live apps sharing plan capacity; zero routed production traffic is not an access restriction.",
+        "Sticky settings stay with their final environment, but target settings are applied to the source during swap preparation.",
+        "Managed identities, VNet integration, custom domains and nonpublic TLS bindings do not swap.",
+        "A reverse swap restores a compatible release, not external database writes or document changes.",
+        "Automatic and custom backups have different size, retention, storage and networking behavior; use tier-specific schedule limits.",
+        "New database protection should use service-native backup, not the retiring linked-database option.",
+        "Restore rehearsals must account for target interruption and excluded infrastructure and data."
+      ],
+      "sourceIds": [
+        "deployment-slots",
+        "app-backups",
+        "app-limits",
+        "app-identities",
+        "vnet-integration",
+        "private-endpoints",
+        "exam-guide"
+      ]
+    }
+  ],
+  "glossary": [
+    {
+      "term": "App Service app",
+      "definition": "The hosted application resource containing its runtime configuration, settings, identity, hostname bindings and deployment targets."
+    },
+    {
+      "term": "App Service plan",
+      "definition": "The region, OS, pricing tier, worker size and worker count supplying compute capacity to one or more apps."
+    },
+    {
+      "term": "Worker instance",
+      "definition": "A virtual machine instance providing App Service execution capacity. Apps and slots in the same plan can share its resources."
+    },
+    {
+      "term": "SKU",
+      "definition": "Stock keeping unit: the product-size label, such as S1, that identifies an available plan option within its pricing tier."
+    },
+    {
+      "term": "Scale up and scale out",
+      "definition": "Scale up changes worker size or pricing tier; scale out changes the number of worker instances."
+    },
+    {
+      "term": "Azure Monitor autoscale",
+      "definition": "Plan-wide instance scaling based on configured metric rules or schedules, supported on Standard and higher App Service tiers."
+    },
+    {
+      "term": "App Service automatic scaling",
+      "definition": "HTTP-demand-driven scaling on eligible Premium v2-v4 plans, with per-app always-ready and maximum settings within a plan burst limit."
+    },
+    {
+      "term": "Managed identity",
+      "definition": "An application identity with credentials managed by Azure. Target services still need to authorize its requested operations."
+    },
+    {
+      "term": "Domain verification ID",
+      "definition": "The value placed in an asuid TXT record to demonstrate control of a custom hostname and help prevent another app from claiming it."
+    },
+    {
+      "term": "TLS binding",
+      "definition": "The association between a hostname and the server certificate used to protect its HTTPS connections."
+    },
+    {
+      "term": "SNI",
+      "definition": "Server Name Indication: TLS handshake information that lets the server choose a certificate by hostname while sharing an IP address."
+    },
+    {
+      "term": "Webspace",
+      "definition": "An App Service deployment unit associated with the plan's resource-group, region and OS combination, within which uploaded or imported private certificates are shared."
+    },
+    {
+      "term": "Access restriction",
+      "definition": "An ordered allow or deny rule controlling access through an App Service public entrance, separate from application sign-in and data authorization."
+    },
+    {
+      "term": "Private endpoint",
+      "definition": "A private-IP entrance to a service through Azure Private Link. An App Service private endpoint handles inbound, not app-initiated outbound, traffic."
+    },
+    {
+      "term": "VNet integration",
+      "definition": "The App Service feature for sending selected outbound traffic through a delegated subnet in a same-region virtual network."
+    },
+    {
+      "term": "Deployment slot",
+      "definition": "A live, separately addressable app version that shares the plan and can exchange content and selected configuration with another slot."
+    },
+    {
+      "term": "Sticky setting",
+      "definition": "A setting whose final value remains associated with its deployment slot rather than moving with the release during a swap."
+    },
+    {
+      "term": "SAS",
+      "definition": "Shared access signature: a token granting specified access to a storage resource for a limited scope and validity period. App Service custom backups require supported SAS authorization."
+    },
+    {
+      "term": "Restore rehearsal",
+      "definition": "A controlled recovery into an isolated target followed by application, connectivity and authorization tests to establish that the recovery procedure is usable."
+    }
+  ],
+  "sources": [
+    {
+      "id": "app-overview",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/overview",
+      "title": "App Service overview",
+      "supports": "Managed web application hosting, supported stack categories and the distinction between ordinary App Service and other hosting variations."
+    },
+    {
+      "id": "app-plans",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/overview-hosting-plans",
+      "title": "What are Azure App Service plans?",
+      "supports": "Region, OS and tier properties; shared and dedicated compute; apps and slots competing for plan workers; plan-level scaling and billing."
+    },
+    {
+      "id": "app-limits",
+      "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/azure-subscription-service-limits#azure-app-service-limits",
+      "title": "Azure App Service limits",
+      "supports": "Tier-specific worker limits, CPU quotas, custom-domain and TLS support, staging slot counts and the higher-tier custom-backup scheduling difference explicitly scoped in the lesson."
+    },
+    {
+      "id": "app-create",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/quickstart-dotnetcore?tabs=net10&pivots=development-environment-azure-portal",
+      "title": "Create and deploy a web app through the Azure portal",
+      "supports": "Portal app and plan creation choices, publish mode, runtime, OS, region, deployment verification and current unique default hostname format."
+    },
+    {
+      "id": "app-identities",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/overview-managed-identity",
+      "title": "Use managed identities for App Service and Azure Functions",
+      "supports": "System-assigned and user-assigned identity lifecycle, portal enablement, slot-specific identities and separate target-service authorization."
+    },
+    {
+      "id": "blob-data-roles",
+      "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/assign-azure-role-data-access",
+      "title": "Assign an Azure role for access to blob data",
+      "supports": "Explicit blob data roles, managed identity principals, container-scoped least privilege and role-assignment propagation considerations."
+    },
+    {
+      "id": "scale-up",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/manage-scale-up",
+      "title": "Scale up an app in Azure App Service",
+      "supports": "Scale-up versus scale-out, portal tier changes, effects on a shared plan and independent scaling of dependent services."
+    },
+    {
+      "id": "monitor-autoscale",
+      "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/autoscale/autoscale-get-started",
+      "title": "Get started with autoscale in Azure",
+      "supports": "Standard-or-higher plan prerequisite, metric and schedule rules, instance limits, cooldowns, flapping and run history."
+    },
+    {
+      "id": "automatic-scaling",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/manage-automatic-scaling",
+      "title": "Automatic scaling in Azure App Service",
+      "supports": "Premium v2-v4 eligibility, HTTP demand, always-ready and prewarmed instances, maximum burst, per-app limits, Functions and slot exclusions, billing and session affinity."
+    },
+    {
+      "id": "custom-domains",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain",
+      "title": "Set up an existing custom domain in Azure App Service",
+      "supports": "Paid-tier prerequisites, A and CNAME routing, asuid TXT ownership records, migration validation and custom-domain binding flow."
+    },
+    {
+      "id": "app-certificates",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/configure-ssl-certificate",
+      "title": "Add and manage TLS/SSL certificates in App Service",
+      "supports": "Managed-certificate limitations and July 2025 change notice, current issuance prerequisites, PFX requirements, private certificate webspace scope, Key Vault imports and renewal behavior."
+    },
+    {
+      "id": "managed-certificate-update",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/app-service-managed-certificate-changes-july-2025",
+      "title": "App Service managed certificates: July and November 2025 updates",
+      "supports": "The November section and updated FAQ supersede the page's retained July public-access warning: HTTP validation tokens are served by App Service front ends despite normal app access restrictions, while public DNS and supported Traffic Manager configurations remain required."
+    },
+    {
+      "id": "tls-bindings",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/configure-ssl-bindings",
+      "title": "Enable HTTPS for a custom domain in Azure App Service",
+      "supports": "SNI versus IP-based bindings, supported tiers, HTTPS and minimum TLS configuration, binding replacement and browser validation."
+    },
+    {
+      "id": "access-restrictions",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/app-service-ip-restrictions",
+      "title": "Set up App Service access restrictions",
+      "supports": "Public ingress rule priority, unmatched action, service-endpoint rules, HTTP 403 results and independent SCM restrictions."
+    },
+    {
+      "id": "vnet-integration",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/overview-vnet-integration",
+      "title": "Integrate your app with an Azure virtual network",
+      "supports": "Outbound-only behavior, supported plans, same-region requirement, delegated subnet sizing, DNS, routes, NSGs and separate backup configuration routing."
+    },
+    {
+      "id": "private-endpoints",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/networking/private-endpoint",
+      "title": "Use private endpoints for Azure App Service apps",
+      "supports": "Inbound-only private endpoints, supported tiers, public access coexistence, separate integration subnet, private DNS and SCM records, per-slot endpoints and IP-based TLS exclusion."
+    },
+    {
+      "id": "deployment-slots",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/deploy-staging-slots",
+      "title": "Set up staging environments in Azure App Service",
+      "supports": "Slot prerequisites and creation, configuration versus content cloning, sticky and unswapped settings, source warm-up, preview authentication limitation, auto-swap platform limits and rollback."
+    },
+    {
+      "id": "app-backups",
+      "url": "https://learn.microsoft.com/en-us/azure/app-service/manage-backup",
+      "title": "Back up and restore your app in Azure App Service",
+      "supports": "Current Basic-or-higher support, automatic and custom size and retention rules, Standard scheduling, SAS-only storage authorization, VNet prerequisites, linked-database retirement, restore interruption, custom-domain manifest behavior and excluded content and configuration."
+    },
+    {
+      "id": "exam-guide",
+      "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/az-104",
+      "title": "Study guide for Exam AZ-104",
+      "supports": "App Service objective scope for the study guide effective 2026-04-17, including plans, scaling, app creation, TLS, custom DNS, backup, networking and deployment slots."
+    }
+  ],
+  "lab": {
+    "title": "Optional manual rehearsal: one small app, one slot and one tested restore",
+    "purpose": "Observe the difference between a plan, an app, a release swap and a restore using disposable school-themed content. This is optional practice, not an instruction for the course software to deploy resources.",
+    "prerequisites": [
+      "An approved practice subscription with sufficient resource-creation permissions and available Linux Standard S1 capacity in the chosen region.",
+      "An approved small non-sensitive web artifact with visibly different build 12 and build 13 pages, and an authorized deployment process already understood by the learner.",
+      "A dedicated practice resource group and a recorded list of resources owned by this exercise; do not use a production plan or real pupil data.",
+      "A same-subscription practice storage account and container supporting the required SAS-based App Service backup authorization.",
+      "If practising private backup routing, an approved same-region VNet integration subnet, correct private DNS and storage network access; otherwise use the simpler approved reachable-storage scenario.",
+      "Permission from the cost owner and a planned end time. A custom-domain extension additionally requires control of an unused real DNS name and an appropriate certificate."
+    ],
+    "costWarning": "Standard workers are billed while allocated even if the app is stopped. A staging slot shares that capacity but can increase load. Storage, retained manual backups, monitoring, private endpoints, VPN and data transfer can add charges. Do not upgrade to Premium or create private-network infrastructure merely to finish this small lab. Budget alerts are notifications, not an automatic spending stop.",
+    "steps": [
+      "Record the chosen names, region and estimated charges. Create a dedicated Linux Standard S1 plan and a compatible Web App using the portal flow taught in the first lesson.",
+      "Deploy build 12 using the approved deployment process. Browse the default domain copied from Overview and record the visible build and a successful request.",
+      "Create staging under Deployment slots, inspect the cloned configuration, restrict its access appropriately, and deploy build 13. Verify that its separate URL shows build 13 while production still shows build 12.",
+      "Add a harmless environment-name setting with different values for production and staging and mark it as a deployment slot setting. Have the practice artifact show only this nonsecret value.",
+      "Review Swap with staging as source and production as target. Perform an ordinary manual swap, then verify that production shows build 13 while retaining its production environment value.",
+      "Reverse the swap and verify that build 12 returns. Record that this experiment changed application content, not an external database or document archive.",
+      "Configure custom backups to the practice container with a six-hour schedule and explicit seven-day scheduled retention. If using the private scenario, verify and enable backup over VNet integration for the relevant slot.",
+      "Run one manual backup, inspect its success status and corresponding ZIP and XML artifacts, and record that this manual recovery point has indefinite retention.",
+      "Restore the chosen backup into an isolated same-OS test target or the disposable staging slot after confirming its contents may be overwritten. Observe target interruption and then test the restored page and configuration.",
+      "Optionally map an unused real subdomain with the displayed CNAME and verification TXT, bind an eligible certificate with SNI and inspect the browser certificate. Skip this extension if you lack domain ownership or a safe certificate plan."
+    ],
+    "expectedResults": [
+      "The app and plan appear as separate resources, and the slot shares the existing plan rather than creating dedicated workers.",
+      "The swap exchanges visible builds while the marked environment value stays associated with its final slot.",
+      "A successful custom backup produces identifiable artifacts, and a tested restore reproduces the intended supported content in the chosen target.",
+      "Any missing identity, network, authentication or TLS configuration is identified explicitly instead of being assumed restored.",
+      "If the domain extension is performed, public DNS, app hostname recognition and the browser's certificate all match the intended custom name."
+    ],
+    "cleanup": [
+      "Remove only the lab's scheduled backup configuration and lab-owned manual backup artifacts after the rehearsal has been recorded and the cost owner confirms they are no longer needed.",
+      "If a lab-only custom name was added, remove its routing record and binding deliberately so no dangling CNAME remains. Preserve shared certificates and unrelated DNS records.",
+      "Disconnect lab VNet integration before removing its network resources. Delete only lab-owned private endpoints and DNS records, leaving pre-existing office and shared network resources intact.",
+      "Delete the lab app, slots and isolated restore target, then delete the paid plan only after verifying that no other app uses it.",
+      "Delete a resource group only if its inventory contains exclusively disposable lab resources. Recheck the recorded plan, storage and monitoring resources for remaining charges."
+    ]
+  }
+}

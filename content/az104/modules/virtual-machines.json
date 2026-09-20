@@ -1,0 +1,1521 @@
+{
+  "schemaVersion": 1,
+  "id": "virtual-machines",
+  "title": "Virtual machines: build, protect, scale, and move a school service",
+  "summary": "Choose the parts of an Azure virtual machine, distinguish durable disks from disposable storage, configure host encryption, and reason about availability, scale sets, and moves using a fictional Romanian school's timetable and document services.",
+  "priority": "core",
+  "priorityReason": "The official AZ-104 guide effective April 17, 2026 explicitly includes VM creation, host encryption, moves, sizing, disks, availability placement, and scale sets. These lessons teach objectives co-06 through co-12. Core is a teaching priority, not a prediction of examination frequency.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/virtual-machines/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Create a virtual machine.",
+    "Configure encryption at host for Azure virtual machines.",
+    "Move a virtual machine to another resource group, subscription, or region.",
+    "Manage virtual machine sizes.",
+    "Manage virtual machine disks.",
+    "Deploy virtual machines to availability zones and availability sets.",
+    "Deploy and configure Azure Virtual Machine Scale Sets."
+  ],
+  "lessons": [
+    {
+      "id": "vm-create-size-and-connect",
+      "title": "Build the computer the application actually needs",
+      "summary": "Translate a school service into VM components, separate connection requirements from permissions, and plan a resize without treating it as a harmless settings change.",
+      "objectives": [
+        "Choose compatible image, processor architecture, region, size, disks, network interface, and authentication.",
+        "Check both regional and VM-family quotas without confusing quota with available capacity.",
+        "Distinguish Azure management permission, network reachability, and operating-system authentication.",
+        "Plan and verify a disruptive resize while protecting durable data."
+      ],
+      "sections": [
+        {
+          "id": "computer-and-responsibility",
+          "title": "A VM is a computer, not a completed application",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Imagine Liceul Dunarea, a fictional Romanian school. Its timetable application runs a web service, and its office uses a document-processing service. A virtual machine, or VM, presents a program with a processor, memory, disks, and network connections while Azure operates the physical server underneath. The operating system inside the VM is the guest. Windows Server and Linux are possible guests. The physical computer running that guest is the host. The school chooses VMs when it needs operating-system control, particular software, or a migration path for an existing server."
+            },
+            {
+              "type": "paragraph",
+              "text": "That control brings responsibility. Azure creating the VM does not install the school's application, design its backup policy, or prove it can handle Monday morning traffic. Administrators still configure and patch the guest, secure accounts, install software, monitor performance, and recover application data. A successful deployment means Azure created the requested resources, not that the timetable is correct. Keep two acceptance tests: an infrastructure test that the VM starts with the intended components, and an application test that a teacher can retrieve a timetable using the intended identity."
+            }
+          ]
+        },
+        {
+          "id": "select-vm-components",
+          "title": "Choose a compatible bundle rather than one attractive price",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The image supplies the initial operating system and possibly preinstalled software. Check its publisher, version, support lifetime, licensing terms, and architecture. Processor architecture describes the instruction set software expects, such as x64 or Arm64. An x64-only application does not become an Arm64 application because an Arm-based VM looks cheaper. Match the image architecture, application packages, and VM size. Also check the VM generation and security type supported by the image and size. Generation 2 and Trusted Launch are not substitutes for checking this compatibility."
+            },
+            {
+              "type": "paragraph",
+              "text": "A size, identified by a stock keeping unit or SKU name, determines virtual CPUs, memory, network limits, and storage capabilities. CPU means central processing unit; a virtual CPU, or vCPU, is a processing unit exposed to the guest. Memory holds active work; disk capacity holds files. GiB means gibibyte, a binary capacity unit equal to 1,073,741,824 bytes. More memory does not automatically supply more disk space. The size also limits the number of network interfaces and data disks. A network interface, or NIC, has an IP configuration in a subnet of a virtual network, or VNet. Disks and NICs are resources associated with the VM, not merely text labels inside it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose the subscription that will be billed and the resource group that will organize the service's lifecycle and management access. A resource group is a management container, not a network or physical rack. Choose the VM region deliberately, considering school policy, user latency, supported services, and prices. Check the actual image and size in the selected region and, for zonal deployment, the selected zone. Put the NIC, compatible disks, and VM in an arrangement supported in that location. Selecting a resource group's metadata location does not relocate its VMs."
+            }
+          ]
+        },
+        {
+          "id": "quota-and-capacity",
+          "title": "Pass both quota checks before expecting allocation",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Quota is the subscription's allowed usage, not a reservation of physical equipment. VM vCPU quotas are checked at two levels within each region: total regional vCPUs and the relevant VM-family vCPUs. Azure also applies other resource limits. In the portal, inspect the subscription's Usage + quotas information for the intended region and family. Do not assume a universal quota from a tutorial. Existing allocated and deallocated VMs both count toward the documented vCPU usage, so simply stopping a forgotten machine does not necessarily free quota."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose the school has used 10 of 16 total regional vCPUs and 6 of 8 vCPUs in the chosen family. A proposed four-vCPU VM would produce 14 regional vCPUs, which fits, but 10 family vCPUs, which exceeds eight. The family quota blocks this choice even though the total quota has space. Request the appropriate increase or choose a genuinely compatible alternative family after rechecking both limits. Once quotas fit, Azure must still find capacity for that size in the requested region or zone. A quota approval alone cannot guarantee that allocation."
+            }
+          ]
+        },
+        {
+          "id": "create-vm-worked-plan",
+          "title": "Worked example: create a private timetable worker",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Turn requirements into portal decisions",
+              "scenario": "The timetable worker requires supported x64 Linux packages. For this fictional design, measurements suggest a portal-listed general-purpose candidate with two vCPUs and 8 GiB of memory. Assume its image, security type, disk features, regional capacity, and quotas have been checked. The school's administrator already provides a private administration path into the application network.",
+              "steps": [
+                {
+                  "action": "In Virtual machines, choose Create, then select the approved subscription and resource group rg-school-timetable. Name the VM vm-timetable-01 and choose the approved region.",
+                  "why": "The billing boundary, ownership, and location are explicit. Putting this VM in the correct group does not automatically grant access to the private network."
+                },
+                {
+                  "action": "Select a supported x64 Linux image and the checked size. Review availability and security selections instead of accepting every default.",
+                  "why": "The OS and processor must run the application's packages. Availability placement and security requirements constrain which sizes and images are usable."
+                },
+                {
+                  "action": "Configure an administrator username and SSH public-key authentication. Keep the private key securely with the administrator rather than in the application files.",
+                  "why": "Secure Shell, or SSH, is the Linux remote administration protocol. Azure places the public key on the VM; the administrator proves possession of its matching private key."
+                },
+                {
+                  "action": "Select a persistent managed OS disk and the intended application subnet. Use a NIC with a private IP configuration and no VM public IP for this design.",
+                  "why": "The guest needs a boot disk and a network attachment. An already arranged private route makes an internet-facing administration address unnecessary."
+                },
+                {
+                  "action": "Review disk encryption, monitoring, backup decisions, tags, estimated charges, and deletion behavior before Review + create. An authorized administrator would then create the VM and inspect deployment results.",
+                  "why": "Validation can catch incompatible resource settings, but it does not replace the application's security review or budget approval."
+                },
+                {
+                  "action": "After deployment, confirm the private address, disk attachments, power state, guest login, and a harmless application health response.",
+                  "why": "A running VM is only one layer of evidence. A health response verifies that the intended program is installed and listening."
+                }
+              ],
+              "result": "The design produces a deliberately private Linux worker, not a publicly exposed tutorial server. These are teaching steps, not an instruction to create resources in an unapproved subscription."
+            }
+          ]
+        },
+        {
+          "id": "access-three-gates",
+          "title": "Separate management rights, a network path, and guest access",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Azure role-based access control, or RBAC, authorizes management actions such as creating a VM or changing its size. Permission to manage the VM resource does not automatically grant an operating-system login. SSH keys or configured guest credentials answer a different question: who may enter the computer? If Microsoft Entra sign-in is intentionally configured, its supported extensions and login roles must also be correct. A managed identity used by the application to request access to another Azure service is different again. It does not create an SSH network path."
+            },
+            {
+              "type": "paragraph",
+              "text": "Private access means an administrator reaches the VM through an arranged private route, for example a school VPN, or through an approved Azure Bastion service. It is not permission by itself. Routes must reach the NIC; network security group rules must allow the administration flow; the guest firewall must permit it; and the SSH or Remote Desktop service must listen. Remote Desktop Protocol, or RDP, is commonly used for Windows administration. A correct password cannot repair a blocked route, and a successful network connection cannot authorize an incorrect account."
+            },
+            {
+              "type": "diagram",
+              "title": "Three separate checks before administration succeeds",
+              "description": "Management authorization is shown above the connection path because it controls Azure resource operations, not packet forwarding. The lower path still requires network permission, a guest listener, and valid guest authentication.",
+              "nodes": [
+                {
+                  "id": "azure-control",
+                  "label": "Azure RBAC",
+                  "detail": "Create or resize the VM resource",
+                  "column": 1,
+                  "row": 0
+                },
+                {
+                  "id": "admin-client",
+                  "label": "School administrator",
+                  "detail": "Approved private connection",
+                  "column": 0,
+                  "row": 1
+                },
+                {
+                  "id": "network-path",
+                  "label": "Route and NIC",
+                  "detail": "Network security rules allow traffic",
+                  "column": 1,
+                  "row": 1
+                },
+                {
+                  "id": "guest-service",
+                  "label": "Guest operating system",
+                  "detail": "Firewall, listener, and login",
+                  "column": 2,
+                  "row": 1
+                }
+              ],
+              "edges": [
+                {
+                  "from": "azure-control",
+                  "to": "guest-service",
+                  "label": "Manages VM resource, not guest login"
+                },
+                {
+                  "from": "admin-client",
+                  "to": "network-path",
+                  "label": "SSH or RDP traffic"
+                },
+                {
+                  "from": "network-path",
+                  "to": "guest-service",
+                  "label": "Reach listener, then authenticate"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "measure-before-resizing",
+          "title": "Diagnose the constraint before buying a larger machine",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Sizing starts with observations. If the document worker spends sustained periods using nearly all its CPU while memory and disk response remain healthy, additional CPU may help. If it spends time moving memory pages to disk because memory is full, more memory may be the important change. If requests wait for disk operations, investigate disk latency, input/output operations per second, and throughput limits. IOPS counts operations; throughput counts data moved per second. Both the disk and VM can impose limits, so changing only one might leave the other bottleneck in place."
+            },
+            {
+              "type": "paragraph",
+              "text": "Scaling up changes one VM's size. Scaling out adds VM instances and only helps when the application can distribute work safely. Neither automatically expands a filesystem. Before resizing, compare processor architecture, supported generations, disk controller, Premium storage support, NIC count, data disk count, and local temporary storage characteristics. The current resize documentation distinguishes Windows sizes with and without local temporary disks: direct resizing between those two categories is not supported for Windows. SCSI, Small Computer System Interface, and NVMe, Non-Volatile Memory Express, are different storage interfaces. A transition from a SCSI-based VM to a remote-NVMe-enabled size requires its documented migration path, not an assumption that any larger size is compatible."
+            }
+          ]
+        },
+        {
+          "id": "resize-worked-maintenance",
+          "title": "Worked example: resize as a maintenance operation",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Give the document worker more processing capacity",
+              "scenario": "A Windows document worker has a persistent managed OS disk, a managed data disk containing uploaded files, and a temporary disk holding reproducible conversion scratch files. The administrator has selected a compatible larger size that also has local temporary storage.",
+              "steps": [
+                {
+                  "action": "Confirm the CPU bottleneck, target compatibility, quota headroom, recoverable backup, and an agreed maintenance window. Pause incoming document work.",
+                  "why": "A resize can interrupt processing. A queued or incomplete upload must not be confused with safely stored application data."
+                },
+                {
+                  "action": "Open the VM's Size page and inspect available sizes. If the target requires releasing the current host, plan Stop with deallocation before resizing.",
+                  "why": "The requested size may not exist on the current hardware cluster. Deallocation releases that allocation so Azure can try elsewhere; it does not promise capacity."
+                },
+                {
+                  "action": "Treat temporary files as disposable, select the target size, and resize. Restart or allocate the VM as required.",
+                  "why": "A running resize causes a restart even when deallocation is unnecessary. Deallocation or host changes can lose local temporary data, while persistent managed OS and data disks remain."
+                },
+                {
+                  "action": "Verify successful allocation, the actual guest CPU and memory, disk mounts, private administration, and a test document conversion before resuming work.",
+                  "why": "A failed resize can leave the VM model showing the requested size while the VM still runs its previous size. Configuration intent is not proof of a completed change."
+                }
+              ],
+              "result": "The administrator accepts a planned interruption, preserves durable files, and validates the new running capacity rather than merely observing a changed size label."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-resize-storage",
+              "prompt": "After a deallocation-based resize, the worker's temporary scratch files are missing but its managed data disk still contains the submitted documents. Did Azure necessarily lose the durable disk?",
+              "answer": "No. This matches the different persistence contracts of local temporary storage and managed data disks.",
+              "explanation": "Rebuild scratch files from the durable input. If unique documents had existed only on the temporary disk, the design would have been unsafe before the resize."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Read size, disk, and access requirements separately",
+              "text": "A larger VM is not a firewall repair, a disk expansion, or a quota waiver. Treat resizing as disruptive, check compatibility and allocation, and distinguish durable managed disks from temporary and ephemeral storage."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "vm-create-compatible-components",
+          "kind": "single",
+          "prompt": "The timetable packages are x64-only and administrators already have a working private route into the application subnet. Which creation plan fits these facts?",
+          "choices": [
+            {
+              "id": "matched-private-vm",
+              "text": "Use a supported x64 image and matching size, a NIC in the subnet, managed OS storage, and configured guest authentication without requiring a VM public IP.",
+              "explanation": "The architecture runs the software and the existing private path removes the need for public administration exposure. Guest authentication remains necessary."
+            },
+            {
+              "id": "arm-auto-converts",
+              "text": "Use an Arm64 size because Azure automatically converts every x64 program.",
+              "explanation": "Selecting a VM architecture does not automatically convert an application's instruction set or dependencies."
+            },
+            {
+              "id": "group-creates-path",
+              "text": "Place the VM in the administrators' resource group and omit network and guest access planning.",
+              "explanation": "A resource group organizes management scope. It neither establishes a network route nor configures an operating-system login."
+            }
+          ],
+          "correctIds": [
+            "matched-private-vm"
+          ],
+          "explanation": "Creation is a compatibility and access design exercise, not just a VM name and price selection."
+        },
+        {
+          "id": "vm-family-quota-arithmetic",
+          "kind": "single",
+          "prompt": "Regional usage is 10 of 16 vCPUs and chosen-family usage is 6 of 8. A new VM needs four vCPUs in that family. What follows before considering physical capacity?",
+          "choices": [
+            {
+              "id": "quota-reserves-host",
+              "text": "The unused regional quota guarantees a host for this size.",
+              "explanation": "Quota is permission to consume resources. Available physical capacity is checked separately."
+            },
+            {
+              "id": "family-limit-blocks",
+              "text": "The family quota blocks the request even though the total regional quota would allow it.",
+              "explanation": "10 + 4 = 14 fits the regional limit of 16, but 6 + 4 = 10 exceeds the family limit of eight."
+            },
+            {
+              "id": "regional-only",
+              "text": "The VM is permitted because only the total regional quota matters.",
+              "explanation": "Azure evaluates both tiers, not only the regional total."
+            }
+          ],
+          "correctIds": [
+            "family-limit-blocks"
+          ],
+          "explanation": "Check both arithmetic constraints, then consider regional or zonal allocation capacity."
+        },
+        {
+          "id": "vm-private-access-gates",
+          "kind": "single",
+          "prompt": "An administrator can resize the Linux VM through Azure and owns the correct SSH private key. The guest firewall blocks TCP 22. What should the administrator conclude?",
+          "choices": [
+            {
+              "id": "key-opens-port",
+              "text": "Uploading the same public key again will open the blocked port.",
+              "explanation": "Authentication key configuration does not change an independent operating-system firewall policy."
+            },
+            {
+              "id": "resize-implies-login",
+              "text": "Any identity allowed to resize a VM is automatically permitted to log into its guest.",
+              "explanation": "Management-plane authorization and guest login authorization are separate."
+            },
+            {
+              "id": "guest-filter-independent",
+              "text": "Azure management rights and a valid key do not bypass the guest firewall.",
+              "explanation": "The network connection must reach the SSH listener before guest authentication can succeed."
+            }
+          ],
+          "correctIds": [
+            "guest-filter-independent"
+          ],
+          "explanation": "Investigate the failing layer instead of adding unrelated permissions or public exposure."
+        },
+        {
+          "id": "vm-resize-durability",
+          "kind": "multiple",
+          "prompt": "Choose TWO justified expectations for a compatible resize of a VM with persistent managed OS and data disks and local temporary storage.",
+          "choices": [
+            {
+              "id": "all-windows-sizes",
+              "text": "Windows can directly resize between any sizes with and without temporary disks.",
+              "explanation": "The documented Windows resize restrictions distinguish these categories and require a migration workaround across them."
+            },
+            {
+              "id": "restart-possible-deallocate",
+              "text": "A running resize restarts the VM, and changing hardware clusters may require deallocation.",
+              "explanation": "Resizing is disruptive even when deallocation is not required."
+            },
+            {
+              "id": "temporary-not-durable",
+              "text": "Temporary files must be reconstructible; persistent managed disks are not erased merely by deallocation.",
+              "explanation": "Local temporary storage can be lost while persistent managed disks retain their data."
+            },
+            {
+              "id": "model-proves-allocation",
+              "text": "The requested size appearing in the VM model proves successful allocation.",
+              "explanation": "After a failed resize, the model can show the requested size while the VM continues on its previous allocation."
+            }
+          ],
+          "correctIds": [
+            "restart-possible-deallocate",
+            "temporary-not-durable"
+          ],
+          "explanation": "Plan maintenance around the actual resource transition and the correct storage persistence contract."
+        }
+      ],
+      "takeaways": [
+        "Choose compatible image, architecture, security type, region, size, network, disks, and guest authentication together.",
+        "Family quota, regional quota, and physical capacity are separate checks.",
+        "Management authorization, network reachability, and guest authentication answer different questions.",
+        "Measure the bottleneck and verify actual allocation after a disruptive resize."
+      ],
+      "sourceIds": [
+        "vm-overview",
+        "vm-portal",
+        "vm-quotas",
+        "vm-resize",
+        "disks-overview",
+        "ephemeral-disks"
+      ]
+    },
+    {
+      "id": "vm-disks-and-host-encryption",
+      "title": "Know where a file lives before protecting it",
+      "summary": "Manage persistent and disposable disks, complete guest-side volume work, and choose encryption at host without confusing it with storage encryption or retiring guest-based ADE.",
+      "objectives": [
+        "Distinguish persistent OS and data disks, temporary disks, and ephemeral OS disks.",
+        "Attach and expand a managed disk while completing the required guest partition and filesystem work.",
+        "Explain the different encryption boundaries of storage SSE, encryption at host, and Azure Disk Encryption.",
+        "Check host-encryption support, registration, lifecycle requirements, and incompatible combinations."
+      ],
+      "sections": [
+        {
+          "id": "disk-roles-and-persistence",
+          "title": "Four storage descriptions that must not be mixed",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A managed disk is a virtual block-storage device whose underlying storage Azure manages. Block storage presents numbered pieces of storage to the guest, much like a computer's physical drive. Managed does not mean Azure decides which folders your application should use. OS means operating system. A persistent OS disk contains the bootable operating system and retains its written data independently of a particular host allocation. A managed data disk provides additional persistent storage for application files. Separating the document archive from the OS makes maintenance and recovery easier, although both still need protection against accidental deletion and application corruption."
+            },
+            {
+              "type": "paragraph",
+              "text": "Disk type is a separate choice from disk role. Azure offers solid-state drive, or SSD, tiers and a hard disk drive, or HDD, tier with different performance and pricing characteristics. Standard SSD, Premium SSD, Premium SSD v2, and Ultra Disk are not interchangeable names for the same capabilities. Select a supported type against the workload's latency, throughput, and IOPS requirements, then check the VM's corresponding limits. Our small teaching examples use a supported SSD choice without asserting that the most expensive disk would solve every performance problem."
+            },
+            {
+              "type": "paragraph",
+              "text": "A local temporary disk is different. It uses storage attached to the VM host and is intended for replaceable work such as caches, swap, or conversion scratch files. Some sizes have no temporary disk. Data may survive an ordinary successful restart, but that observation does not make it durable: deallocation, redeployment, or certain maintenance events can lose it. Windows often labels a temporary drive D, but do not infer durability from a letter. Inspect the actual attachment and purpose before placing the school's only copy of a signed document there."
+            },
+            {
+              "type": "paragraph",
+              "text": "An ephemeral OS disk is another distinct choice: writes to the OS disk reside on local VM storage rather than being durably persisted like a normal managed OS disk. It suits stateless workers that can rebuild from an image and external state. Stateless means losing an individual worker does not lose unique business information. Supported local storage must fit the image and chosen placement requirements. Resizing or redeploying can reprovision the OS and discard changes. Ordinary stop-deallocate-and-restart behavior, disk snapshots, Azure Backup, and Azure Site Recovery are not supported for ephemeral OS disks. Do not use this design for a manually configured document archive that cannot be reconstructed."
+            }
+          ]
+        },
+        {
+          "id": "guest-storage-responsibilities",
+          "title": "Azure attaches capacity; the guest organizes files",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A new empty managed data disk is not automatically a ready-to-use document folder. The guest must recognize the device, initialize it when appropriate, create a partition or volume, format a filesystem, and assign a drive letter or mount point. A partition describes an area of a disk. A filesystem organizes that area's files and directories. Windows can use Disk Management for this work; Linux uses its storage tools and mount configuration. These are guest administration tasks, separate from Azure permission to attach the disk."
+            },
+            {
+              "type": "paragraph",
+              "text": "Match the Azure disk name, size, and logical unit number, or LUN, to the guest device before changing it. A LUN distinguishes an attached data disk; it is not a folder name. Initialize and format only a confirmed new, empty disk. An existing disk containing files may simply need the correct mount or drive assignment. Formatting it to make a warning disappear can destroy the data. Choose the partition scheme deliberately: GPT, the GUID Partition Table format, is needed for Windows disks of two TiB or larger rather than relying on the older MBR layout's capacity limit."
+            }
+          ]
+        },
+        {
+          "id": "attach-disk-worked-example",
+          "title": "Worked example: give the document service a durable volume",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Attach a small empty disk without touching existing data",
+              "scenario": "The school's Windows document VM has a persistent OS disk and disposable conversion scratch space. It needs a separate 64 GiB managed data disk. Assume its size supports another data disk and the administrator has both Azure disk-management permission and guest administrator access.",
+              "steps": [
+                {
+                  "action": "On the VM's Disks page, choose Create and attach a new disk. Name it disk-school-documents, select a supported disk type, and save.",
+                  "why": "This creates and attaches block storage. The chosen disk type and the VM's storage limits determine the available performance, not the friendly name."
+                },
+                {
+                  "action": "Record the disk's size and LUN, then inspect Disk Management inside Windows and identify that exact new empty device.",
+                  "why": "The OS disk, temporary disk, and other data disks can all be visible. Matching identifiers prevents initializing the wrong disk."
+                },
+                {
+                  "action": "Initialize the verified empty disk, create a volume, format it, and assign an available drive letter. Name the volume SchoolDocuments.",
+                  "why": "A filesystem turns raw capacity into usable file storage. These operations are destructive to preexisting contents, so the empty-disk check is essential."
+                },
+                {
+                  "action": "Give only the service's intended guest identity access to its document directory. Write and read a fictional test document, then verify the configured application path.",
+                  "why": "Azure attachment permission does not establish Windows file permissions. A test under the service identity catches access or path errors that an administrator's test can miss."
+                },
+                {
+                  "action": "Include this volume in the application's backup design and inspect the VM's disk deletion settings.",
+                  "why": "Persistence across deallocation is not protection against deletion. Deleting the VM can also delete selected attached disks, depending on their configured lifecycle options."
+                }
+              ],
+              "result": "The document service has an identifiable durable volume, a usable filesystem, and intentional access and recovery decisions. Disposable conversion output remains separate."
+            }
+          ]
+        },
+        {
+          "id": "expand-and-detach-disks",
+          "title": "Growing a disk does not automatically grow its filesystem",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Suppose SchoolDocuments reaches 55 GiB of a 64 GiB volume and the administrator increases the managed disk to 128 GiB. Azure now exposes a larger device, but Windows can still show the original volume until its partition and filesystem are extended into the new space. Back up first, confirm the target disk, use its Size + performance settings, and then rescan and extend the intended guest volume. Verify both the Azure size and guest free space. Adding capacity to the VM size itself is not this operation."
+            },
+            {
+              "type": "paragraph",
+              "text": "Some supported data-disk expansions can occur without deallocating the VM, but do not generalize that to every disk. OS-disk expansion requires the appropriate stopped and deallocated workflow. The current data-disk rules also require deallocation and detachment when Standard HDD, Standard SSD, or Premium SSD disks cross from at most four TiB to above four TiB. Shrinking an existing managed disk is not supported. Before detaching a disk, stop dependent applications and safely unmount or take its volume offline in the guest. Detaching is not deleting, but an unattached disk can continue generating storage charges."
+            }
+          ]
+        },
+        {
+          "id": "encryption-boundaries",
+          "title": "Ask which layer performs the encryption",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Encryption at rest protects stored bytes using keys. It does not decide whether a logged-in teacher may read a document. Azure Storage server-side encryption, or SSE, encrypts persistent managed-disk data at rest by default using platform-managed keys unless another supported configuration is selected. Microsoft manages platform keys. Customer-managed keys give the organization additional control and responsibility, normally through a key store and disk encryption set. The disk encryption set connects a disk's encryption configuration to an authorized key. Losing usable key access can make an otherwise intact disk unavailable."
+            },
+            {
+              "type": "paragraph",
+              "text": "Encryption at host moves the encryption boundary to the Azure server hosting the VM. It protects temporary storage and OS/data disk caches on that host, and disk data flows encrypted from the host to Azure Storage. This is not simply adding an independent storage-encryption pass: the host performs the encryption before persistence. For this feature, temporary disks and ephemeral OS disks use platform-managed keys; persistent disk caches use platform-managed or customer-managed keys according to the disk configuration. Newer VM generations can already encrypt local temporary storage, but that is not a substitute for checking the required host-encryption setting and cache coverage."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Disk Encryption, or ADE, instead performs volume encryption inside the guest using Windows BitLocker or Linux dm-crypt and integrates with Azure Key Vault. These names describe different implementation layers, not three interchangeable portal labels. Host encryption does not consume the guest's CPU for encryption processing and does not require guest volume-encryption software. None of these choices replaces HTTPS, SSH, or another appropriate protocol for application network traffic. Encrypted files still need authorization, backups, and deliberate retention."
+            }
+          ]
+        },
+        {
+          "id": "host-encryption-worked-example",
+          "title": "Worked example: satisfy a host-storage protection requirement",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Enable host encryption on an eligible document VM",
+              "scenario": "The school requires the document VM's disk caches and local temporary data to be encrypted at rest. It accepts platform-managed keys. This VM uses a supported size, persistent managed disks, and has never used ADE. An authorized subscription administrator handles feature registration.",
+              "steps": [
+                {
+                  "action": "Check current size support and confirm that the Microsoft.Compute EncryptionAtHost subscription feature is Registered before changing the VM.",
+                  "why": "The feature must be enabled for the subscription, and legacy or otherwise unsupported sizes cannot satisfy the requirement merely by selecting a checkbox."
+                },
+                {
+                  "action": "For a new VM, select Encryption at host on the creation Disks pane. For this existing VM, schedule downtime, preserve durable work, and deallocate it first.",
+                  "why": "Existing VMs must be deallocated and reallocated for host encryption to take effect. Temporary scratch contents are not a safe place to preserve unfinished work."
+                },
+                {
+                  "action": "In the existing VM's disk additional settings, enable Encryption at host, save, and start the VM again.",
+                  "why": "The saved setting must be applied to a supported host allocation. Changing the desired configuration alone is not the final operational test."
+                },
+                {
+                  "action": "Confirm the setting remains enabled, inspect provisioning success, and verify disk mounts and a document read/write operation.",
+                  "why": "Configuration evidence verifies the intended protection, while a functional check catches guest or application problems after the maintenance."
+                }
+              ],
+              "result": "The host protects the required local disk data and caches without introducing a guest ADE deployment. If a prerequisite fails, choose a supported design rather than silently weakening the requirement."
+            }
+          ]
+        },
+        {
+          "id": "encryption-restrictions-and-retirement",
+          "title": "Plan for incompatible histories and a verified retirement",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The host-encryption documentation forbids enabling the feature on VMs or scale sets that currently have, or previously had, ADE enabled. Turning ADE off is therefore not proof that the same VM can simply switch to host encryption. ADE also cannot be enabled on disks with encryption at host enabled. For an existing ADE workload, use Microsoft's supported migration guidance and test recovery copies as part of that project. Do not directly decrypt an ADE-managed Windows disk through ordinary BitLocker controls; that bypasses the supported management process and risks data loss."
+            },
+            {
+              "type": "paragraph",
+              "text": "As reviewed on September 20, 2026, Microsoft schedules ADE retirement for September 15, 2028. The retirement notice says ADE-enabled workloads can continue running at that date, but encrypted disks will fail to unlock after VM reboots, causing service disruption. Plan migration before the deadline, including affected backups, rather than treating a still-running VM as evidence that no action is needed. For new ordinary VMs, Microsoft's notice recommends encryption at host. This deadline concerns ADE, not a retirement of managed-disk encryption in general."
+            },
+            {
+              "type": "paragraph",
+              "text": "There are narrower compatibility rules too. A sector is a low-level unit of disk addressing; 512e means a format that emulates 512-byte sectors. For Ultra Disks and Premium SSD v2 with 512e sectors, host encryption requires disks created after May 13, 2023; the documented path for older disks uses a snapshot and a new disk. Do not turn that date into a rule for every managed disk. Enabling host encryption on an existing scale set automatically covers only new instances created afterward. Existing instances still require deallocation and reallocation. Track each instance's transition rather than assuming one scale-set setting retroactively protected all running hosts."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-old-ade-vm",
+              "prompt": "An administrator disables ADE on an old VM and immediately proposes enabling encryption at host on that same VM. Is the history now irrelevant?",
+              "answer": "No. Previously enabled ADE is explicitly included in the host-encryption restriction.",
+              "explanation": "The current switch state is not the complete eligibility test. Use the supported migration procedure and validate the resulting design before declaring the requirement met."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Match protection to the stated storage boundary",
+              "text": "For host caches and temporary storage, reason about encryption at host rather than assuming default managed-disk SSE covers everything. Separately check persistent versus ephemeral storage, guest filesystem work, key dependencies, and current feature restrictions."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "vm-disk-role-choice",
+          "kind": "single",
+          "prompt": "The school's uploaded documents must survive deallocation of their worker VM. Which location fits this requirement?",
+          "choices": [
+            {
+              "id": "ephemeral-os-folder",
+              "text": "A folder written only to an ephemeral OS disk because it is an OS disk.",
+              "explanation": "Ephemeral OS writes are disposable and can be lost when the OS is reprovisioned."
+            },
+            {
+              "id": "persistent-data-volume",
+              "text": "A persistent managed data disk with a configured guest volume and an appropriate backup policy.",
+              "explanation": "The disk retains data independently of the host allocation, while the guest volume makes it usable and backups address other loss scenarios."
+            },
+            {
+              "id": "temporary-drive-letter",
+              "text": "Whichever disk Windows happens to label D, without checking its role.",
+              "explanation": "A drive letter does not establish durability. D is commonly local temporary storage."
+            }
+          ],
+          "correctIds": [
+            "persistent-data-volume"
+          ],
+          "explanation": "Judge storage by its persistence contract, not by an operating-system label."
+        },
+        {
+          "id": "vm-disk-expand-guest",
+          "kind": "single",
+          "prompt": "Azure shows a data disk expanded from 64 to 128 GiB. Windows still shows the original 64 GiB volume. Which next action follows, assuming a backup exists and the correct disk has been identified?",
+          "choices": [
+            {
+              "id": "format-used-disk",
+              "text": "Initialize and format the existing disk as if it were empty.",
+              "explanation": "This risks destroying existing documents. Initialization is for a verified new, empty disk, not ordinary volume growth."
+            },
+            {
+              "id": "resize-cpu",
+              "text": "Increase the VM's vCPU count to make the filesystem use the extra capacity.",
+              "explanation": "CPU sizing does not extend a partition or filesystem."
+            },
+            {
+              "id": "extend-existing-volume",
+              "text": "Rescan as needed and extend the existing partition and filesystem into the available space.",
+              "explanation": "Azure device capacity and guest volume capacity are separate layers; both must be updated."
+            }
+          ],
+          "correctIds": [
+            "extend-existing-volume"
+          ],
+          "explanation": "The remaining work is inside the guest, not another purchase of Azure disk capacity."
+        },
+        {
+          "id": "vm-host-encryption-eligibility",
+          "kind": "multiple",
+          "prompt": "Choose TWO correct requirements for applying encryption at host to an existing VM under the documentation reviewed for this lesson.",
+          "choices": [
+            {
+              "id": "support-registration",
+              "text": "Confirm supported size and the subscription's EncryptionAtHost registration.",
+              "explanation": "Both supported hardware configuration and subscription feature readiness are prerequisites."
+            },
+            {
+              "id": "deallocate-reallocate",
+              "text": "Plan deallocation and reallocation for the existing VM.",
+              "explanation": "Existing running VMs do not acquire the required host protection solely from a configuration edit."
+            },
+            {
+              "id": "ignore-ade-history",
+              "text": "Ignore previous ADE use if ADE is currently disabled.",
+              "explanation": "The restriction explicitly includes VMs that previously had ADE enabled."
+            },
+            {
+              "id": "sse-proves-host",
+              "text": "Treat default managed-disk SSE as proof the host-encryption setting is enabled.",
+              "explanation": "Default storage encryption and encryption at host are different boundaries and configurations."
+            }
+          ],
+          "correctIds": [
+            "support-registration",
+            "deallocate-reallocate"
+          ],
+          "explanation": "A correct enablement plan checks eligibility and the required allocation lifecycle."
+        },
+        {
+          "id": "vm-ade-retirement-response",
+          "kind": "single",
+          "prompt": "A school still has an ADE-enabled VM and ADE-dependent backups. What is the justified response to the published September 15, 2028 retirement?",
+          "choices": [
+            {
+              "id": "all-encryption-retires",
+              "text": "Remove all disk encryption because Azure managed-disk encryption is retiring.",
+              "explanation": "The retirement is specifically ADE. Microsoft recommends host encryption for new ordinary VMs."
+            },
+            {
+              "id": "migrate-before-deadline",
+              "text": "Plan supported migration to host encryption before the deadline, including affected backups and recovery testing.",
+              "explanation": "The notice requires migration and warns that encrypted disks will fail to unlock after VM reboots following retirement."
+            },
+            {
+              "id": "never-reboot-plan",
+              "text": "Keep the VM running forever because retirement only affects new deployments.",
+              "explanation": "Existing workloads are affected when their encrypted disks must unlock after reboot. Avoiding planned restarts is not a recovery strategy."
+            }
+          ],
+          "correctIds": [
+            "migrate-before-deadline"
+          ],
+          "explanation": "Use the dated notice to plan migration, not to weaken data protection or defer unavoidable recovery work."
+        }
+      ],
+      "takeaways": [
+        "Persistent OS and data disks are different from local temporary disks and ephemeral OS disks.",
+        "Attaching or expanding Azure storage leaves guest partition, filesystem, and access work to the administrator.",
+        "Encryption at host protects host-local storage and caches; default storage SSE and guest ADE are different mechanisms.",
+        "Check ADE history, supported sizes, registration, and deallocation requirements before enabling host encryption.",
+        "Migrate ADE workloads and affected backups before the published September 15, 2028 retirement."
+      ],
+      "sourceIds": [
+        "disks-overview",
+        "disks-attach",
+        "disks-expand",
+        "ephemeral-disks",
+        "disk-encryption",
+        "host-encryption",
+        "ade-retirement"
+      ]
+    },
+    {
+      "id": "vm-availability-and-scale-sets",
+      "title": "Keep useful capacity available while failures and demand change",
+      "summary": "Distinguish zones from availability sets, choose a scale-set orchestration mode, calculate autoscale decisions, and require real application health before rolling upgrades.",
+      "objectives": [
+        "Choose availability zones or availability sets for the failure boundary being addressed.",
+        "Explain fault domains and update domains without treating placement as application replication.",
+        "Choose Flexible or Uniform scale-set orchestration and configure a repeatable deployment.",
+        "Calculate autoscale behavior and connect upgrade policy to health monitoring."
+      ],
+      "sections": [
+        {
+          "id": "availability-failure-boundaries",
+          "title": "Start with what could fail together",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Two copies of the timetable website help only if the second copy remains useful when the first fails. If both rely on one unprotected database or each stores different teacher uploads locally, adding web VMs has not solved the complete availability problem. Availability means a service can perform its intended work when needed. Backup addresses recovery of earlier data; it does not automatically supply a live replacement server. First identify the failure boundary: an application process, one physical host, shared power equipment, an availability zone, or an entire region."
+            },
+            {
+              "type": "paragraph",
+              "text": "An availability zone is a physically separate grouping of datacenter infrastructure within an Azure region, with independent power, cooling, and networking. Deploying separate application instances across supported zones reduces their exposure to a single-zone infrastructure failure. A single VM placed in zone 1 is still one VM, not a machine replicated across zones. The application must distribute requests and preserve required state outside an individual replaceable instance. A load balancer can direct traffic to healthy backends, but it does not synchronize the application's database or invent missing capacity."
+            },
+            {
+              "type": "paragraph",
+              "text": "An availability set is a logical grouping that spreads VMs across fault domains and update domains within a region. A fault domain groups infrastructure with shared failure risks, such as power and network switching. An update domain groups VMs that may restart together during planned platform maintenance. Fault domains address correlated infrastructure failures; update domains address maintenance grouping. Availability sets do not provide the same datacenter-level isolation as zones, and they do not automatically increase instance count or repair an application bug."
+            }
+          ]
+        },
+        {
+          "id": "zone-set-worked-placement",
+          "title": "Worked example: select and verify placement",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Two timetable frontends with a stated failure target",
+              "scenario": "The school wants the frontend to tolerate loss of one zone. Its application is ready to run on multiple workers, its shared state has a separate resilience design, and the selected region, image, VM size, disks, and frontend networking support the proposed zonal architecture.",
+              "steps": [
+                {
+                  "action": "Choose availability-zone placement for separate VM instances in two supported zones, rather than choosing an availability set.",
+                  "why": "The requirement names a zone-level failure. An availability set's fault-domain spread does not provide the same isolation boundary."
+                },
+                {
+                  "action": "Create each VM with the same tested application version and compatible image architecture, and configure the frontend to send traffic only to healthy instances.",
+                  "why": "Physical separation is useful only if the surviving instance can serve the same requests and its dependencies remain available."
+                },
+                {
+                  "action": "Size the surviving capacity for the required service level and test one backend being unavailable.",
+                  "why": "If both workers normally operate at their limit, losing one may leave too little capacity even though the placement is correct."
+                },
+                {
+                  "action": "For a different site where zones are unavailable and the requirement is host-level separation, create a managed availability set before deploying its VMs and inspect their assigned domains.",
+                  "why": "Placement options depend on regional and SKU support. The alternative solves a narrower failure problem and should be described honestly."
+                }
+              ],
+              "result": "The chosen architecture follows the required failure boundary. No placement choice is a promise of uninterrupted end-to-end application service."
+            },
+            {
+              "type": "paragraph",
+              "text": "Availability sets support up to three fault domains and up to twenty update domains, with managed-disk fault-domain support varying by region between two and three. Choose supported counts at creation; the set's counts cannot later be changed. With five configured update domains and six VMs, a domain must be reused. That does not mean Azure updates every VM simultaneously. Inspect the actual assignments, and do not stop or deallocate the first VM between creating members if relying on their initial fault-domain spread."
+            }
+          ]
+        },
+        {
+          "id": "scale-set-orchestration",
+          "title": "A scale set manages instances, not just a larger VM",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A Virtual Machine Scale Set, or VMSS, groups VM instances under a configuration and orchestration system. A model describes how new instances should be created, including image, size, disks, network settings, and application configuration. Changing the model is separate from updating already-running instances. The school can add frontend workers when timetable requests rise and remove replaceable workers when demand falls. This is scaling out and in. The application must tolerate instances appearing and disappearing; storing the only copy of a new document on a worker would make scale-in dangerous."
+            },
+            {
+              "type": "paragraph",
+              "text": "Choose orchestration mode when creating the set; it cannot be changed later. Flexible orchestration manages standard Azure VM resources and supports individual VM management through standard VM interfaces. It is Microsoft's recommended general-purpose choice and can accommodate varied VM configurations within documented constraints. Uniform orchestration manages scale-set-specific instances primarily as a group based on a shared VM profile. Do not assume an individual Uniform instance behaves like an independently managed standard VM for every management or backup integration. Both modes support metrics-based autoscale, but their lifecycle and health integrations differ."
+            },
+            {
+              "type": "paragraph",
+              "text": "Fault-domain configuration still matters in a scale set. For Flexible orchestration, supported counts depend on regional versus zonal placement and VM capabilities. A configured count of one is used for maximum spreading; it is not an assertion that every VM must occupy the same physical rack. Fixed multi-domain regional placement has different constraints, including restrictions for sizes without memory-preserving update support. Flexible orchestration does not use the availability-set update-domain model. For a zonal Flexible deployment, use its supported fault-domain setting rather than copying an availability set's three-domain configuration."
+            }
+          ]
+        },
+        {
+          "id": "scale-set-deployment-plan",
+          "title": "Worked example: configure a repeatable frontend fleet",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "From two manually managed frontends to a Flexible scale set",
+              "scenario": "The school has packaged a repeatable timetable frontend. Documents and session state live outside the replaceable workers. It plans a small Flexible scale set spread across supported zones, using a verified image, size, and private administration path.",
+              "steps": [
+                {
+                  "action": "In the portal's scale-set creation workflow, explicitly choose Flexible orchestration, the intended region and zones, and a compatible image and size.",
+                  "why": "The orchestration mode is a durable design choice. Zone, architecture, disk, and SKU capabilities must work together before capacity can be allocated."
+                },
+                {
+                  "action": "Configure persistent or deliberately ephemeral OS storage, NIC subnet settings, guest authentication, and a supported frontend such as Standard Load Balancer.",
+                  "why": "The scale set needs the same basic components as a standalone VM, plus an entry point that can route requests among instances."
+                },
+                {
+                  "action": "Provide an explicit approved outbound path where workers must retrieve packages or contact public endpoints, and keep application state outside the workers.",
+                  "why": "Do not assume Flexible instances receive working implicit outbound access. Replacement instances must bootstrap successfully without becoming the sole owners of data."
+                },
+                {
+                  "action": "Start with manual upgrade mode, install the Application Health extension, and prove that a healthy worker reports application readiness.",
+                  "why": "A VM reporting Running does not prove the timetable service can answer. The health signal must be trustworthy before automatic lifecycle actions depend on it."
+                },
+                {
+                  "action": "Add the autoscale profile and a tested rolling upgrade policy only after verifying deployment, routing, and health.",
+                  "why": "Automating an untested model can reproduce a broken image across more machines. Scale and update controls must follow a working baseline."
+                }
+              ],
+              "result": "The school has a reproducible fleet with deliberate networking and health prerequisites, rather than a collection of manually customized servers that cannot safely be replaced."
+            }
+          ]
+        },
+        {
+          "id": "autoscale-metric-arithmetic",
+          "title": "Use measurements, time windows, and bounds together",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An Azure Monitor autoscale profile includes minimum, maximum, and default instance counts plus rules. For the school, assume minimum two, maximum six, and default two. Configure scale-out by one when average CPU exceeds 70 percent over ten minutes, and scale-in by one when average CPU is below 30 percent over ten minutes. Give both rules a five-minute cooldown so new capacity has time to settle. Azure evaluates each candidate rule's own cooldown since the most recent scaling action. A cooldown is not the observation window, and neither setting guarantees the application becomes ready instantly."
+            },
+            {
+              "type": "paragraph",
+              "text": "Assume the CPU statistic averages across two equal-size instances and then across the ten-minute window. If their sustained CPU values are 80 and 70 percent, the fleet average is 75 percent, so the scale-out condition is met. Two instances become three, subject to allocation success. Under an intentionally simplified constant-work assumption, the same load would then average 50 percent: two times 75 divided by three. This estimate explains why adding capacity helps; it is not a prediction of exact real CPU usage, because requests and initialization overhead change."
+            },
+            {
+              "type": "paragraph",
+              "text": "The inclusive maximum of six stops this profile adding a seventh instance, even during high CPU. Minimum equal to maximum would prevent scaling entirely. A default is used as a safe capacity target when metric data cannot be read and current capacity is below that default; it is not a constant forced instance count. For queue-based scaling, inspect normalization: when the queue's total message count is configured to be divided by instance count, the rule evaluates messages per worker. With 120 queued jobs and three workers, that is 40 jobs per worker, not 120. A threshold of at least 50 would not yet trigger."
+            },
+            {
+              "type": "paragraph",
+              "text": "Keep scale-in and scale-out thresholds well separated to reduce flapping, which is repeated expansion and contraction. With several rules, any scale-out condition can trigger expansion, but all scale-in conditions must be met for contraction. Compare requested capacity with actual instance counts and provisioning results. A rule that requests another worker cannot overcome exhausted family quota, missing zonal capacity, a bad image, or a subnet with no usable addresses. A maximum instance count bounds this fleet's count, not the entire Azure bill."
+            }
+          ]
+        },
+        {
+          "id": "rolling-upgrades-and-health",
+          "title": "Change the fleet without trusting a false health signal",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Upgrade policy controls how a scale-set model change reaches existing instances. Manual mode leaves the administrator to apply updates deliberately. Automatic mode does not provide the same deliberate batch-by-batch control as rolling mode. Rolling upgrades update batches with configured pauses and unhealthy-instance thresholds. For ten instances, a twenty-percent batch represents two instances. Before choosing that batch, calculate whether the remaining healthy instances can serve the required traffic. A batch setting is a rollout control, not an availability guarantee."
+            },
+            {
+              "type": "paragraph",
+              "text": "The dedicated rolling-upgrade documentation requires the Application Health extension for Flexible orchestration. Uniform orchestration can use that extension or an appropriate health probe. Configure a health endpoint that checks the service's readiness instead of always returning success from an unrelated process. Verify this signal before changing from manual to rolling policy. Check progress and policy breaches while updates occur, and investigate unhealthy upgraded instances before continuing. Rolling model upgrades and automatic OS-image upgrades are distinct features; support for rolling policy does not imply that Flexible supports every Uniform automatic-image capability."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-scale-out-bound",
+              "prompt": "The school's scale set already has six instances, its configured maximum is six, and CPU remains above the scale-out threshold. Will this profile request a seventh worker?",
+              "answer": "No. The inclusive maximum bounds the autoscale profile.",
+              "explanation": "Investigate demand, capacity planning, bottlenecks, and the approved maximum. Do not assume a metric rule silently overrides the configured upper bound."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Keep placement, scaling, and upgrading separate",
+              "text": "Zones and fault domains describe failure placement; autoscale changes instance count; upgrade policy changes running instances; health monitoring supplies evidence for safe lifecycle actions. An availability set is not an autoscaler, and a running VM is not necessarily a healthy application."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "vm-zone-versus-set",
+          "kind": "single",
+          "prompt": "A supported school frontend must tolerate loss of one availability zone, and its shared state and traffic routing already support that design. Which placement addresses this requirement?",
+          "choices": [
+            {
+              "id": "one-zonal-vm",
+              "text": "Deploy one VM in zone 1 because Azure automatically replicates that VM into all zones.",
+              "explanation": "A zonal VM is one instance in its selected zone, not an automatically replicated application."
+            },
+            {
+              "id": "set-equals-zones",
+              "text": "Use an availability set because its update domains are availability zones.",
+              "explanation": "Update domains group planned maintenance. They are not physically separate availability zones."
+            },
+            {
+              "id": "separate-zone-instances",
+              "text": "Deploy separate frontend instances across supported availability zones with enough surviving capacity.",
+              "explanation": "Different zones provide the intended infrastructure isolation; sufficient remaining capacity and application design still matter."
+            }
+          ],
+          "correctIds": [
+            "separate-zone-instances"
+          ],
+          "explanation": "Match the isolation mechanism to the specified failure boundary."
+        },
+        {
+          "id": "vm-domain-reasoning",
+          "kind": "single",
+          "prompt": "A managed availability set supports two fault domains in the selected region and is configured with five update domains. Which interpretation is correct?",
+          "choices": [
+            {
+              "id": "different-domain-purposes",
+              "text": "Fault domains reduce shared infrastructure risk; update domains group possible planned-maintenance restarts.",
+              "explanation": "The two domain types address different reasons VMs might become unavailable together."
+            },
+            {
+              "id": "automatic-instance-count",
+              "text": "The set automatically scales between two and five instances.",
+              "explanation": "These values are placement and maintenance groups, not autoscale minimum and maximum counts."
+            },
+            {
+              "id": "five-zones",
+              "text": "The five update domains guarantee placement in five availability zones.",
+              "explanation": "Update domains do not represent availability zones or guarantee zone-level separation."
+            }
+          ],
+          "correctIds": [
+            "different-domain-purposes"
+          ],
+          "explanation": "Do not reuse the word domain as though all grouping mechanisms solve the same problem."
+        },
+        {
+          "id": "vmss-autoscale-calculation",
+          "kind": "single",
+          "prompt": "The example profile has minimum two, maximum six, and scale-out by one above 70 percent average CPU for ten minutes. Two equal-size instances average 80 and 70 percent throughout that window; cooldown has elapsed. What count does the rule request, assuming no conflicting action?",
+          "choices": [
+            {
+              "id": "request-three",
+              "text": "Three instances, because the fleet average is 75 percent.",
+              "explanation": "(80 + 70) / 2 = 75, which exceeds 70, and adding one stays below the maximum of six."
+            },
+            {
+              "id": "request-six",
+              "text": "Six instances immediately, because maximum is the target after any threshold breach.",
+              "explanation": "Maximum is a bound. The configured action adds one rather than jumping directly to the bound."
+            },
+            {
+              "id": "remain-two",
+              "text": "Two instances, because both individual values must exceed 70 percent.",
+              "explanation": "The stated rule evaluates average CPU across these instances, not a separate all-instances test."
+            }
+          ],
+          "correctIds": [
+            "request-three"
+          ],
+          "explanation": "Apply the selected aggregation, observation window, cooldown, action size, and bounds in that order."
+        },
+        {
+          "id": "vmss-flexible-upgrade-health",
+          "kind": "multiple",
+          "prompt": "Choose TWO correct decisions for the school's new Flexible scale set before relying on rolling model upgrades.",
+          "choices": [
+            {
+              "id": "extension-health-first",
+              "text": "Configure the Application Health extension and verify readiness reporting before enabling rolling policy.",
+              "explanation": "The dedicated rolling-upgrade requirements specify the extension for Flexible orchestration."
+            },
+            {
+              "id": "probe-only-flexible",
+              "text": "Use only a load-balancer probe because Flexible rolling upgrades never require the health extension.",
+              "explanation": "Uniform can use a probe as its health source; Flexible rolling upgrades require the Application Health extension."
+            },
+            {
+              "id": "running-is-ready",
+              "text": "Treat the VM power state Running as sufficient evidence the timetable application works.",
+              "explanation": "The guest can be running while the application fails to start or cannot reach required dependencies."
+            },
+            {
+              "id": "choose-mode-at-create",
+              "text": "Choose Flexible at creation and manage its instances as standard Azure VM resources.",
+              "explanation": "Flexible provides standard VM instances, and the orchestration mode cannot be switched later."
+            }
+          ],
+          "correctIds": [
+            "choose-mode-at-create",
+            "extension-health-first"
+          ],
+          "explanation": "The orchestration resource model and the application's health signal are explicit prerequisites, not incidental defaults."
+        }
+      ],
+      "takeaways": [
+        "A zone, fault domain, and update domain describe different failure or maintenance boundaries.",
+        "Availability placement still requires multiple useful instances, working traffic routing, and resilient application state.",
+        "Choose scale-set orchestration at creation and make replacement instances reproducible.",
+        "Autoscale evaluates metrics over time within configured bounds; a requested scale action can still fail.",
+        "Verify mode-appropriate application health before rolling upgrades."
+      ],
+      "sourceIds": [
+        "vm-overview",
+        "availability-sets",
+        "vmss-modes",
+        "rolling-upgrades",
+        "autoscale-rules",
+        "vm-quotas",
+        "ephemeral-disks"
+      ]
+    },
+    {
+      "id": "vm-moves-and-regional-planning",
+      "title": "Move ownership or location without losing dependencies",
+      "summary": "Distinguish a resource-group or subscription move from a regional relocation, then plan changed IDs, access, identity dependencies, replication, validation, and cleanup.",
+      "objectives": [
+        "Choose the correct process for a resource-group, subscription, or regional move.",
+        "Identify dependent resources, changed resource IDs, and destination permissions and policy constraints.",
+        "Recheck managed identities and role assignments rather than assuming access moves with the VM.",
+        "Plan a supported Resource Mover workflow with application validation and deliberate cleanup."
+      ],
+      "sections": [
+        {
+          "id": "three-different-moves",
+          "title": "Ask what must actually change",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school first puts its document VM in a testing resource group. Later, the IT team wants a production resource group, then a subscription billed to the school administration, and eventually another Azure region. These requests all use the word move, but they do not mean the same operation. Azure Resource Manager, the management service that organizes Azure resources, can move supported resources between resource groups or subscriptions. That changes management ownership and resource identifiers. It does not copy the running computer to a different physical region."
+            },
+            {
+              "type": "paragraph",
+              "text": "A region is part of a resource's deployment location. Moving a VM into a resource group whose own metadata location is elsewhere does not change the VM's location. Regional relocation requires a separate process, such as Azure Resource Mover for supported configurations, which coordinates replication and target resources. Resource Mover is also not the same as maintaining ongoing disaster recovery. A planned relocation has preparation, cutover, acceptance, and cleanup milestones. If the requirement instead asks for continuous recovery readiness, that needs a recovery architecture rather than a one-time management move."
+            }
+          ]
+        },
+        {
+          "id": "resource-move-preflight",
+          "title": "Validate the dependency group and destination",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Inventory the VM, managed OS and data disks, NICs, virtual network, network security groups, public addresses if present, load-balancer connections, encryption keys, backup configuration, and identities. Dependencies can reach beyond the VM's current resource group. A VM with a NIC in a shared VNet is not an isolated package merely because its name contains school. For a cross-subscription move, the VM's existing VNet and all required dependent resources must move too. The general move guidance requires cross-subscription resources and dependencies to be together in one source resource group and moved together."
+            },
+            {
+              "type": "paragraph",
+              "text": "Both subscriptions must be active and belong to the same Microsoft Entra tenant for this standard resource-move operation. A tenant is the identity directory boundary; moving a resource between subscriptions is not transferring an entire subscription to another directory. Check destination resource-provider registration, quota, policy, and supported resource types. The moving account needs the source resource group's moveResources action and permission to write the destination resource group. A read-only lock on the relevant group or subscription blocks moving. Broader roles may contain these permissions, but removing every lock or granting everyone Owner is not a careful fix."
+            },
+            {
+              "type": "paragraph",
+              "text": "Validate the exact configuration rather than assuming every VM can move. Current special-case guidance includes VMs with Marketplace purchase plans, disk encryption, Azure Backup, and scheduled patching. VMs in an availability set cannot be moved individually. Scale sets using Standard Load Balancer or Standard public IP have documented move restrictions. Customer-managed-key encrypted disks cannot move between subscriptions using the ordinary move operation. These restrictions are reasons to choose a supported migration plan, not instructions to remove protection blindly. Backups and keys deserve preservation and recovery testing before any workaround is considered."
+            },
+            {
+              "type": "example",
+              "title": "Move the complete dedicated service to another subscription",
+              "scenario": "Assume the school's document VM uses a dedicated VNet with no unrelated workloads. The source and destination subscriptions are active in the same tenant, and every selected resource supports the ordinary cross-subscription move.",
+              "steps": [
+                {
+                  "action": "Consolidate the VM, its disks, NIC, VNet, and other required dependencies into one source transfer group using supported resource-group moves first.",
+                  "why": "The cross-subscription operation requires resources and their dependencies together. If the VNet were shared, the school could not pretend the unrelated dependent resources did not exist."
+                },
+                {
+                  "action": "Check destination provider registration, quotas, policy, and permissions, then select Move to another subscription and choose the destination subscription and group.",
+                  "why": "The receiving subscription must accept and be authorized to manage the entire resource set, not just the VM's compute object."
+                },
+                {
+                  "action": "Wait for validation, perform the authorized move, then update resource-ID references and required access assignments at the new subscription and group scopes.",
+                  "why": "Both management path components change. An application test and an access review confirm the resulting service rather than relying only on a successful move notification."
+                }
+              ],
+              "result": "The service changes subscription ownership without changing region. Where a shared dependency cannot move, choose a different supported migration architecture instead of forcing this workflow."
+            }
+          ]
+        },
+        {
+          "id": "resource-group-move-worked",
+          "title": "Worked example: reorganize without relocating",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Move a supported document VM into its production group",
+              "scenario": "The school wants vm-documents-01 and its dedicated supported dependencies moved from rg-school-test to rg-school-production in the same subscription. The VM uses persistent managed disks and no special-case configuration that blocks this move. Its physical region must stay unchanged.",
+              "steps": [
+                {
+                  "action": "Record resource IDs, disk attachments, relevant role assignments, application health, and the current region. Inventory references in monitoring and automation.",
+                  "why": "These observations provide a before-and-after comparison and identify settings that rely on the old management paths."
+                },
+                {
+                  "action": "Review dependencies, destination policy, locks, and permissions. In the source resource group, select the supported resources and choose Move to another resource group.",
+                  "why": "The target is a management container, so a regional replication workflow is unnecessary. The selected resources still need to form a supported move request."
+                },
+                {
+                  "action": "Choose rg-school-production and wait for the portal's validation to finish. Resolve any dependency error before starting the move.",
+                  "why": "Validation is a separate gate. A missing dependency is not fixed by repeatedly submitting the same incomplete selection."
+                },
+                {
+                  "action": "After authorized confirmation, allow the move to complete without competing resource edits, then inspect the resources at their new scope.",
+                  "why": "Azure temporarily locks source and destination groups against management changes during the operation. Ordinary supported moves do not inherently stop a running VM, but special cases can require downtime."
+                },
+                {
+                  "action": "Update old resource-ID references, restore required role assignments at their intended new scopes, and test administration and document access.",
+                  "why": "A successful control-plane move does not prove that monitoring, authorization, or the application still uses the right identifiers."
+                }
+              ],
+              "result": "The VM is organized under the production group while remaining in its original region. The administrator treats dependency and access validation as part of completion."
+            },
+            {
+              "type": "paragraph",
+              "text": "A resource ID includes the subscription, resource-group name, provider, resource type, and resource name. Changing rg-school-test to rg-school-production changes that full ID even if vm-documents-01 stays the friendly name. An alert, dashboard, script, or external inventory using the old full ID can therefore stop referring to the intended resource. Do not confuse a stable VM name, a private IP address, and a resource ID: they identify different aspects of the system."
+            }
+          ]
+        },
+        {
+          "id": "moved-identities-and-rbac",
+          "title": "Access must be checked from the caller and target sides",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "An Azure role assignment directly scoped to a moved resource or its child is not moved automatically and can become orphaned. Record necessary assignments, remove obsolete ones deliberately, and recreate needed assignments at the new scope. Inherited access can also change because the destination group or subscription has different assignments. For example, a teacher-support group with Reader on the old resource group does not thereby gain Reader on the new group. Conversely, a broader assignment on the destination may expose management information to additional administrators."
+            },
+            {
+              "type": "paragraph",
+              "text": "A managed identity lets software request tokens without the application storing a password. A system-assigned identity belongs to its resource's lifecycle; a user-assigned identity is a separate resource that can be attached where supported. After a move, verify the identity association and actual access to each dependency, such as the document storage service or key vault. Azure management access to the VM and the application's permission to read documents are different checks. Do not blindly recreate an identity, because changing its principal can require new permissions wherever the old principal was authorized."
+            },
+            {
+              "type": "paragraph",
+              "text": "Microsoft documents a VM move issue in which a stale managed-identity reference allows the VM to keep running but causes a later stop/start to fail. The documented workaround is to update a VM property, such as an intentional tag change, so the identity reference refreshes. Include a planned restart validation when appropriate rather than declaring success solely because the old process still runs. A subscription transfer to another Microsoft Entra directory is a different operation that can break both managed-identity types and needs its own identity-recreation and permission plan."
+            }
+          ]
+        },
+        {
+          "id": "regional-move-constraints",
+          "title": "A regional move needs a new landing place",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the school's later regional relocation, check Resource Mover's current support matrix against the exact operating system, kernel where relevant, VM security type, disk layout, and networking. The kernel is the core of an operating system that manages hardware and running processes. As reviewed for this lesson, the matrix supports Windows Trusted Launch VMs but does not support Linux Trusted Launch VMs. Do not interpret support for an Ubuntu release as support for every security configuration using that release. VMs already using Site Recovery replication also need the documented handling before Resource Mover preparation. An unsupported source design needs a different supported migration path."
+            },
+            {
+              "type": "paragraph",
+              "text": "Check target-region availability of the desired size, zones, disk types, quotas, network services, and accepted prices. The target VM must not be smaller than the source under Resource Mover's validation of CPU, memory, NIC count, and disk count. Running disks must be attached and initialized for the workflow. The temporary disk is excluded from preparation, so copy any accidentally misplaced unique data to durable storage before starting. The replication path requires approved outbound connectivity to its documented storage, identity, and recovery endpoints; a private VM does not automatically have that path."
+            },
+            {
+              "type": "paragraph",
+              "text": "Expect target-side configuration work. A regional public IP address is not retained in the target region, so DNS records, allowlists, and integrations may need changes. A static private IP can be reused only under the documented target-subnet availability conditions; conflicts can fail the move. VNet peering is not retained and must be recreated deliberately. VM extensions and VM RBAC assignments are not copied to the target by this workflow. Reinstall required extensions, reestablish roles, verify identities, and configure monitoring and backup rather than mistaking copied disk bytes for a fully restored service."
+            }
+          ]
+        },
+        {
+          "id": "regional-move-worked",
+          "title": "Worked example: prepare, cut over, test, then commit",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Relocate the document VM with an explicit acceptance gate",
+              "scenario": "The school has a supported Windows document VM and a planned move to another supported region in the same subscription. A qualified administrator has verified the current matrix, target capacity and quota, protected data, permissions, and a maintenance window. The school approves overlap charges while source and target resources coexist.",
+              "steps": [
+                {
+                  "action": "Open Azure Resource Mover, choose the source and destination regions, add the VM, and resolve all direct and indirect dependencies.",
+                  "why": "Adding only the VM can miss its NIC, VNet, disks, and security resources. The service also needs its own managed identity and role assignments; the tutorial requires Owner access for initial setup."
+                },
+                {
+                  "action": "Review destination configuration, map supported target resources, and prepare the move after dependencies validate.",
+                  "why": "Preparation establishes replication using the recovery components and prepares other resources. It is not yet acceptance of the target application."
+                },
+                {
+                  "action": "Wait for the required ready state, pause new document submissions, and initiate the move during the approved maintenance window.",
+                  "why": "Initiating creates target VM replicas and shuts down the source VM, so some downtime occurs. Pausing application writes prevents an ambiguous cutover of business work."
+                },
+                {
+                  "action": "Before commit, validate target startup, document counts and sample contents, guest access, identity-based storage access, encryption configuration, networking, DNS changes, and health reporting.",
+                  "why": "Disk replication does not copy every supporting setting. A VM that starts but cannot read the document archive has not met the school's acceptance criteria."
+                },
+                {
+                  "action": "If validation fails, use the workflow's discard path and the agreed recovery plan. If it succeeds, commit the move and complete the approved traffic cutover.",
+                  "why": "Discard returns the move to its earlier initiate-pending workflow state; it is not a magic reconciliation of new target writes. The plan must prevent two independent writable copies from diverging."
+                },
+                {
+                  "action": "After acceptance and the agreed retention period, review source resources and move-generated cache, vault, and collection resources for narrow cleanup.",
+                  "why": "Commit does not automatically delete source resources. Extra disks and recovery resources can continue costing money, but shared or still-needed resources must not be deleted."
+                }
+              ],
+              "result": "The school accepts a tested service in the destination, not merely a successful move status. Recovery and cleanup remain deliberate operational decisions."
+            },
+            {
+              "type": "paragraph",
+              "text": "This worked plan deliberately keeps the subscription unchanged so regional and billing changes do not become one ambiguous test. Current Resource Mover documentation also describes combined subscription-and-region capabilities, but support must be checked for the specific workflow. Do not infer that the ordinary Resource Manager subscription move relocates a VM geographically, and do not treat the same-subscription example as a universal restriction on every Resource Mover scenario."
+            }
+          ]
+        },
+        {
+          "id": "move-prediction-and-exam",
+          "title": "Predict the consequences before changing the label",
+          "blocks": [
+            {
+              "type": "prediction",
+              "id": "predict-group-location",
+              "prompt": "vm-documents-01 runs in West Europe. It is moved to a resource group whose metadata location is North Europe. The VM's region is not otherwise changed. Has the document service moved to North Europe?",
+              "answer": "No. The resource group membership changed, not the VM's deployment region.",
+              "explanation": "A resource-group move changes the resource ID and management scope. Regional relocation requires a separate supported process with target-region planning, replication or another migration mechanism, and application acceptance."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Choose the move mechanism before its permissions",
+              "text": "A resource-group or subscription move changes management scope and IDs; a regional move creates a target deployment through a supported relocation workflow. For either, identify dependencies and access consequences. A green validation result is not proof that application authentication, backups, and external references are correct afterward."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "vm-move-scope-versus-region",
+          "kind": "single",
+          "prompt": "The document VM remains in West Europe but must belong to a different resource group in the same subscription. Which choice best matches the requirement?",
+          "choices": [
+            {
+              "id": "resource-manager-move",
+              "text": "Validate a supported resource-group move and update changed resource-ID references afterward.",
+              "explanation": "The requirement changes management scope, not geographic deployment."
+            },
+            {
+              "id": "group-location-relocates",
+              "text": "Create a North Europe resource group and assume moving into it copies the VM there.",
+              "explanation": "A group's metadata location does not change an existing VM's region."
+            },
+            {
+              "id": "regional-replication-required",
+              "text": "Always use regional replication because every resource-group move relocates disk bytes.",
+              "explanation": "A standard resource-group move does not itself change physical location."
+            }
+          ],
+          "correctIds": [
+            "resource-manager-move"
+          ],
+          "explanation": "Select the operation based on what changes, then handle that operation's dependency and access requirements."
+        },
+        {
+          "id": "vm-subscription-move-dependencies",
+          "kind": "single",
+          "prompt": "The school wants a standard cross-subscription move of a supported VM whose NIC uses a shared VNet. Both subscriptions belong to the same tenant. What must be investigated before proceeding?",
+          "choices": [
+            {
+              "id": "tenant-enough",
+              "text": "Nothing else, because matching tenant IDs prove every resource supports the move.",
+              "explanation": "Same-tenant membership is a prerequisite, not a substitute for resource-specific support and destination validation."
+            },
+            {
+              "id": "whole-dependency-group",
+              "text": "Whether the VNet and all required dependent resources can be consolidated and moved together, with destination quotas, providers, policy, and permissions validated.",
+              "explanation": "A VM in an existing VNet cannot simply leave that required dependency behind for this cross-subscription move."
+            },
+            {
+              "id": "nic-alone-enough",
+              "text": "Only the VM name and NIC, because VNet dependencies never matter across subscriptions.",
+              "explanation": "The documented move constraints require the VNet and its dependent resources to move as well."
+            }
+          ],
+          "correctIds": [
+            "whole-dependency-group"
+          ],
+          "explanation": "Shared infrastructure can make a seemingly small VM move a much wider migration decision."
+        },
+        {
+          "id": "vm-move-identity-validation",
+          "kind": "multiple",
+          "prompt": "Choose TWO appropriate checks after a supported resource-group move of a VM that uses a managed identity.",
+          "choices": [
+            {
+              "id": "verify-identity-restart",
+              "text": "Test identity-based dependency access and account for the documented stale-reference restart issue.",
+              "explanation": "A running process alone does not prove future startup or correct managed-identity references."
+            },
+            {
+              "id": "name-preserves-id",
+              "text": "Leave every resource-ID reference unchanged because the VM's friendly name is unchanged.",
+              "explanation": "The full resource ID includes the resource group and possibly subscription, so it changes even if the name does not."
+            },
+            {
+              "id": "identity-bypasses-network",
+              "text": "Assume the managed identity bypasses network restrictions on the document storage service.",
+              "explanation": "Identity authorization and network reachability are independent requirements."
+            },
+            {
+              "id": "recheck-role-scopes",
+              "text": "Recreate required resource-scoped role assignments and evaluate inherited access at the destination.",
+              "explanation": "Direct assignments do not automatically move, and the destination has different inherited scopes."
+            }
+          ],
+          "correctIds": [
+            "recheck-role-scopes",
+            "verify-identity-restart"
+          ],
+          "explanation": "Validate management authorization, identity associations, and actual application access as separate evidence."
+        },
+        {
+          "id": "vm-regional-move-acceptance",
+          "kind": "single",
+          "prompt": "Resource Mover has initiated a supported regional move of the document VM. Which acceptance plan is justified before commit and cleanup?",
+          "choices": [
+            {
+              "id": "test-target-and-dependencies",
+              "text": "Test target data and service behavior, restore required roles and extensions, verify networking and identities, then commit and separately review source cleanup.",
+              "explanation": "Regional relocation does not copy every setting, and committing does not automatically delete source resources."
+            },
+            {
+              "id": "public-ip-unchanged",
+              "text": "Skip endpoint checks because the source regional public IP must be preserved.",
+              "explanation": "The support matrix states that the regional public IP is not retained in the target region."
+            },
+            {
+              "id": "temporary-disk-copied",
+              "text": "Use temporary-disk files as the authoritative comparison because Resource Mover always replicates them.",
+              "explanation": "Temporary disks are excluded from preparation and are not a durable source of business data."
+            }
+          ],
+          "correctIds": [
+            "test-target-and-dependencies"
+          ],
+          "explanation": "Acceptance concerns the complete application, not just the replication engine's success state."
+        }
+      ],
+      "takeaways": [
+        "Resource-group and subscription moves change management scope, not a VM's physical region.",
+        "Move support depends on the complete dependency graph and destination constraints.",
+        "Resource IDs and role scopes change; managed-identity access and restart behavior need verification.",
+        "Regional moves require target configuration, replication, planned downtime, and application acceptance.",
+        "Commit and source cleanup are separate decisions."
+      ],
+      "sourceIds": [
+        "resource-moves",
+        "vm-move-limits",
+        "disk-encryption",
+        "identity-move",
+        "regional-moves",
+        "regional-support",
+        "vm-quotas"
+      ]
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Virtual machine",
+      "definition": "A computer implemented through virtualization, with a guest operating system running on Azure-managed physical hardware."
+    },
+    {
+      "term": "Image",
+      "definition": "The source operating-system and software state used to create a VM; its version, architecture, and supported security features matter."
+    },
+    {
+      "term": "VM size or SKU",
+      "definition": "A named hardware configuration defining vCPUs, memory, and supported network and storage capabilities."
+    },
+    {
+      "term": "Quota",
+      "definition": "A subscription usage limit, such as regional or VM-family vCPUs, which is different from available physical capacity."
+    },
+    {
+      "term": "Network interface",
+      "definition": "A VM's network attachment with IP configuration in a virtual-network subnet, commonly abbreviated NIC."
+    },
+    {
+      "term": "Deallocation",
+      "definition": "Releasing a VM's current compute allocation; persistent managed disks remain, but local temporary data must not be relied on."
+    },
+    {
+      "term": "Managed data disk",
+      "definition": "Azure-managed persistent block storage attached to a VM for application files or other data; the guest still manages its filesystem."
+    },
+    {
+      "term": "Ephemeral OS disk",
+      "definition": "An OS-disk configuration whose writes are stored locally and are disposable when the OS is reprovisioned, intended for reconstructible workloads."
+    },
+    {
+      "term": "Filesystem",
+      "definition": "The guest operating system's structure for organizing files and directories within a volume."
+    },
+    {
+      "term": "Encryption at host",
+      "definition": "Encryption performed by the VM host that protects local temporary storage and disk caches and sends encrypted disk data to Azure Storage."
+    },
+    {
+      "term": "Azure Disk Encryption",
+      "definition": "Guest-based volume encryption using BitLocker or dm-crypt, scheduled for retirement on September 15, 2028; abbreviated ADE."
+    },
+    {
+      "term": "Fault domain",
+      "definition": "A placement grouping of infrastructure with shared failure risks such as power or network equipment."
+    },
+    {
+      "term": "Update domain",
+      "definition": "A grouping of VMs that can restart together during planned platform maintenance; not an availability zone."
+    },
+    {
+      "term": "Availability zone",
+      "definition": "A physically separate grouping of datacenter infrastructure within a supported Azure region."
+    },
+    {
+      "term": "Scale-set orchestration",
+      "definition": "The management model for a VM fleet: Flexible uses standard VM resources, while Uniform primarily manages scale-set-specific instances as a group."
+    },
+    {
+      "term": "Autoscale cooldown",
+      "definition": "A rule-specific wait measured since the latest scaling action before that rule can initiate another action; separate from its metric observation window."
+    },
+    {
+      "term": "Managed identity",
+      "definition": "An Azure-managed application identity used to request access tokens without storing a password in application configuration."
+    },
+    {
+      "term": "Resource ID",
+      "definition": "The full Azure management path identifying a resource, including its subscription and resource group; it changes when those scopes change."
+    }
+  ],
+  "sources": [
+    {
+      "id": "vm-overview",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/overview",
+      "title": "Virtual machines in Azure",
+      "supports": "VM responsibilities, image and size choices, regions, related NIC and disk resources, billing components, temporary-storage persistence, and availability planning."
+    },
+    {
+      "id": "vm-portal",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/linux/quick-create-portal",
+      "title": "Create a Linux virtual machine in the Azure portal",
+      "supports": "Portal VM creation sequence, subscription and resource-group selection, image and size review, administrator SSH public-key setup, and deployment validation. The lesson deliberately replaces the quickstart's public access with an already approved private path."
+    },
+    {
+      "id": "vm-quotas",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/quotas",
+      "title": "Check vCPU quotas",
+      "supports": "Regional and VM-family vCPU quota tiers, allocated and deallocated usage, Usage + quotas inspection, and the distinction between quota and actual regional or zonal capacity."
+    },
+    {
+      "id": "vm-resize",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/resize-vm",
+      "title": "Change the size of a virtual machine",
+      "supports": "Resize restarts and possible deallocation, persistent OS/data disks, Windows temporary-disk category restrictions, SCSI versus remote NVMe restrictions, and the requested-size model after allocation failure."
+    },
+    {
+      "id": "disks-overview",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/managed-disks-overview",
+      "title": "Azure managed disks overview",
+      "supports": "Managed block storage, OS/data/temporary roles, VM-dependent disk support, disk backup concepts, temporary-disk loss scenarios, and managed-disk availability integration."
+    },
+    {
+      "id": "disks-attach",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/windows/attach-managed-disk-portal",
+      "title": "Attach a managed data disk to a Windows VM",
+      "supports": "Portal creation and attachment, guest Disk Management initialization and formatting, verifying disk identity and LUN, destructive-operation warnings, and GPT for disks of two TiB or larger."
+    },
+    {
+      "id": "disks-expand",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/windows/expand-os-disk",
+      "title": "Expand virtual hard disks attached to a Windows virtual machine",
+      "supports": "Separate Azure disk and guest volume expansion, unsupported shrinking, deallocation and online-expansion distinctions, and the four-TiB crossing restriction for Standard HDD, Standard SSD, and Premium SSD data disks."
+    },
+    {
+      "id": "ephemeral-disks",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/ephemeral-os-disks",
+      "title": "Ephemeral OS disks for Azure VMs",
+      "supports": "Disposable local OS writes, stateless-workload suitability, image/local-storage fit, reprovisioning after resize or redeploy, unsupported stop-deallocate lifecycle, snapshots, Backup, and Site Recovery, and distinction from temporary disks."
+    },
+    {
+      "id": "disk-encryption",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/disk-encryption",
+      "title": "Server-side encryption of Azure Disk Storage",
+      "supports": "Default managed-disk SSE, platform and customer keys, host-encryption boundary and cache-key behavior, guest ADE comparison, host-encryption restrictions, and customer-managed-key cross-subscription disk-move restrictions."
+    },
+    {
+      "id": "host-encryption",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/disks-enable-host-based-encryption-portal",
+      "title": "Enable encryption at host using the Azure portal",
+      "supports": "EncryptionAtHost registration, supported-size checks, portal disk settings, existing-VM deallocation and reallocation, current or previous ADE incompatibility, 512e disk creation-date restriction, and scale-set existing-instance handling."
+    },
+    {
+      "id": "ade-retirement",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/windows/disk-encryption-overview",
+      "title": "Azure Disk Encryption for Windows VMs",
+      "supports": "Verified September 15, 2028 ADE retirement, failure to unlock after reboots following retirement, migration including backups, new-VM host-encryption recommendation, and warning against direct BitLocker decryption of ADE disks."
+    },
+    {
+      "id": "availability-sets",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/availability-set-overview",
+      "title": "Availability sets overview",
+      "supports": "Availability-set versus zone resilience, fault and update domain purposes, up-to-three fault and up-to-twenty update domains, region-dependent managed-disk domain counts, immutable configured counts, and deployment sequencing that can produce shared fault domains."
+    },
+    {
+      "id": "vmss-modes",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/virtual-machine-scale-sets-orchestration-modes",
+      "title": "Orchestration modes for Virtual Machine Scale Sets",
+      "supports": "Creation-time immutable orchestration mode, standard Flexible versus scale-set-specific Uniform VM management, supported autoscale and health integrations, fault-domain spreading qualifications, explicit Flexible outbound access, and distinct automatic OS-image support."
+    },
+    {
+      "id": "rolling-upgrades",
+      "url": "https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/virtual-machine-scale-sets-configure-rolling-upgrades",
+      "title": "Configure rolling upgrades on Virtual Machine Scale Sets",
+      "supports": "Current dedicated requirements for Flexible Application Health extension and Uniform extension or probe, manual-first health validation, batch percentages, pauses, unhealthy thresholds, and distinction between model upgrade policy and automatic OS-image upgrades."
+    },
+    {
+      "id": "autoscale-rules",
+      "url": "https://learn.microsoft.com/en-us/azure/azure-monitor/autoscale/autoscale-understanding-settings",
+      "title": "Understand autoscale settings",
+      "supports": "Minimum and maximum bounds, safe default capacity, instance and time aggregation, divide-by-instance queue normalization, per-rule cooldown since the most recent scaling action, any scale-out versus all scale-in conditions, and flapping avoidance."
+    },
+    {
+      "id": "resource-moves",
+      "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/move-resource-group-and-subscription",
+      "title": "Move resources to a new resource group or subscription",
+      "supports": "Unchanged physical location, changed resource IDs, same-tenant subscriptions, permissions, temporary management locks, destination providers and quotas, validation, role-assignment handling, and consolidated cross-subscription dependencies."
+    },
+    {
+      "id": "vm-move-limits",
+      "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/move-limitations/virtual-machines-move-limitations",
+      "title": "Special cases when moving virtual machines",
+      "supports": "VNet dependency requirements, availability-set grouping, Standard frontend scale-set restrictions, Marketplace plans, encryption, scheduled patching, and backup configurations that require extra move planning."
+    },
+    {
+      "id": "regional-moves",
+      "url": "https://learn.microsoft.com/en-us/azure/resource-mover/tutorial-move-region-virtual-machines",
+      "title": "Move Azure VMs across regions",
+      "supports": "Resource Mover setup permissions and identity, dependency validation, prepare/replicate/initiate/commit/discard workflow, source shutdown and downtime, target testing, supported combined-move capability, and separate source and helper-resource cleanup."
+    },
+    {
+      "id": "regional-support",
+      "url": "https://learn.microsoft.com/en-us/azure/resource-mover/support-matrix-move-region-azure-vm",
+      "title": "Support for moving Azure VMs between regions",
+      "supports": "OS and security-type support including Windows versus Linux Trusted Launch, existing Site Recovery restriction, target-size comparison, excluded temporary disks, unretained regional public IP and peering, static-private-IP conditions, uncopied roles and extensions, and required outbound access."
+    },
+    {
+      "id": "identity-move",
+      "url": "https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/known-issues",
+      "title": "Known issues with managed identities for Azure resources",
+      "supports": "VM move stale managed-identity reference causing later startup failure, documented property-update workaround, and the separate effects of transferring subscriptions between Microsoft Entra directories."
+    }
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect one private VM and a disposable data disk",
+    "purpose": "Practice the separation between Azure resource configuration, guest storage, and application observations. This is an optional supervised exercise, not an automated deployment.",
+    "prerequisites": [
+      "Use a teacher-approved nonproduction subscription, budget, and empty lab-only resource group. Do not use real student records or production credentials.",
+      "An administrator must grant permission to create and manage the lab VM, its disks and NIC, and use the approved subnet. The learner also needs guest administrator access for Windows Disk Management.",
+      "Arrange a working approved private RDP path, such as an existing supervised Bastion or VPN setup. Do not create a broad internet RDP rule to make the lab easier.",
+      "Have the administrator verify a supported Windows image, matching architecture and size, quota and capacity, and an already Registered EncryptionAtHost feature if host encryption is included.",
+      "Do not use an ADE-enabled or previously ADE-enabled VM. Keep all lab data fictional and disposable."
+    ],
+    "costWarning": "A created VM incurs compute and possibly OS licensing charges; disks, snapshots, networking, and Bastion can incur separate charges. Deallocating compute does not remove disk or other retained-resource charges. This lab uses no fixed price or free-tier promise.",
+    "steps": [
+      "Before creating anything, record the chosen image, architecture, size, region, quota headroom, private subnet, managed OS disk, authentication method, and permitted spending window.",
+      "With explicit approval, manually create one private Windows test VM using the checked configuration and no VM public IP. If all host-encryption prerequisites are met, select Encryption at host during creation. Otherwise inspect the setting without claiming the protection is enabled.",
+      "Inspect deployment status, actual VM properties, NIC private address, and disk list. Connect through the prearranged private path and confirm the guest login separately from Azure portal access.",
+      "Manually create and attach one empty 32 GiB managed data disk. Record its name, size, and LUN; identify that exact empty device in Disk Management before initializing, formatting, and assigning an available letter.",
+      "Create a fictional text file on the new volume, read it back, and record its path. Identify any temporary storage separately without placing unique data there.",
+      "Optionally, within the approved charge limit, expand the data disk to 64 GiB using a supported workflow. Observe Azure's new device size, then extend the intended guest volume and confirm the original file remains readable.",
+      "Record the observed differences among VM power state, disk attachment, guest volume capacity, file access, and host-encryption configuration. Do not perform moves, scale-set creation, or a resize unless separately approved."
+    ],
+    "expectedResults": [
+      "The VM can be managed through Azure and accessed through the approved private path, with network access and guest credentials tested separately.",
+      "The new disk is visible in Azure before its guest filesystem is prepared, and the fictional file resides on the intended persistent volume.",
+      "If expansion was performed, guest usable capacity increases only after the relevant volume is extended, without formatting the existing data.",
+      "Host encryption is reported as enabled only if registration, support, selected configuration, and resulting VM state were verified."
+    ],
+    "cleanup": [
+      "Delete only the recorded lab VM and its lab-owned disks, NIC, and any lab-only ancillary resources after reviewing their delete-with-VM settings. Delete the lab resource group only if its contents have been confirmed to belong entirely to this exercise.",
+      "Check for retained unattached disks, snapshots, addresses, and other charged resources created by this exercise; remove only those no longer required and confirm deletion completes.",
+      "Do not delete shared VNets, Bastion, VPN gateways, identities, key stores, or backup resources. Do not remove shared subscription feature registrations as lab cleanup."
+    ]
+  }
+}

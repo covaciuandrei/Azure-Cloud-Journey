@@ -1,0 +1,683 @@
+{
+  "schemaVersion": 1,
+  "id": "infrastructure-as-code",
+  "title": "Infrastructure as code: describe, inspect, and change an Azure environment",
+  "summary": "Read the same small school network in ARM JSON and Bicep, make a justified change to both, and separate local compilation, deployment previews, resource lifecycle, and imperfect exports.",
+  "priority": "core",
+  "priorityReason": "The compute objectives explicitly require interpreting, modifying, deploying, exporting, and converting templates. These lessons teach those operations directly rather than treating a template as an unexplained download.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/overview",
+  "reviewedAt": "2026-09-20",
+  "officialObjectives": [
+    "Interpret an ARM template or Bicep file.",
+    "Modify an existing ARM template.",
+    "Modify an existing Bicep file.",
+    "Deploy resources using an ARM template or Bicep file.",
+    "Export an ARM template or convert an ARM template to Bicep."
+  ],
+  "lessons": [
+    {
+      "id": "iac-arm-and-bicep-model",
+      "title": "Read a desired state before trying to deploy it",
+      "summary": "Understand what templates describe, how names and dependencies determine the deployment, and why Bicep and JSON are two authoring forms for the same management system.",
+      "objectives": [
+        "Explain declarative infrastructure and the conditions behind idempotent deployment.",
+        "Trace parameters, variables, resources, outputs, and API versions in a complete ARM template.",
+        "Interpret equivalent Bicep declarations and implicit resource dependencies.",
+        "Distinguish resource scope, physical region, deployment order, and application access."
+      ],
+      "sections": [
+        {
+          "id": "desired-state-not-click-history",
+          "title": "Write the result you want, not a recording of your clicks",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A Romanian school wants separate practice environments for its timetable website. An administrator could repeatedly click through the portal, but remembering every setting becomes difficult. Infrastructure as code, abbreviated IaC, stores the intended infrastructure in reviewable text files. A classmate can read the proposed change before anyone applies it. Version control records why the network changed, not merely who remembers clicking a button. The files describe Azure resources such as networks and machines; they do not contain the website's lesson data or replace its application code."
+            },
+            {
+              "type": "paragraph",
+              "text": "Azure Resource Manager, or ARM, is Azure's management service for creating and changing resources. A declarative template says that a named resource should exist with specified properties. It does not instruct Azure to click a sequence of screens. Resource Manager sends requests to the appropriate resource provider, such as Microsoft.Network, and orders operations according to dependencies. The portal, command-line tools, and templates ultimately use management operations, so a template cannot bypass permission checks, Azure Policy, a resource lock, or a service restriction."
+            },
+            {
+              "type": "paragraph",
+              "text": "Idempotent means that applying the same desired state repeatedly to the same resource identities should converge on the same configuration rather than create another copy on every run. The identity includes the resource's scope, type, and name. Changing the name from school-lab-vnet to school-test-vnet describes a different network, not a rename instruction. Idempotence also is not continuous enforcement: an administrator can introduce drift through a later manual change. Another deployment can reconcile supported properties, but the file is not a background agent watching every edit."
+            }
+          ]
+        },
+        {
+          "id": "read-complete-arm-network",
+          "title": "A complete, small ARM JSON template",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "JSON, JavaScript Object Notation, represents objects with named properties and arrays with ordered entries. Save the following complete example as school-network.json only if doing the optional exercise. It declares a virtual network, or VNet, and a network security group, or NSG. The VNet holds address ranges; the NSG holds traffic rules. The empty custom-rule list does not mean deny everything: Azure NSGs also have default rules. This example creates an empty infrastructure skeleton, not a complete secure website, a VM, a public address, or a database."
+            },
+            {
+              "type": "code",
+              "language": "json",
+              "code": "{\n  \"$schema\": \"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#\",\n  \"contentVersion\": \"1.0.0.0\",\n  \"parameters\": {\n    \"environment\": { \"type\": \"string\", \"defaultValue\": \"lab\", \"allowedValues\": [\"lab\", \"test\"] },\n    \"location\": { \"type\": \"string\", \"defaultValue\": \"[resourceGroup().location]\" },\n    \"subnetPrefix\": { \"type\": \"string\", \"defaultValue\": \"10.60.1.0/24\" }\n  },\n  \"variables\": {\n    \"networkName\": \"[concat('school-', parameters('environment'), '-vnet')]\",\n    \"nsgName\": \"[concat('school-', parameters('environment'), '-nsg')]\",\n    \"resourceTags\": { \"project\": \"classroom\" }\n  },\n  \"resources\": [\n    {\n      \"type\": \"Microsoft.Network/networkSecurityGroups\",\n      \"apiVersion\": \"2025-01-01\",\n      \"name\": \"[variables('nsgName')]\",\n      \"location\": \"[parameters('location')]\",\n      \"tags\": \"[variables('resourceTags')]\",\n      \"properties\": { \"securityRules\": [] }\n    },\n    {\n      \"type\": \"Microsoft.Network/virtualNetworks\",\n      \"apiVersion\": \"2025-01-01\",\n      \"name\": \"[variables('networkName')]\",\n      \"location\": \"[parameters('location')]\",\n      \"tags\": \"[variables('resourceTags')]\",\n      \"properties\": {\n        \"addressSpace\": { \"addressPrefixes\": [\"10.60.0.0/16\"] }\n      }\n    },\n    {\n      \"type\": \"Microsoft.Network/virtualNetworks/subnets\",\n      \"apiVersion\": \"2025-01-01\",\n      \"name\": \"[concat(variables('networkName'), '/web')]\",\n      \"dependsOn\": [\n        \"[resourceId('Microsoft.Network/virtualNetworks', variables('networkName'))]\",\n        \"[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]\"\n      ],\n      \"properties\": {\n        \"addressPrefix\": \"[parameters('subnetPrefix')]\",\n        \"networkSecurityGroup\": {\n          \"id\": \"[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]\"\n        }\n      }\n    }\n  ],\n  \"outputs\": {\n    \"networkId\": {\n      \"type\": \"string\",\n      \"value\": \"[resourceId('Microsoft.Network/virtualNetworks', variables('networkName'))]\"\n    }\n  }\n}",
+              "explanation": "This resource-group-scope template declares an NSG, a VNet, and its child subnet. Bracketed strings are evaluated ARM expressions. The child's name includes its parent network and /web. Both dependencies must exist before Azure creates the subnet and associates its NSG."
+            },
+            {
+              "type": "paragraph",
+              "text": "Read the template from its inputs to its result. Parameters are values the person deploying may supply; a default is used only when no value overrides it. The environment parameter accepts lab or test, which prevents an accidental third spelling. Variables calculate reusable values, so environment lab produces networkName school-lab-vnet and nsgName school-lab-nsg. resourceTags is an object reused by the VNet and NSG. The resources array also declares the web child subnet separately. The output returns the network's resource ID, a management address identifying that exact network, not an IP address that a browser can visit."
+            },
+            {
+              "type": "paragraph",
+              "text": "The schema URI describes the template document format. contentVersion is the author's version label, not the Azure service version and not automatic change control. Each resource's apiVersion selects the provider's contract for its properties. An API, or application programming interface, defines accepted requests and responses. Choosing a newer date without checking the resource reference is not a general repair technique. A property may be unavailable, change meaning, or require a particular resource capability. This example pins a published network API rather than relying on an invisible latest version."
+            }
+          ]
+        },
+        {
+          "id": "read-equivalent-bicep-network",
+          "title": "The same intent expressed in Bicep",
+          "blocks": [
+            {
+              "type": "code",
+              "language": "bicep",
+              "code": "targetScope = 'resourceGroup'\n\n@allowed(['lab', 'test'])\nparam environment string = 'lab'\nparam location string = resourceGroup().location\nparam subnetPrefix string = '10.60.1.0/24'\n\nvar networkName = 'school-${environment}-vnet'\nvar nsgName = 'school-${environment}-nsg'\nvar resourceTags = {\n  project: 'classroom'\n}\n\nresource schoolNsg 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {\n  name: nsgName\n  location: location\n  tags: resourceTags\n  properties: {\n    securityRules: []\n  }\n}\n\nresource schoolNetwork 'Microsoft.Network/virtualNetworks@2025-01-01' = {\n  name: networkName\n  location: location\n  tags: resourceTags\n  properties: {\n    addressSpace: {\n      addressPrefixes: ['10.60.0.0/16']\n    }\n  }\n}\n\nresource schoolSubnet 'Microsoft.Network/virtualNetworks/subnets@2025-01-01' = {\n  parent: schoolNetwork\n  name: 'web'\n  properties: {\n    addressPrefix: subnetPrefix\n    networkSecurityGroup: {\n      id: schoolNsg.id\n    }\n  }\n}\n\noutput networkId string = schoolNetwork.id",
+              "explanation": "Save this separate equivalent authoring file as school-network.bicep. Parameters have types, variables reuse values, and resource declarations combine provider type and API version. parent: schoolNetwork and schoolNsg.id create the child's implicit dependencies; additional dependsOn entries would be redundant."
+            },
+            {
+              "type": "paragraph",
+              "text": "Bicep is a language designed specifically for Azure infrastructure. It compiles into an ARM JSON template, so it does not introduce a second infrastructure service or a separate local state file to synchronize. Compilation translates syntax; deployment asks Azure to act. schoolNsg and schoolNetwork are symbolic names used inside the file. Their name properties still determine the names visible in Azure. Renaming the symbol schoolNetwork consistently within the file need not rename any Azure resource. Changing networkName can. That distinction lets an author improve readability without accidentally creating a replacement environment."
+            },
+            {
+              "type": "paragraph",
+              "text": "The @allowed decorator constrains the parameter, and string is its data type. Interpolation inserts environment into a larger string using ${environment}. Objects use colons between property names and values, while arrays use square brackets. Unlike ARM expression strings, Bicep calls resourceGroup() directly and accesses schoolNsg.id directly. The output has a declared type too. Neither format needs a password for this network skeleton. In a template that does need a secret, use a secure parameter and an appropriate secret source, never an ordinary output or a committed credential."
+            }
+          ]
+        },
+        {
+          "id": "scope-region-and-dependencies",
+          "title": "Scope chooses ownership; dependencies choose order",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Scope is the management boundary where the deployment operates: a resource group, subscription, management group, or tenant. A subscription is an Azure billing and management boundary, and a resource group collects related resources inside it. Our template targets an existing resource group. Its location parameter chooses the resources' region; resourceGroup().location merely supplies a convenient default. It does not force every resource in every group to occupy that region. A subscription-scope template uses different deployment commands and can create resource groups. Changing the command alone does not transform this resource-group template into a correctly designed subscription deployment."
+            },
+            {
+              "type": "paragraph",
+              "text": "The ARM template explicitly says that the subnet depends on both the network and NSG. Constructing an ID with resourceId supplies the correct identifier but does not itself establish this explicit ordering relationship in the JSON example. Bicep sees the parent and symbolic schoolNsg.id references and generates those dependencies. Resource Manager may create the independent VNet and NSG in parallel; their position in the file is not a reliable sequence. A deployment dependency is also not a packet path or a permission grant. After creation, the subnet's NSG association controls filtering, whereas the dependencies have already served their ordering purpose."
+            },
+            {
+              "type": "diagram",
+              "title": "From reviewed intent to a dependent resource pair",
+              "description": "The author chooses either ARM JSON or Bicep. Bicep is compiled to ARM JSON before Resource Manager deploys it. The independent VNet and NSG must both exist before the web child subnet is created and associated with the NSG. The bottom arrows represent deployment order, not internet traffic.",
+              "nodes": [
+                { "id": "bicep-file", "label": "Bicep file", "detail": "Readable desired state", "column": 0, "row": 0 },
+                { "id": "arm-template", "label": "ARM template", "detail": "JSON plus parameters", "column": 1, "row": 0 },
+                { "id": "resource-manager", "label": "Resource Manager", "detail": "Scope and permissions", "column": 2, "row": 0 },
+                { "id": "school-nsg", "label": "School NSG", "detail": "Independent of VNet", "column": 0, "row": 2 },
+                { "id": "school-network", "label": "School VNet", "detail": "Parent address space", "column": 2, "row": 1 },
+                { "id": "school-subnet", "label": "Web child subnet", "detail": "Parent plus NSG association", "column": 2, "row": 2 }
+              ],
+              "edges": [
+                { "from": "bicep-file", "to": "arm-template", "label": "Compile locally" },
+                { "from": "arm-template", "to": "resource-manager", "label": "Submit at group scope" },
+                { "from": "resource-manager", "to": "school-nsg", "label": "Provider request" },
+                { "from": "resource-manager", "to": "school-network", "label": "Provider request" },
+                { "from": "school-nsg", "to": "school-subnet", "label": "NSG exists first" },
+                { "from": "school-network", "to": "school-subnet", "label": "Parent exists first" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "trace-a-repeatable-deployment",
+          "title": "Worked example: determine what will actually exist",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Two files, one intended school network",
+              "scenario": "Assume a dedicated empty resource group in an allowed region, adequate permissions, and no policy conflicts. The administrator supplies environment=lab and does not override subnetPrefix. Only one authoring file is deployed at a time.",
+              "steps": [
+                { "action": "Evaluate the parameters and variables before counting resources.", "why": "The defaults produce school-lab-nsg and school-lab-vnet, with web subnet 10.60.1.0/24 inside 10.60.0.0/16. Variables are values, not separately billed Azure objects." },
+                { "action": "Create the independent NSG and VNet, then create the web child subnet with its NSG association.", "why": "The subnet needs its parent and the association needs a real NSG target. JSON explicitly declares both dependencies; Bicep infers them from the references." },
+                { "action": "Return the VNet resource ID and then consider a second identical deployment to the same scope.", "why": "The same types and names identify the existing resources. With unchanged properties, another deployment does not ask for another copy." },
+                { "action": "Treat a later environment=test deployment as a separate proposed environment.", "why": "Both resource names change. Under incremental deployment, the lab resources are not implicitly renamed or removed when test resources are introduced." }
+              ],
+              "result": "The learner can explain the inputs, VNet, NSG, child subnet, association, deployment order, and output without executing either file. Neither success nor a resource ID proves that the school's future website is installed or reachable."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-symbol-versus-name",
+              "prompt": "An author renames the Bicep symbol schoolNetwork to timetableNetwork everywhere, but leaves networkName and the deployment scope unchanged. Does this alone request a new Azure VNet?",
+              "answer": "No. The deployed name, type, and scope remain the same.",
+              "explanation": "A symbolic name is an authoring reference. It matters to the compiler and other expressions, but the resource's name property is what participates in its Azure identity."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Interpret values rather than guessing from file order",
+              "text": "A parameter is an input, a variable is a reusable expression, a resource declaration requests infrastructure, and an output returns a value. API version is not deployment scope. A dependency orders creation but does not authorize a user or permit a network connection."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "iac-interpret-resource-names",
+          "kind": "single",
+          "prompt": "The complete template receives environment=test, with all other defaults. Which VNet name is requested?",
+          "choices": [
+            { "id": "name-test", "text": "school-test-vnet", "explanation": "networkName concatenates school-, the supplied environment value test, and -vnet." },
+            { "id": "name-symbol", "text": "schoolNetwork", "explanation": "This is the Bicep symbol, not the deployed name property." },
+            { "id": "name-lab", "text": "school-lab-vnet", "explanation": "The default lab is overridden by the explicitly supplied test value." }
+          ],
+          "correctIds": ["name-test"],
+          "explanation": "Follow the input through the variable to the resource name; the name is not inferred from the file name."
+        },
+        {
+          "id": "iac-interpret-dependency",
+          "kind": "single",
+          "prompt": "Why does the Bicep child subnet wait for the NSG in the same deployment?",
+          "choices": [
+            { "id": "file-order", "text": "The NSG happens to appear earlier in the text.", "explanation": "Declaration order does not define a reliable deployment sequence." },
+            { "id": "symbol-reference", "text": "The subnet configuration references schoolNsg.id.", "explanation": "The symbolic reference creates the implicit dependency that Bicep passes to Resource Manager." },
+            { "id": "tag-match", "text": "The parent network and NSG have the same project tag.", "explanation": "Matching tags organize resources but do not impose creation order." }
+          ],
+          "correctIds": ["symbol-reference"],
+          "explanation": "Dependencies represent what must exist first, not arbitrary textual order or organizational labels."
+        },
+        {
+          "id": "iac-idempotent-scope",
+          "kind": "single",
+          "prompt": "An unchanged template with environment=lab is redeployed to the same group after a successful deployment. No resource properties have drifted. What should you expect?",
+          "choices": [
+            { "id": "new-copy", "text": "A new numbered VNet is automatically added.", "explanation": "The template supplies fixed names, not a request to generate another numbered copy." },
+            { "id": "website-ready", "text": "The timetable application is automatically installed.", "explanation": "The template contains no VM, web application, or application deployment instructions." },
+            { "id": "same-resources", "text": "The same named resources remain in the requested state.", "explanation": "Stable scope, types, names, and properties are the basis for idempotent deployment." }
+          ],
+          "correctIds": ["same-resources"],
+          "explanation": "Idempotence concerns the requested infrastructure state. It does not invent application configuration."
+        },
+        {
+          "id": "iac-version-and-scope",
+          "kind": "single",
+          "prompt": "Which statement correctly distinguishes apiVersion from targetScope?",
+          "choices": [
+            { "id": "contract-and-boundary", "text": "apiVersion selects a resource-provider contract; targetScope selects the deployment's management boundary.", "explanation": "These answer different questions: which request shape, and at which level to deploy." },
+            { "id": "both-region", "text": "Both select the Azure region.", "explanation": "A resource's location selects its region; neither field means that." },
+            { "id": "schema-cost", "text": "apiVersion sets the monthly price and targetScope sets CPU count.", "explanation": "Neither property specifies price or machine capacity." }
+          ],
+          "correctIds": ["contract-and-boundary"],
+          "explanation": "Read scope, location, and provider version as separate pieces of information."
+        }
+      ],
+      "takeaways": [
+        "Declarative files describe intended resources; repeatability depends on stable identities and compatible properties.",
+        "Bicep compiles to ARM JSON and uses symbolic references to infer dependencies.",
+        "Inputs, expressions, infrastructure declarations, and returned values have different responsibilities.",
+        "An infrastructure deployment is not evidence of application authentication or network reachability."
+      ],
+      "sourceIds": ["bicep-overview", "arm-syntax", "arm-dependencies", "bicep-dependencies", "bicep-deploy", "network-authoring", "nsg-defaults"]
+    },
+    {
+      "id": "iac-modify-and-deploy",
+      "title": "Make a controlled change and understand the deployment boundary",
+      "summary": "Modify actual ARM and Bicep definitions, preview the result at the right scope, and choose explicit resource lifecycle behavior instead of trusting the word incremental.",
+      "objectives": [
+        "Modify equivalent ARM JSON and Bicep declarations while preserving unrelated required properties.",
+        "Calculate the effect of a changed subnet parameter and shared tags.",
+        "Distinguish compilation, validation, what-if, and deployment with scoped CLI examples.",
+        "Explain incremental mode, the risk of complete mode, and deployment-stack deletion or detachment."
+      ],
+      "sections": [
+        {
+          "id": "define-a-bounded-change",
+          "title": "Begin with a change request and its assumptions",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school's practice network has no attached machines, private endpoints, delegations, or peerings. Its administrator wants a smaller web subnet for an address-planning exercise and a costCenter tag on the VNet and NSG. This empty-network assumption matters: changing an occupied subnet can fail or disrupt dependent resources, and reducing an address range is not a general way to save money. IP address space is a planning constraint; a smaller private subnet does not automatically make a VM cheaper. The change ticket should state what remains the same as well as what changes."
+            },
+            {
+              "type": "paragraph",
+              "text": "Assume 40 future ordinary NIC addresses and room for 10 more are required. A /26 IPv4 subnet contains 2 to the power of 32 minus 26, or 64 addresses. Azure reserves five addresses in each ordinary subnet, leaving 59 assignable addresses. Fifty required addresses fit with nine spare. A /27 provides 32 minus five, or 27, so it would not fit. The proposed 10.60.1.0/26 is within the existing 10.60.0.0/16 VNet and is correctly aligned. Service-specific subnets can impose additional sizing rules, so this arithmetic is not a universal Container Apps or gateway recipe."
+            }
+          ]
+        },
+        {
+          "id": "modify-arm-json-fields",
+          "title": "Modify the ARM template at two precise locations",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "In school-network.json from the previous lesson, replace the entire object at parameters.subnetPrefix with the first JSON object below. Replace variables.resourceTags with the second object. These are replacement values for named locations, not complete deployment templates. Keep environment, location, all three resource declarations, dependsOn, the NSG association, and the output. Do not paste a second subnetPrefix property beside the first. Duplicate JSON properties make the intended value ambiguous across tools and are not a sound editing strategy."
+            },
+            {
+              "type": "code",
+              "language": "json",
+              "code": "{ \"type\": \"string\", \"defaultValue\": \"10.60.1.0/26\" }",
+              "explanation": "Replace only the value of parameters.subnetPrefix in the complete template. This changes the default; an explicitly supplied subnetPrefix parameter still overrides that default."
+            },
+            {
+              "type": "code",
+              "language": "json",
+              "code": "{ \"project\": \"classroom\", \"costCenter\": \"school-lab\" }",
+              "explanation": "Replace only variables.resourceTags. Because both resources refer to this object, both retain project and gain costCenter. The tag is a management label, not an access rule or an enforced spending limit."
+            },
+            {
+              "type": "paragraph",
+              "text": "Now trace each edit to a resource property. The subnet's addressPrefix expression reads parameters('subnetPrefix'), so the new default reaches the web subnet when no override is present. Both tags expressions read variables('resourceTags'), so the added tag reaches both resources without duplicating its spelling. Merely adding an unused parameter would change nothing. Editing contentVersion would also not change the subnet. The useful review question is not whether a word appears in the file, but whether a resource property actually consumes the value."
+            }
+          ]
+        },
+        {
+          "id": "modify-bicep-fields",
+          "title": "Apply the same change to the Bicep authoring file",
+          "blocks": [
+            {
+              "type": "code",
+              "language": "bicep",
+              "code": "param subnetPrefix string = '10.60.1.0/26'\n\nvar resourceTags = {\n  project: 'classroom'\n  costCenter: 'school-lab'\n}",
+              "explanation": "These are replacement declarations in school-network.bicep, not a separate deployable network file. Replace the existing subnetPrefix and resourceTags declarations; leave their consumers and all remaining declarations unchanged."
+            },
+            {
+              "type": "paragraph",
+              "text": "The Bicep modification uses the same desired values, but not JSON's quoted expression syntax. A common translation error is inserting the literal text [parameters('subnetPrefix')] into a Bicep string. That would not mean the normal Bicep parameter reference. Keep addressPrefix: subnetPrefix in the resource. Likewise, keep tags: resourceTags and id: schoolNsg.id. The compiler can then retain type checking and dependency inference. Editing the symbolic name or API version is unnecessary for this ticket and would add unrelated review work."
+            },
+            {
+              "type": "paragraph",
+              "text": "For a real project, choose one maintained authoring source rather than independently editing two files forever. These paired edits are a learning exercise showing equivalent intent. A generated ARM template is often a build artifact from maintained Bicep. If people separately change both, a future build can overwrite the manual JSON change. Record which file is authoritative and compare the resulting resource declarations, parameters, and outputs rather than expecting identical whitespace. Source control should contain intent and nonsecret configuration, not a captured access token or a downloaded private key."
+            }
+          ]
+        },
+        {
+          "id": "validate-preview-and-apply",
+          "title": "Compile locally, then validate and preview the intended scope",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The following Bash-style Azure CLI examples are for a learner to inspect or optionally run with permission; this course does not execute them. Install a current Azure CLI and its Bicep component first. For Azure operations, authenticate to an authorized training tenant, explicitly select the intended subscription, and confirm that rg-school-iac-lab already exists in an allowed region. The deploying identity needs write permissions on these network resources and Microsoft.Resources/deployments operations at the relevant scope. An appropriate Contributor assignment at this dedicated group can satisfy those management needs, subject to policy and deny restrictions. Reading a template does not confer those permissions."
+            },
+            {
+              "type": "code",
+              "language": "azurecli",
+              "code": "az bicep build --file school-network.bicep --outfile school-network.compiled.json\naz deployment group validate --resource-group rg-school-iac-lab --template-file school-network.bicep --parameters environment=lab\naz deployment group what-if --resource-group rg-school-iac-lab --template-file school-network.bicep --parameters environment=lab --mode Incremental",
+              "explanation": "Build is local compilation and uses a distinct output name so it does not overwrite the hand-authored school-network.json. Validate and what-if contact Azure but do not deploy the declared network resources. Use the same subscription, group, file, and parameters for preview and the eventual approved deployment."
+            },
+            {
+              "type": "paragraph",
+              "text": "Compilation can detect syntax and many type errors without allocating Azure resources. Provider validation checks more of the proposed request, but success does not reserve regional capacity or guarantee a later operation will succeed. What-if compares intended properties with current resources. Read creates, modifications, deletions, and ignored or unsupported information; do not approve merely because a command returned without an error. Defaulted provider properties and unresolved expressions can create noise. Investigate an unexpected difference rather than assuming it is harmless, especially when the proposed subnet or a resource identity changes."
+            },
+            {
+              "type": "code",
+              "language": "azurecli",
+              "code": "az deployment group create --name school-network-change-01 --resource-group rg-school-iac-lab --template-file school-network.bicep --parameters environment=lab --mode Incremental --confirm-with-what-if",
+              "explanation": "This command does deploy after confirmation. It is not a simulation. Stop if the preview is unexpected. To deploy the modified ARM JSON instead, replace the template-file value with school-network.json in validation, preview, and deployment; do not deploy both competing versions without deliberate intent."
+            },
+            {
+              "type": "paragraph",
+              "text": "The command's group scope matches targetScope and the resource-group ARM schema. Its deployment name identifies a history record, not the VNet. Reusing a deployment name can replace its earlier history entry, so meaningful unique names help trace reviewed changes. After an approved deployment, inspect deployment operations and the actual subnet and tags. If deployment fails after one resource succeeds, do not assume everything was rolled back. Investigate the failed operation, preserve the intended state, and decide whether to correct and retry or deliberately remove the practice resources."
+            }
+          ]
+        },
+        {
+          "id": "incremental-is-not-property-patching",
+          "title": "Separate resources omitted from the template from properties omitted on a resource",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Incremental is the recommended ordinary deployment mode and the default. An unrelated resource in the target group that is absent from the template is left alone. However, properties of a resource that is present in the template are reapplied as its desired configuration. Omitting a nondefault property is not a promise to keep its current value. A provider can reset omitted properties to defaults. Preserve all required nondefault properties and inspect what-if. Read resource-specific update behavior rather than assuming every service performs the same field-by-field merge."
+            },
+            {
+              "type": "paragraph",
+              "text": "There is a documentation distinction worth making explicit. The general deployment-modes page still recommends declaring subnets on the VNet parent, but current service-specific Bicep networking guidance recommends independently managed child subnets. That guidance documents newer VNet behavior: omitting the parent's subnets property preserves existing subnets, while explicitly setting it empty deletes them. Our example follows the current service-specific guidance, declares web as a child, and never assigns subnets on the parent. Do not manage the same subnet simultaneously through both patterns or assume an empty array means leave unchanged."
+            },
+            {
+              "type": "paragraph",
+              "text": "Suppose the group contains the school's VNet with its subnet, NSG, and an unrelated storage account. Redeploying this network template incrementally leaves the storage account. Removing costCenter from the shared tag object is different: the VNet and NSG receive the revised tag object, so the omitted tag should not be assumed preserved. The words incremental deployment describe how resources absent from the template are handled, not a universal field-by-field merge. This is why copying one convenient property from a portal export can be unsafe when updating a complex existing resource."
+            },
+            {
+              "type": "paragraph",
+              "text": "Complete mode historically attempts to delete supported resources in the target resource group that are absent from the resolved template. It is not an all-or-nothing transaction, and child-resource behavior, locks, and scope restrictions matter. Subscription deployments do not support complete mode. Current Microsoft guidance says complete mode is not recommended and is being gradually deprecated; use deployment stacks for template-managed deletion instead. This lesson explains complete mode so you can recognize its risk, not as the recommended cleanup default or an invitation to test it in a shared group."
+            }
+          ]
+        },
+        {
+          "id": "stacks-and-change-reasoning",
+          "title": "Manage lifecycle explicitly instead of deleting by surprise",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "A deployment stack is an Azure resource that tracks a defined collection of managed resources. Its actionOnUnmanage setting controls what happens when a resource leaves that collection: detach keeps the resource in Azure but stops stack management; delete removes the selected managed resource. DeleteResources and deleteAll differ in whether managed resource groups are also subject to deletion. Deleting a managed resource group can delete everything inside it, so the ownership boundary must be deliberate. Detaching a billable resource does not stop its charges. A stack is lifecycle management, not a data backup."
+            },
+            {
+              "type": "paragraph",
+              "text": "Stacks can also use deny settings to restrict management-plane changes, with their own role and permission requirements. Those settings do not authenticate the timetable's users or protect every data-plane action. Review the stack's managed-resource inventory and the proposed detach or delete actions before applying changes. Current documentation describes dedicated stack what-if results, which are stored result resources, unlike ordinary deployment what-if. Do not assume that the ordinary group what-if command previews a stack's complete lifecycle behavior, or that a preview proves every provider operation will succeed. This small lab uses ordinary incremental deployments and no stack."
+            },
+            {
+              "type": "example",
+              "title": "Approve the intended network change, not an accidental replacement",
+              "scenario": "The empty practice network already exists with the original /24 subnet and project tag. The reviewed ticket asks for a /26 and a costCenter tag, keeping environment=lab and the same resource group.",
+              "steps": [
+                { "action": "Calculate that /26 leaves 59 ordinary assignable addresses, enough for the stated 50-address plan.", "why": "A justified default change follows a capacity requirement. Guessing that a longer prefix is larger would select the wrong range." },
+                { "action": "Apply the two ARM replacements or the two Bicep replacements, preserving names, NSG association, and dependencies.", "why": "The change should update the existing intended resources rather than request new names or silently remove essential configuration." },
+                { "action": "Compile where applicable, validate, and preview with environment=lab in the exact target group.", "why": "Previewing test but deploying lab examines different resource identities and therefore is not approval of the actual change." },
+                { "action": "Approve only the expected subnet and tag modifications, then inspect the deployed state.", "why": "Unexpected creates suggest a name or scope change. A successful preview is not itself a deployment, and a successful deployment still deserves an outcome check." }
+              ],
+              "result": "The administrator can modify both authoring formats, explain the numerical change, and preserve the intended resource boundary. An unrelated group resource is not selected for deletion merely because it is absent from this incremental template."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-overridden-default",
+              "prompt": "The subnetPrefix default is changed to /26, but the deployment command explicitly supplies subnetPrefix=10.60.1.0/24. Which value reaches the web subnet?",
+              "answer": "10.60.1.0/24, because the supplied parameter overrides the default.",
+              "explanation": "Changing a template default does not override the caller. A review must include the parameter file or command values, not only the template diff."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Preview, resource lifecycle, and property replacement are different decisions",
+              "text": "What-if predicts; create applies. Incremental preserves unrelated resources absent from the template, not every omitted property of declared resources. Recognize legacy complete-mode deletion semantics, but use current deployment-stack guidance for deliberate lifecycle management."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "iac-modify-arm-consumer",
+          "kind": "single",
+          "prompt": "In the supplied ARM template, which edit adds a costCenter tag to both the VNet and NSG while retaining project?",
+          "choices": [
+            { "id": "unused-input", "text": "Add an unused parameter named costCenter.", "explanation": "A parameter changes resource state only when a relevant resource property consumes its value." },
+            { "id": "replace-shared-tags", "text": "Replace variables.resourceTags with an object containing both project and costCenter.", "explanation": "Both resources consume that shared object through their tags expression." },
+            { "id": "version-only", "text": "Change contentVersion to 2.0.0.0.", "explanation": "An author version label does not create or populate resource tags." }
+          ],
+          "correctIds": ["replace-shared-tags"],
+          "explanation": "Modify the shared value that is actually referenced by both tags properties."
+        },
+        {
+          "id": "iac-modify-bicep-prefix",
+          "kind": "single",
+          "prompt": "The school needs 50 ordinary assignable addresses in an empty subnet. Which Bicep change from this lesson fits that requirement?",
+          "choices": [
+            { "id": "prefix-27", "text": "Set the default to 10.60.1.0/27 because 27 is greater than 26.", "explanation": "A longer prefix means fewer host addresses. A /27 leaves only 27 assignable addresses here." },
+            { "id": "symbol-26", "text": "Rename schoolNetwork to subnet26 without changing any property.", "explanation": "An authoring symbol does not determine the subnet's address prefix." },
+            { "id": "prefix-26", "text": "Set subnetPrefix's default to 10.60.1.0/26 and retain addressPrefix: subnetPrefix.", "explanation": "A /26 has 64 addresses, with 59 after Azure's five reservations, and the resource consumes the changed value." }
+          ],
+          "correctIds": ["prefix-26"],
+          "explanation": "Correct modification requires both sufficient calculated capacity and a resource property connected to the new value."
+        },
+        {
+          "id": "iac-deployment-scope-and-preview",
+          "kind": "single",
+          "prompt": "You have permission in a dedicated existing resource group. Which sequence correctly previews and then applies this resource-group Bicep file?",
+          "choices": [
+            { "id": "group-preview-apply", "text": "Use group what-if, inspect it, and use group create with the same subscription, group, file, and parameters.", "explanation": "The preview and application evaluate the same intended scope and resource identities." },
+            { "id": "compile-is-deploy", "text": "Run bicep build and assume the VNet now exists.", "explanation": "Compilation creates an ARM template locally; it does not deploy infrastructure." },
+            { "id": "different-environment", "text": "Preview environment=test and apply environment=lab without another review.", "explanation": "The names differ, so the preview did not evaluate the resources the actual deployment will target." }
+          ],
+          "correctIds": ["group-preview-apply"],
+          "explanation": "A useful preview must match the intended deployment inputs and be reviewed before applying changes."
+        },
+        {
+          "id": "iac-resource-lifecycle",
+          "kind": "single",
+          "prompt": "An unrelated storage account exists in the group but is absent from this ordinary incremental deployment. What is the correct expectation and current lifecycle guidance?",
+          "choices": [
+            { "id": "automatic-delete", "text": "Incremental deletes the account because it is not declared.", "explanation": "That reverses incremental-mode behavior." },
+            { "id": "preserve-use-stacks", "text": "The account is left alone; use deliberate deployment-stack behavior for template-managed deletions.", "explanation": "Incremental preserves absent resources, while current Microsoft guidance recommends stacks rather than complete mode for managed deletion." },
+            { "id": "all-properties-preserved", "text": "Incremental guarantees every omitted property of every declared resource is preserved too.", "explanation": "Declared resource properties are reapplied. Omitted nondefault properties can be reset." }
+          ],
+          "correctIds": ["preserve-use-stacks"],
+          "explanation": "Reason separately about absent resources, omitted properties, and explicit stack-managed detachment or deletion."
+        }
+      ],
+      "takeaways": [
+        "A precise modification preserves unrelated desired properties and traces each changed value to its consumers.",
+        "An explicit parameter value overrides the template's default.",
+        "Use matching scope and parameters for validation, preview, and approved deployment.",
+        "Incremental mode is not a universal property merge, and complete mode is not the recommended deletion strategy.",
+        "Detaching a resource from a stack leaves it running and potentially billable."
+      ],
+      "sourceIds": ["arm-syntax", "bicep-overview", "bicep-deploy", "deployment-what-if", "deployment-modes", "deployment-stacks", "stack-what-if", "vnet-addressing", "network-authoring"]
+    },
+    {
+      "id": "iac-export-and-decompile",
+      "title": "Recover useful intent from an export without trusting it blindly",
+      "summary": "Choose between current-resource export and deployment history, convert ARM JSON to Bicep, and repair the result before treating it as reusable infrastructure.",
+      "objectives": [
+        "Choose an export method based on whether the current resource state or original deployment intent is needed.",
+        "Explain conversion, missing-property, secret, and resource-coverage limitations.",
+        "Use a bounded export and decompile workflow with distinct local output files.",
+        "Review a recovered template for reusable parameters, dependencies, and data that IaC does not preserve."
+      ],
+      "sections": [
+        {
+          "id": "two-exports-two-questions",
+          "title": "Ask whether you need today's configuration or yesterday's submitted template",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "The school inherits a training resource group built partly through the portal. A student suggests exporting it and immediately using the result for the next class. Export can be a useful investigation tool, but first decide what question you are asking. A current-resource export generates a template from existing resources. A deployment-history export retrieves the template submitted in a selected deployment. These are different evidence sources. One describes a generated view of current configuration; the other describes the earlier request, before later manual changes."
+            },
+            {
+              "type": "paragraph",
+              "text": "Imagine the original network deployment requested a /24 web subnet and project tag. A later authorized change made the empty subnet /26 and added costCenter. In the portal, open the resource group and use Export template to inspect a generated snapshot, selecting only the intended practice resources when appropriate. That route can reflect the later edits. Alternatively, open Deployments, select the original named deployment, and view or download its Template. That file still requests the original /24. Exporting deployment history is not a way to discover every change made since that deployment."
+            },
+            {
+              "type": "paragraph",
+              "text": "History is useful when you need the authored parameter structure or want to understand how a failed deployment was intended to work. Current-state export is useful when no trustworthy original file exists or when investigating drift. Neither automatically tells you why a setting was chosen. Keep the observed configuration separate from the desired configuration: an accidental permissive rule is not approved policy merely because an export faithfully records it. The person recovering the template must compare it with the school's requirements before promoting it into maintained code."
+            }
+          ]
+        },
+        {
+          "id": "export-boundaries-and-secrets",
+          "title": "A generated template is neither a complete backup nor a guaranteed redeployment",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Microsoft documents that export is not guaranteed to succeed and is not a reliable automatic conversion of arbitrary existing resources into production-ready templates. The resource-group export limit is 200 resources. Some resource types are unsupported, and published schemas can lag the provider's latest properties. A warning that a resource was skipped is a missing part of the design, not cosmetic output. Generated files can include provider-returned properties that should not be set by a new deployment. They can also hard-code the subscription, resource group, region, or resource names, making the file unsuitable for reuse elsewhere."
+            },
+            {
+              "type": "paragraph",
+              "text": "Secrets require special care in both directions. Some password parameters are missing from exported templates; do not assume an export can recover a VM administrator password. Conversely, configuration values, connection strings, identifiers, and other sensitive information may appear in exported content. Inspect the result before sharing or committing it. A secure parameter protects how a supplied value is handled by deployment tooling; it does not magically clean a password already pasted as a literal into a file. Restore secret inputs through an approved secret-management path, and avoid displaying them in ordinary outputs or review logs."
+            },
+            {
+              "type": "paragraph",
+              "text": "An ARM template defines management-plane resources, not the complete contents of their services. Exporting a storage account is not backing up its uploaded school documents. Exporting a VM declaration is not taking a recoverable image of the guest filesystem, its database, and its installed packages. Those need appropriate data protection and application recovery processes. Similarly, creating a network from recovered code does not reproduce student accounts or prove the timetable application authenticates correctly. Keep infrastructure reconstruction, data restoration, and application verification as separate tasks with separate evidence."
+            }
+          ]
+        },
+        {
+          "id": "bounded-export-decompile-workflow",
+          "title": "Convert a local copy, not the only working source",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "For the following optional Bash-style workflow, prerequisites are a current Azure CLI, installed Bicep component, authorized authentication to the chosen subscription, and permission to read and export the dedicated practice group. The export command contacts Azure but does not create the exported infrastructure. Decompile and build operate on local files. Use a new local folder containing none of the original school-network files, and check that the filenames below are unused. Shell output redirection can overwrite an existing file even if the subsequent conversion fails; distinct names protect the maintained source."
+            },
+            {
+              "type": "code",
+              "language": "azurecli",
+              "code": "az group export --name rg-school-iac-lab > school-export.json\naz bicep decompile --file school-export.json\naz bicep build --file school-export.bicep --outfile school-export.checked.json",
+              "explanation": "Run one command at a time and stop on errors or export warnings. Decompile normally writes school-export.bicep next to school-export.json. Do not add --force to overwrite an existing authored file. Build writes a separate checked JSON file and does not deploy anything."
+            },
+            {
+              "type": "paragraph",
+              "text": "Decompilation attempts to translate ARM JSON into Bicep. There is no guaranteed mapping for every possible input, so warnings and errors need inspection and correction. The converter can produce unfamiliar symbolic names or parameter names that need tidying. For example, periods are allowed in some ARM parameter names but not Bicep identifiers, so the converter replaces them with underscores. Parameter files and callers may therefore need coordinated updates. A successful conversion is the beginning of maintenance work, not a certificate that external references and deployment assumptions are correct."
+            },
+            {
+              "type": "paragraph",
+              "text": "Building the generated Bicep back to JSON is a useful compiler check, not a byte-for-byte round-trip guarantee. Expression formatting, symbols, metadata, and the structure of the emitted template can differ. The objective is equivalent deployment intent after reviewing and repairing the conversion, not matching text hashes. Compilation also cannot prove that the target region offers a requested SKU, that a source resource still exists, that your identity has permission, or that a secret can be retrieved. Those questions require targeted validation and later runtime checks in a safe environment."
+            }
+          ]
+        },
+        {
+          "id": "repair-recovered-intent",
+          "title": "Turn discovered configuration into something a classmate can maintain",
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": "Review the recovered resource inventory first. If you selected a VNet and its NSG, check that both are present and that the subnet association points to the intended NSG. An export of just the VNet can contain a reference to an NSG outside the selected set. That is not necessarily wrong, but you must choose whether the new environment reuses an existing approved resource or creates its own. An existing-resource reference does not create the referenced resource. Removing a dependency merely to silence an error may hide a missing prerequisite rather than solve it."
+            },
+            {
+              "type": "paragraph",
+              "text": "Next distinguish values that should vary from values that are policy. Environment names and deployment location may be parameters; required secure settings should not become optional merely to make deployment easier. Replace unnecessary hard-coded scope IDs with appropriate resource references, preserving intentional cross-scope dependencies and their permissions. Retain all required nondefault properties when describing an existing resource. Remove read-only provider metadata only after checking the relevant resource reference, not by deleting every unfamiliar field. Prefer a short readable definition with understood intent over a giant generated file nobody can explain."
+            },
+            {
+              "type": "paragraph",
+              "text": "Finally, compare the proposed file with both the source environment and the destination requirements. A different region is not a harmless search-and-replace when associated resources are regional. A different subscription may need new role assignments, registered providers, and valid references. For this network-only exercise, an isolated empty destination helps keep the consequences understandable. For a real application, write down the resources not covered by export, the data-restoration plan, and the identity changes before deployment. That review makes the recovered file a proposal that can be tested, rather than an unexplained claim of portability."
+            }
+          ]
+        },
+        {
+          "id": "recover-the-school-template",
+          "title": "Worked example: an export that looks complete but is not",
+          "blocks": [
+            {
+              "type": "example",
+              "title": "Recover the current empty network without losing its intent",
+              "scenario": "The original deployment history contains the /24 version. The current dedicated practice group contains the approved /26 VNet and NSG with the extra costCenter tag. Assume no workload data or other resources are in the group.",
+              "steps": [
+                { "action": "Choose current-resource export for the two practice resources and retain the original history template separately for comparison.", "why": "The current export can reveal the later /26 and tag change, while history explains the earlier intended baseline. Neither should silently replace the other." },
+                { "action": "Inspect export warnings, the VNet and NSG inventory, child subnet, association, and sensitive values before converting.", "why": "The expected objects and their correct association are concrete checks. An export can represent the child differently; a skipped NSG is not acceptable merely because the remaining file is valid JSON." },
+                { "action": "Decompile into a new Bicep file, fix diagnostics, and parameterize only the intended environment differences.", "why": "Conversion helps recover authoring form, but names, hard-coded IDs, and missing inputs still require human decisions." },
+                { "action": "Build locally, then validate and run what-if against an explicitly approved empty target group before any deployment.", "why": "Local syntax success is distinct from target-scope validity. The proposed creates should match the reviewed network, subnet, and NSG design, not modify the inherited source by accident." },
+                { "action": "After any separately approved deployment, inspect the subnet and NSG link rather than comparing only file hashes.", "why": "Equivalent intent can compile differently, while the observable network properties are the required outcome." }
+              ],
+              "result": "The school gains a maintainable starting point and a documented gap check, not a promise that any resource group can be cloned perfectly. The procedure deliberately avoids claiming to recover application data or secrets."
+            },
+            {
+              "type": "prediction",
+              "id": "predict-history-after-drift",
+              "prompt": "After the approved manual /26 change, a student downloads the original deployment's template from history. Will that old template automatically contain the /26?",
+              "answer": "No. It still represents the template submitted for that original deployment.",
+              "explanation": "History does not rewrite an earlier request to include later resource edits. Use current-resource export or direct inspection to investigate current state, then decide which state should be maintained."
+            },
+            {
+              "type": "callout",
+              "tone": "exam",
+              "title": "Export, decompile, build, deploy, and restore are not synonyms",
+              "text": "Export retrieves or generates a resource template. Decompile attempts JSON-to-Bicep conversion. Build translates Bicep to ARM JSON. Deploy changes Azure resources. Restore recovers protected data or workloads. Successful completion of one does not prove the guarantees of another."
+            }
+          ]
+        }
+      ],
+      "checkpoints": [
+        {
+          "id": "iac-export-current-or-history",
+          "kind": "single",
+          "prompt": "The school needs to investigate a tag added after the original deployment. Which source is more appropriate for discovering that current tag?",
+          "choices": [
+            { "id": "old-history-template", "text": "Only the template saved with the original deployment.", "explanation": "It represents the earlier request and does not automatically incorporate later edits." },
+            { "id": "bicep-file-extension", "text": "Renaming the original .json file to .bicep.", "explanation": "Changing an extension neither discovers current state nor converts the file's syntax." },
+            { "id": "current-resource-export", "text": "A current-resource export or current resource inspection.", "explanation": "These inspect current state and can reflect changes made after deployment." }
+          ],
+          "correctIds": ["current-resource-export"],
+          "explanation": "Choose the evidence source based on the time and state you need to investigate."
+        },
+        {
+          "id": "iac-decompile-and-build",
+          "kind": "single",
+          "prompt": "An exported template decompiles and the resulting Bicep builds successfully. Which claim is justified?",
+          "choices": [
+            { "id": "syntax-not-portability", "text": "The generated Bicep passes compilation, but deployment assumptions and conversion output still need review.", "explanation": "The compiler checks the file, not every live permission, dependency, secret, regional capability, or recovered design decision." },
+            { "id": "exact-round-trip", "text": "The regenerated JSON must be byte-for-byte identical to the original.", "explanation": "Equivalent infrastructure can have different emitted syntax and metadata." },
+            { "id": "already-deployed", "text": "A second copy of the school's environment is now running.", "explanation": "Neither local decompile nor local build deploys resources." }
+          ],
+          "correctIds": ["syntax-not-portability"],
+          "explanation": "Treat conversion as an authoring aid followed by review, validation, and a controlled deployment process."
+        },
+        {
+          "id": "iac-export-not-backup",
+          "kind": "single",
+          "prompt": "An administrator exports the resource declaration for the school's document storage account. What must not be assumed?",
+          "choices": [
+            { "id": "settings-review", "text": "That the file can be inspected to understand some resource settings.", "explanation": "Inspection is an appropriate use of export, with its documented coverage limitations." },
+            { "id": "documents-recovered", "text": "That the export includes a restorable copy of all uploaded documents.", "explanation": "A management-plane resource template is not a backup of stored document contents." },
+            { "id": "parameter-review", "text": "That hard-coded names may need parameterization before reuse.", "explanation": "This is a real review task, not an unsupported guarantee." }
+          ],
+          "correctIds": ["documents-recovered"],
+          "explanation": "Recreating a container for data and restoring the data itself are different operations."
+        },
+        {
+          "id": "iac-export-missing-resource",
+          "kind": "single",
+          "prompt": "An export warning says a required resource was omitted. The remaining JSON parses. What should the administrator do?",
+          "choices": [
+            { "id": "ignore-warning", "text": "Ignore the warning because valid JSON proves full export coverage.", "explanation": "A well-formed document can still omit a necessary resource." },
+            { "id": "paste-password", "text": "Paste the production administrator password into an output to force completeness.", "explanation": "This does not recover a missing resource and would expose a secret." },
+            { "id": "resolve-the-gap", "text": "Investigate the missing resource, author or reference it correctly, and validate the complete intended design.", "explanation": "The warning exposes a real coverage gap that syntax validation cannot repair." }
+          ],
+          "correctIds": ["resolve-the-gap"],
+          "explanation": "Inventory and dependency reasoning must accompany conversion and syntax checks."
+        }
+      ],
+      "takeaways": [
+        "Current-resource export and deployment-history export answer different questions.",
+        "Export can omit resources or required properties and can include sensitive or nonportable values.",
+        "Decompilation is an aid to authoring, not an automatic production migration.",
+        "Compilation checks syntax and types, not all live deployment prerequisites.",
+        "Infrastructure templates do not replace data backup, secret management, or application verification."
+      ],
+      "sourceIds": ["export-portal", "bicep-decompile", "bicep-deploy", "deployment-what-if", "deployment-modes"]
+    }
+  ],
+  "glossary": [
+    { "term": "Infrastructure as code", "definition": "Describing intended infrastructure in reviewable files that can be versioned and used for deployment." },
+    { "term": "Declarative", "definition": "Specifying a desired result rather than a sequence of manual creation steps." },
+    { "term": "Idempotent", "definition": "Able to converge on the same desired configuration when repeated with the same resource identities and inputs, rather than creating another copy each time." },
+    { "term": "ARM template", "definition": "A JSON document that Azure Resource Manager evaluates to deploy resources at a specified management scope." },
+    { "term": "Bicep", "definition": "Azure's declarative infrastructure language, compiled into ARM JSON for deployment." },
+    { "term": "Parameter", "definition": "A typed input to a template, optionally constrained or given a default that an explicit value can override." },
+    { "term": "Variable", "definition": "A named reusable value or expression inside a template, not a separately deployed resource." },
+    { "term": "Symbolic name", "definition": "A Bicep identifier used to refer to a declaration, distinct from the resource's actual Azure name property." },
+    { "term": "API version", "definition": "The provider contract version used for a resource's deployment request and property structure." },
+    { "term": "Deployment scope", "definition": "The resource group, subscription, management group, or tenant boundary at which a deployment operates." },
+    { "term": "What-if", "definition": "A preview of predicted deployment changes that must be reviewed and does not guarantee every later operation will succeed." },
+    { "term": "Deployment stack", "definition": "An Azure resource that tracks a collection of managed resources and applies explicit lifecycle and optional deny settings." },
+    { "term": "Drift", "definition": "A difference between the maintained desired configuration and the currently deployed state." },
+    { "term": "Decompile", "definition": "Attempt to translate an ARM JSON template into Bicep for further review and maintenance." }
+  ],
+  "sources": [
+    { "id": "bicep-overview", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/overview", "title": "What is Bicep?", "supports": "Declarative infrastructure, repeatability, compilation to ARM JSON, symbolic references, and no separate local state file." },
+    { "id": "arm-syntax", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/syntax", "title": "ARM template structure and syntax", "supports": "Schema, contentVersion, parameters, variables, resource declarations, and outputs in the concrete JSON example." },
+    { "id": "arm-dependencies", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/resource-dependency", "title": "Define ARM resource deployment order", "supports": "Explicit dependsOn, resource ID references, parallel deployment, and the difference between declaration order and dependencies." },
+    { "id": "bicep-dependencies", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/resource-dependencies", "title": "Resource dependencies in Bicep", "supports": "Symbolic references create implicit dependencies and make redundant dependsOn unnecessary." },
+    { "id": "network-authoring", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/scenarios-virtual-networks", "title": "Virtual networks in Bicep", "supports": "Current recommendation to manage subnets as child resources and newer VNet behavior when the parent subnets property is omitted versus explicitly emptied, distinguished from older general deployment-mode wording." },
+    { "id": "nsg-defaults", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Network security groups overview", "supports": "Default NSG rules remain when no custom rules are declared; the empty example is not a complete deny-all application security design." },
+    { "id": "bicep-deploy", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-cli", "title": "Deploy Bicep files with Azure CLI", "supports": "CLI prerequisites, permissions, scope-specific commands, parameter overrides, and deployment-name history behavior." },
+    { "id": "deployment-what-if", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deploy-what-if", "title": "ARM template deployment what-if", "supports": "Preview semantics, management permissions, group what-if and confirmation, unresolved expressions, and provider-default noise." },
+    { "id": "deployment-modes", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deployment-modes", "title": "Azure Resource Manager deployment modes", "supports": "Recommended incremental mode, reapplication of declared resource properties, complete-mode risks and gradual deprecation, and the recommendation to use stacks for deletion. Its subnet wording is explicitly distinguished from the newer service-specific guidance." },
+    { "id": "deployment-stacks", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks", "title": "Create and deploy deployment stacks", "supports": "Managed resource inventory, actionOnUnmanage, detach versus delete, group-deletion consequences, and management-plane deny-setting permissions." },
+    { "id": "stack-what-if", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks-what-if", "title": "Preview deployment stack changes", "supports": "Current dedicated stack what-if behavior, stored result resources, and previewing detach/delete actions rather than treating ordinary deployment what-if as equivalent." },
+    { "id": "vnet-addressing", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-faq", "title": "Azure Virtual Network frequently asked questions", "supports": "Azure's five reserved addresses per ordinary subnet and capacity reasoning for the /26 example; service-specific requirements remain separate." },
+    { "id": "export-portal", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/export-template-portal", "title": "Export a template using the Azure portal", "supports": "Current-resource versus history export, 200-resource limit, unsupported types, schema/property gaps, and missing password parameters." },
+    { "id": "bicep-decompile", "url": "https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/decompile", "title": "Decompile ARM JSON to Bicep", "supports": "Export/decompile commands, local output naming, overwrite risk, conversion limitations, parameter-name changes, and absence of a guaranteed textual round trip." }
+  ],
+  "lab": {
+    "title": "Optional manual lab: inspect a bounded network change",
+    "purpose": "Practice reading, modifying, previewing, and recovering a small empty network design. The complete teaching and calculations are already in the lessons; no Azure access is required to study them.",
+    "prerequisites": [
+      "Permission from the subscription owner to use a dedicated empty training group named rg-school-iac-lab, with no production resources or attached workloads.",
+      "A current Azure CLI and installed Bicep component, an authenticated approved tenant/subscription context, network-resource write and deployment permissions, and an allowed region.",
+      "A local working folder for the two original example files and separate generated exports; no real credentials in source files.",
+      "An agreed spending limit and permission to remove only the practice resources after the exercise. Do not create VMs, gateways, public IPs, or other paid services for this lab."
+    ],
+    "costWarning": "Local reading and compilation create no Azure resources. Plain empty VNets and NSGs do not themselves incur compute charges, but connected services, logging, traffic, Cloud Shell storage, and any accidental extra resources can incur costs. Confirm current pricing and group contents before using Azure. Budgets are alerts, not an automatic spending stop.",
+    "steps": [
+      "Copy the complete original JSON and Bicep examples into distinct local files and identify the VNet, NSG, child subnet, three parameters, computed names, output, and dependencies.",
+      "Confirm the dedicated existing training group, subscription, permissions, and empty topology. Stop if it contains anything outside this exercise.",
+      "Choose one authoring format for the optional initial incremental deployment. Validate and preview first using the scoped lesson commands; do not apply unexpected changes.",
+      "If separately approved, deploy the original /24 version and inspect the VNet, web subnet, NSG association, and project tag in the portal.",
+      "Apply the documented /26 and shared costCenter edits to the maintained authoring file. Compile Bicep if chosen, then validate and preview with the same environment=lab input.",
+      "After approval, apply only the expected changes and compare the observed subnet and tags with the calculation of 59 ordinary assignable addresses.",
+      "Open the original deployment history template and compare it with a current-resource export. Use a fresh export filename, inspect warnings and sensitive values, decompile, and build to a separate checked file.",
+      "Do not deploy the recovered export just to see what happens. Explain its inventory, references, gaps, and intended target before considering any further deployment."
+    ],
+    "expectedResults": [
+      "The selected authoring format creates only school-lab-vnet with web subnet and school-lab-nsg; the subnet references that NSG.",
+      "The approved modification produces 10.60.1.0/26 and preserves project while adding costCenter to both resources.",
+      "The old history template can differ from the current export, and local decompile/build do not provision a second environment."
+    ],
+    "cleanup": [
+      "Inspect dependencies, then delete only the practice VNet and its NSG if you created them and they remain unused. Do not delete a shared group or any resource merely because its name looks familiar.",
+      "Delete rg-school-iac-lab only if you created that group for this exercise, have rechecked that it contains no unrelated resources, and its removal is authorized.",
+      "Remove only the exercise's local exports and generated files after retaining any approved nonsecret authored source. Inspect Azure for leftover paid additions before ending the lab."
+    ]
+  }
+}
