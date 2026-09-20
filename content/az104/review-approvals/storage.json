@@ -1,0 +1,17 @@
+[
+  {
+    "id": "storage-accounts",
+    "digest": "78ea71cc1ff8f9e1f5e7aadf282c30d3c63df2c2fe28c644b6b126e5e6222da9",
+    "note": "Independent full review verified account/performance/redundancy matrices, replication prerequisites and restrictions, asynchronous RPO, encryption scopes and keys, and transfer-tool safety. Parent reviewed the added object-replication portal workflow and Storage Explorer key-usage control. Current upstream Premium Page Blob and replication-failover discrepancies remain explicitly scoped rather than converted into unsupported universal claims."
+  },
+  {
+    "id": "storage-access",
+    "digest": "6b52790968f020947118edc04e0f01028acd927f8cf3859749d518602957d601",
+    "note": "Independent reviewer checked all twelve keys, SAS expiry calculations, current service expansion and user-bound qualifications, network versus data authorization, and SMB identity/RBAC/ACL layers. Parent reviewed TSV URL output, saved access-policy and key-rotation controls, the complete hybrid Kerberos configuration, scoped MFA handling and the parent Delete child permission qualification. Cloud-only identity status discrepancies remain explicit."
+  },
+  {
+    "id": "blob-and-file-data",
+    "digest": "786107e965b461e5e28f3f4dac99e3af604f46990c3729970d2945a5ff15fe14",
+    "note": "Independent review verified all twelve keys, current classic and standalone Files models, tier/retention clocks, HNS restrictions, versions, snapshots and soft-delete recovery granularity. Parent reviewed the substantive lifecycle/versioning/snapshot/soft-delete configuration additions and updated objective evidence. Arithmetic and asynchronous-processing qualifications were checked without performing Azure operations."
+  }
+]
