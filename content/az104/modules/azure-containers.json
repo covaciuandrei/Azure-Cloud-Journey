@@ -805,7 +805,7 @@
           "blocks": [
             {
               "type": "paragraph",
-              "text": "Azure Container Apps manages application container orchestration, including replicas, ingress, and demand-driven scaling, without giving you a Kubernetes cluster to administer. An environment groups related apps and jobs within shared networking and operational boundaries. The school might keep its public timetable and background document worker in one environment, but use a different environment for testing. A container app is the managed application resource. A revision records an immutable version of its container configuration, while a replica is a running instance of that revision."
+              "text": "Azure Container Apps manages application container orchestration, including replicas, ingress, and demand-driven scaling, without giving you a Kubernetes cluster to administer. Its container images must target Linux on x64, identified as linux/amd64. Unlike ACI's single-container Windows option, Container Apps cannot run a Windows image; an Arm64-only image is also incompatible. An environment groups related apps and jobs within shared networking and operational boundaries. The school might keep its public timetable and background document worker in one environment, but use a different environment for testing. A container app is the managed application resource. A revision records an immutable version of its container configuration, while a replica is a running instance of that revision."
             },
             {
               "type": "paragraph",
@@ -915,8 +915,8 @@
                   "why": "The first revision must start successfully before the URL can prove the application path. A resource record alone is not sufficient verification."
                 },
                 {
-                  "action": "For a later private timetable image, edit and deploy a revision with explicit image, identity, resource, and scale settings, then verify readiness before moving production traffic.",
-                  "why": "The sample proves the basic path, not the private registry, private database, or real workload's capacity. Those requirements need their own checks."
+                  "action": "For a later private timetable image, verify that it includes a linux/amd64 build, then edit and deploy a revision with explicit image, identity, resource, and scale settings. Verify readiness before moving production traffic.",
+                  "why": "A valid registry permission cannot make a Windows or Arm64-only image compatible. The sample proves the basic path, not the private registry, private database, or real workload's capacity. Those requirements need their own checks."
                 }
               ],
               "result": "The administrator has created a current environment and a working sample app through the portal, with a clear list of assumptions to replace before a real school release."
@@ -1383,7 +1383,7 @@
       "id": "apps-containers",
       "url": "https://learn.microsoft.com/en-us/azure/container-apps/containers",
       "title": "Containers in Azure Container Apps",
-      "supports": "Container configuration and revisions, supported ordinary Consumption CPU/memory pairs through 4 vCPU and 8 GiB, legacy Consumption-only 2-vCPU/4-GiB maximum, aggregate container sizing, sidecar sharing, image version practices, and platform-managed orchestration."
+      "supports": "Linux x64 (linux/amd64) image requirement, container configuration and revisions, supported ordinary Consumption CPU/memory pairs through 4 vCPU and 8 GiB, legacy Consumption-only 2-vCPU/4-GiB maximum, aggregate container sizing, sidecar sharing, image version practices, and platform-managed orchestration."
     },
     {
       "id": "apps-scale",

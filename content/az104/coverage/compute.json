@@ -289,6 +289,7 @@
           "moduleId": "azure-containers",
           "lessonId": "containers-apps-scaling",
           "sectionIds": [
+            "apps-environments-revisions-ingress",
             "apps-current-workload-profiles",
             "apps-subnet-requirements",
             "apps-portal-provision",
@@ -298,7 +299,7 @@
             "apps-subnet-environment-choice",
             "apps-revision-versus-replica"
           ],
-          "evidence": "The learner distinguishes current workload profiles, legacy Consumption-only environments, and qualified Flexible preview, including their different subnet requirements. A worked portal procedure creates the environment and application, selects ingress and resources, verifies the revision and response, and explains a subsequent private-image identity configuration."
+          "evidence": "The learner checks Linux x64 image compatibility and distinguishes current workload profiles, legacy Consumption-only environments, and qualified Flexible preview, including their different subnet requirements. A worked portal procedure creates the environment and application, selects ingress and resources, verifies the revision and response, and checks image compatibility before a subsequent private-image identity configuration."
         }
       ]
     },

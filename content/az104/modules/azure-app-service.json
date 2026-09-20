@@ -746,8 +746,8 @@
             },
             {
               "id": "forever-validated",
-              "text": "Once issuance succeeds, later DNS or access restriction changes cannot affect managed renewal.",
-              "explanation": "The validation prerequisites must continue to hold, and the documentation flags changes to managed-certificate issuance and renewal."
+              "text": "Once issuance succeeds, later public DNS changes cannot affect managed renewal.",
+              "explanation": "Supported public DNS mapping and validation prerequisites must continue to hold. The November 2025 update lets front ends handle validation despite normal App Service access restrictions, but it does not remove the public DNS requirement."
             }
           ],
           "correctIds": [
