@@ -9,20 +9,20 @@ Understand Azure concepts, then put them into practice.
 The application is hosted on **Firebase Hosting**. GitHub stores the application
 source and original learning material; it is not the current web host.
 
-Choose **AZ-104: Azure Administrator** on the opening screen, then enter
-**Learn** or **Practice & exams**. Existing lesson and practice links still open
-directly. AZ-104 remains available. The SC-900 workspace is implemented but stays
-disabled until its complete authorized source capture, original course and
-teaching explanations have independent, exact-hash publication approvals.
+Choose **AZ-104: Azure Administrator** or **SC-900: Security, Compliance, and
+Identity Fundamentals**, then enter **Learn** or **Practice & exams**. Both exams
+are live. Existing AZ-104 lesson links, practice history and content remain
+available and unchanged.
 
 ## What is included
 
 - A React and TypeScript interface with a blue Coursebook layout.
 - An original AZ-104 course covering **5 domains, 21 modules, 59 lessons,
   241 checkpoints and all 82 listed official objectives**.
-- An independently reviewed original SC-900 course in source: **4 domains,
+- An independently reviewed original SC-900 course: **4 domains,
   12 modules, 26 lessons, 112 checkpoints and 58 announced objectives**.
-  SC-900 is not activated in the hosted application.
+- **183 active SC-900 practice questions**, with documentation-reviewed
+  explanations and preserved original question and answer images.
 - First-principles explanations, worked examples, diagrams, glossary entries
   and references to official documentation.
 - Interactive subnet, route and NSG teaching tools.
@@ -168,10 +168,9 @@ attempts.
 ## SC-900 publication status
 
 SC-900 uses a separate exam context, not the AZ-104 bank with different labels.
-Its original course has been independently reviewed, digest-approved and
-assembled locally: **4 domains, 12 modules, 26 lessons, 112 explained checkpoints
-and 58 announced objectives**. This is course-content approval, not production
-activation or approval of the imported question bank.
+Its original course and curated bank are independently reviewed, digest-approved
+and published: **4 domains, 12 modules, 26 lessons, 112 explained checkpoints
+and 58 announced objectives**, plus **183 active practice questions**.
 
 The English study guide reviewed on **September 22,
 2026** announces an effective date of **October 21, 2026**. This is a future
@@ -187,17 +186,27 @@ As in the AZ-104 importer, verified raster signatures and dimensions determine
 the normalized MIME type; corrupt bytes, unsafe types and dimension mismatches
 still fail. A MIME correction never establishes missing discussion evidence.
 
-Browser-generated discussion requests still return a verification challenge.
-Discussions remain unrequested, not confirmed empty. These private drafts
-cannot satisfy publication gates. Factual answer and relevance review,
-per-question teaching and discussion review are not yet approved for publication.
-Cloud-upload code is implemented but not approved for a real apply with this
-incomplete capture. The existing hosted AZ-104 publication is unchanged.
+Browser-generated discussion requests returned a verification challenge. The
+owner explicitly authorized a questions, answers and media release without
+those discussions. Their source totals remain unknown, not zero, and the
+interface explains that discussions are unavailable.
 
-Once independently approved and activated, SC-900 offers free practice in sets
+All 219 source records and 252 original images are retained in Firestore/private-ACL
+Storage and the approved export. New practice excludes 28 unresolved or
+condition-dependent items, six obsolete/unsuitable items, and two duplicate
+copies. Source markings are preserved separately from reviewed explanations;
+incorrect original image markings are clearly identified.
+
+SC-900 offers free practice in sets
 of 10, 20, 30 or 40 and a **40-question, 45-minute mock**. Forty questions is the
 app's practice format, not a claim about the actual exam's exact question count.
 AZ-104 keeps its existing 40-question, 60-minute mock and published content.
+
+Storage safeguards distinguish known Class A and Class B operations, with
+bounded ceilings below the published 5,000/50,000 monthly allowances. Historical
+unclassified reservations remain charged to both classes; no spent usage is
+erased. Hosting validation is separately bound to the exact measured build,
+and the existing budget alert is not represented as a hard cap on future traffic.
 
 Legacy `#home`, `#learn`, `#learn/<lesson>` and `#practice` links, browser keys,
 AZ-104 account paths and course releases remain unchanged. SC-900 uses
