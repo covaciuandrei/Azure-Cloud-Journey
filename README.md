@@ -235,6 +235,9 @@ mode collects only accessible question content through the signed-in browser,
 without sending discussion requests to the server. It saves separately under
 `.data/sc900/question-content/`, records discussions as unrequested, restores
 normal browser request handling afterward, and never sets full capture complete.
+Original image bytes come only from the displayed question images in Chrome's
+existing resource cache, not screenshots, new asset requests or whole-browser
+archives. Resource reads and image decoding have bounded waits.
 For an existing installed Playwright driver and the owner's browser on port 9224:
 
 ```bash

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, rename, statfs } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -27,6 +26,19 @@ async function save(path, value) {
   try { await file.writeFile(`${JSON.stringify(value, null, 2)}\n`); await file.sync(); }
   finally { await file.close(); }
   await rename(temporary, path);
+}
+async function browserResource(session, method, parameters = {}) {
+  let timeout;
+  try {
+    return await Promise.race([
+      session.send(method, parameters),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Browser resource operation timed out: ${method}`)), 30_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 const checkpointPath = resolve(root, "capture-run.json");
 let checkpoint = { schemaVersion: 1, examId: 128, pages: [], completed: false };
@@ -115,24 +127,24 @@ async function renderedCapture() {
   }
   const urls = [...new Set(capture.questions.flatMap(question => question.images.map(image => image.currentSrc)))];
   const cdp = await page.context().newCDPSession(page);
-  let snapshot;
-  try { snapshot = await cdp.send("Page.captureSnapshot", { format: "mhtml" }); }
-  finally { await cdp.detach(); }
-  const extraction = spawnSync("python3", ["-c", `
-import base64,email,json,sys
-request=json.load(sys.stdin)
-allowed=set(request["urls"])
-message=email.message_from_bytes(request["mhtml"].encode())
-assets=[]
-for part in message.walk():
-    url=part.get("Content-Location","")
-    if url in allowed and part.get_content_type().startswith("image/"):
-        raw=part.get_payload(decode=True)
-        assets.append({"url":url,"contentType":part.get_content_type(),"byteLength":len(raw),"base64":base64.b64encode(raw).decode()})
-print(json.dumps(assets))
-`], { input: JSON.stringify({ urls, mhtml: snapshot.data }), encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
-  if (extraction.status !== 0) throw new Error("Could not preserve browser-loaded question image bytes.");
-  capture.assets = JSON.parse(extraction.stdout);
+  capture.assets = [];
+  try {
+    await browserResource(cdp, "Page.enable");
+    const { frameTree } = await browserResource(cdp, "Page.getResourceTree");
+    for (const url of urls) {
+      const resource = frameTree.resources.find(item => item.url === url && item.type === "Image");
+      assert.ok(resource?.mimeType.startsWith("image/"), "A displayed question image is missing from the browser resource cache.");
+      const cached = await browserResource(cdp, "Page.getResourceContent", { frameId: frameTree.frame.id, url });
+      assert.equal(cached.base64Encoded, true, "The browser did not return original binary image bytes.");
+      const bytes = Buffer.from(cached.content, "base64");
+      assert.ok(bytes.length > 0, "A browser-cached question image is empty.");
+      capture.assets.push({
+        url, contentType: resource.mimeType, byteLength: bytes.length, base64: bytes.toString("base64"),
+      });
+    }
+  } finally {
+    await cdp.detach();
+  }
   capture.missingAssetUrls = urls.filter(url => !capture.assets.some(asset => asset.url === url));
   return capture;
 }
@@ -216,8 +228,18 @@ async function revealPage(number) {
       if (await image.evaluate(element => Boolean(element.closest(".chakra-avatar")))) continue;
       await image.scrollIntoViewIfNeeded();
       await image.evaluate(async element => {
-        await element.decode();
-        if (!element.naturalWidth || !element.naturalHeight) throw new Error("A question image failed to load.");
+        let timeout;
+        try {
+          await Promise.race([
+            element.decode(),
+            new Promise((_, reject) => {
+              timeout = setTimeout(() => reject(new Error("A question image did not finish loading.")), 30_000);
+            }),
+          ]);
+          if (!element.naturalWidth || !element.naturalHeight) throw new Error("A question image failed to load.");
+        } finally {
+          clearTimeout(timeout);
+        }
       });
     }
     await page.waitForTimeout(1200);

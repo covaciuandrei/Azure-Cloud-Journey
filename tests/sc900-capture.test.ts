@@ -11,6 +11,13 @@ const captureScript = fileURLToPath(new URL("../tools/ingest/sc900-capture.mjs",
 const driver = `
 import {writeFileSync} from "node:fs";
 let revealed=false, interception, requests=0, aborted=0, removed=false;
+const imageUrl="https://example.test/source.gif";
+const imageBase64="R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+const hasImage=process.env.CAPTURE_TEST_IMAGE==="1";
+if(process.env.CAPTURE_TEST_RESOURCE_STALL==="1"){
+  const originalSetTimeout=globalThis.setTimeout;
+  globalThis.setTimeout=(callback,delay,...args)=>originalSetTimeout(callback,delay===30000?5:delay,...args);
+}
 const handlers={};
 const proof=()=>writeFileSync("browser-proof.json",JSON.stringify({requests,aborted,removed}));
 const request={url:()=>"https://www.examprepper.co/api/discussion?examId=128&questionId=1"};
@@ -35,7 +42,8 @@ const button=name=>({
 });
 const question={
   locator:selector=>selector===".chakra-accordion__button"?{innerText:async()=>"Question 1"}:
-    selector==="img"?{all:async()=>[]}:{filter:()=>({first:()=>({count:async()=>0})})},
+    selector==="img"?{all:async()=>hasImage?[{scrollIntoViewIfNeeded:async()=>{},evaluate:async()=>false}]:[]}:
+      {filter:()=>({first:()=>({count:async()=>0})})},
   getByRole:(_,options)=>typeof options.name==="string"?button(options.name):{count:async()=>0},
 };
 const page={
@@ -53,7 +61,18 @@ const page={
   getByRole:(_,options)=>button(options.name),
   locator:()=>({count:async()=>1,nth:()=>question}),
   context:()=>({newCDPSession:async()=>({
-    send:async()=>({data:"MIME-Version: 1.0\\r\\nContent-Type: text/html\\r\\n\\r\\n<p>Original synthetic fixture</p>"}),
+    send:async(method,parameters)=>{
+      if(method==="Page.enable")return {};
+      if(method==="Page.getResourceTree"&&process.env.CAPTURE_TEST_RESOURCE_STALL==="1")return new Promise(()=>{});
+      if(method==="Page.getResourceTree")return {frameTree:{frame:{id:"synthetic-frame"},resources:hasImage?[
+        {url:imageUrl,type:"Image",mimeType:"image/gif"},
+        {url:"https://example.test/unrelated-avatar.png",type:"Image",mimeType:"image/png"},
+      ]:[]}};
+      if(method==="Page.getResourceContent"&&parameters.frameId==="synthetic-frame"&&parameters.url===imageUrl){
+        return {content:imageBase64,base64Encoded:true};
+      }
+      throw Error("Unexpected browser resource access");
+    },
     detach:async()=>{},
   })}),
   evaluate:async()=>({
@@ -61,7 +80,8 @@ const page={
     url:process.env.CAPTURE_TEST_CHANGED_URL==="1"?"https://www.examprepper.co/exam/128/2":"https://www.examprepper.co/exam/128/1",
     title:"Synthetic fixture",capturedAt:new Date().toISOString(),
     questions:[{heading:"Question 1",html:"<p>Original synthetic fixture</p>",renderedText:"Original synthetic fixture",
-      answerRevealed:revealed,choiceStyles:[],commentCount:0,remainingControls:revealed?[]:["Show Answer"],loadingIndicators:0,images:[]}],
+      answerRevealed:revealed,choiceStyles:[],commentCount:0,remainingControls:revealed?[]:["Show Answer"],loadingIndicators:0,
+      images:hasImage?[{src:imageUrl,currentSrc:imageUrl,alt:"Original synthetic pixel",loaded:true,width:1,height:1}]:[]}],
   }),
 };
 export const chromium={connectOverCDP:async()=>({contexts:()=>[{pages:()=>[page]}]})};
@@ -78,7 +98,8 @@ async function runCapture(questionsOnly: boolean, environment: Record<string, st
       cwd: directory, encoding: "utf8", timeout: 30_000,
       env: {
         ...process.env, PLAYWRIGHT_MODULE: driverPath,
-        CAPTURE_TEST_STATUS: "200", CAPTURE_TEST_FAIL: "0", CAPTURE_TEST_CHANGED_URL: "0", ...environment,
+        CAPTURE_TEST_STATUS: "200", CAPTURE_TEST_FAIL: "0", CAPTURE_TEST_CHANGED_URL: "0",
+        CAPTURE_TEST_IMAGE: "0", CAPTURE_TEST_RESOURCE_STALL: "0", ...environment,
       },
     });
     if (execution.error) throw execution.error;
@@ -149,5 +170,26 @@ test("a concurrent browser navigation cannot be persisted under the previous pag
   assert.equal(result.checkpoint.questionContentCompleted, false);
   assert.equal(result.page, undefined);
   assert.match(result.stderr, /Navigation changed during capture/);
+  assert.deepEqual(result.browser, { requests: 0, aborted: 1, removed: true });
+});
+
+test("capture reads exact displayed image bytes from cache without exporting unrelated browser resources", async () => {
+  const result = await runCapture(true, { CAPTURE_TEST_IMAGE: "1" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.page.assets.length, 1);
+  assert.equal(result.page.assets[0].url, "https://example.test/source.gif");
+  assert.equal(result.page.assets[0].contentType, "image/gif");
+  assert.equal(result.page.assets[0].base64, "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+  assert.equal(result.page.assets[0].byteLength, Buffer.from(result.page.assets[0].base64, "base64").length);
+  assert.deepEqual(result.page.missingAssetUrls, []);
+});
+
+test("a stalled browser resource operation saves a blocked checkpoint and restores request handling", async () => {
+  const result = await runCapture(true, { CAPTURE_TEST_RESOURCE_STALL: "1" });
+  assert.equal(result.status, 2);
+  assert.equal(result.checkpoint.status, "blocked");
+  assert.equal(result.checkpoint.questionContentCompleted, false);
+  assert.equal(result.page, undefined);
+  assert.match(result.stderr, /Browser resource operation timed out: Page.getResourceTree/);
   assert.deepEqual(result.browser, { requests: 0, aborted: 1, removed: true });
 });
