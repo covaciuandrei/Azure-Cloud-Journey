@@ -22,6 +22,55 @@ function assertFresh(checkedAt: string) {
     throw new Error("Cloud controls and quota evidence must be fresh and not future-dated.");
   }
 }
+export const SC900_STORAGE_CONTEXT_MAX_AGE_MS = 3 * 60_000;
+
+/** One locked run only: retain the live reservation instance, never a copied journal snapshot. */
+export function createRunStorageContext<T extends {
+  usage: { checkedAt: string; month: string };
+  controls: { checkedAt: string };
+  cloud: { checkedAt: string };
+}>(load: () => Promise<T>, clock = Date.now): () => Promise<T> {
+  let cached: T | undefined;
+  let verifiedAt = 0;
+  let lastCheckedAt = 0;
+  let pending: Promise<T> | undefined;
+  return () => {
+    if (pending) return pending;
+    const now = clock();
+    if (!Number.isFinite(now) || now < lastCheckedAt) {
+      cached = undefined;
+      return Promise.reject(new Error("Storage context freshness clock is invalid or moved backwards."));
+    }
+    lastCheckedAt = now;
+    if (cached && now - verifiedAt < SC900_STORAGE_CONTEXT_MAX_AGE_MS &&
+        cached.usage.month === pacificQuotaDay(new Date(now)).slice(0, 7)) {
+      return Promise.resolve(cached);
+    }
+    cached = undefined;
+    const next = (async () => {
+      const value = await load();
+      const completedAt = clock();
+      const evidence = [now, Date.parse(value.usage.checkedAt),
+        Date.parse(value.controls.checkedAt), Date.parse(value.cloud.checkedAt)];
+      const oldest = Math.min(...evidence);
+      if (!Number.isFinite(completedAt) || completedAt < now ||
+          evidence.some((time) => !Number.isFinite(time) || time > completedAt) ||
+          completedAt - oldest >= SC900_STORAGE_CONTEXT_MAX_AGE_MS ||
+          value.usage.month !== pacificQuotaDay(new Date(completedAt)).slice(0, 7)) {
+        throw new Error("Verified Storage context expired or has invalid freshness evidence; refresh is required.");
+      }
+      verifiedAt = oldest;
+      lastCheckedAt = completedAt;
+      cached = value;
+      return value;
+    })();
+    pending = next;
+    const clearPending = () => { if (pending === next) pending = undefined; };
+    void next.then(clearPending, clearPending);
+    return next;
+  };
+}
+
 export async function openSc900FirestoreBudgets(usage: FirestoreUsage, workspace: string) {
   assertFresh(usage.checkedAt);
   if (usage.pacificDay !== pacificQuotaDay(new Date()) ||
@@ -112,6 +161,7 @@ export async function runSc900CloudApply(options: {
       const signal = options.signal ? { signal: options.signal } : {};
       const adapter = options.emulator ? createSc900RestAdapter({ target: "emulator", firestoreHost, storageHost, ...signal })
         : createSc900RestAdapter({ target: "production", getAccessToken: async () => (await applicationDefault().getAccessToken()).access_token, ...signal });
+      const storageContext = createRunStorageContext(prepareStorageCloud);
       const refresh = async (): Promise<Sc900CloudQuotas> => {
         if (options.emulator) {
           const checkedAt = new Date().toISOString();
@@ -135,7 +185,7 @@ export async function runSc900CloudApply(options: {
           throw new Error("Fresh project, administrator, rules, billing and budget verification blocks SC900 apply.");
         }
         const firestore = await openSc900FirestoreBudgets(await inspectFirestoreUsage(), options.workspace);
-        const storage = await prepareStorageCloud();
+        const storage = await storageContext();
         const journal = z.object({ months: z.record(z.string(), z.object({
           storedBytes: z.number().int().nonnegative(), transferBytes: z.number().int().nonnegative(),
         }).strict()) }).strict().parse(JSON.parse(
