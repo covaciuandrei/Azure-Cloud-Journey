@@ -4,12 +4,18 @@ import { MAX_COURSE_BYTES } from "./courseCatalog.js";
 import { ExamIdSchema, type ExamId } from "./exams.js";
 
 export const OFFLINE_PROTOCOL = "az104-offline-v1";
+export const SC900_OFFLINE_PROTOCOL = "sc900-offline-v1";
 export const OFFLINE_MANIFEST_URL = "/data/offline-manifest.json";
 export const OFFLINE_MANIFEST_MAX_BYTES = 4 * 1024 * 1024;
 export const OFFLINE_AVAILABILITY_MAX_BYTES = 8_000;
 export const OFFLINE_COURSE_MAX_BYTES = MAX_COURSE_BYTES;
 const courseUrl = /^\/courses\/c_[a-f0-9]{64}\/(?:networking|az104)\.json$/;
 const sc900CourseUrl = /^\/exams\/sc900\/course\/releases\/c_[a-f0-9]{64}\/sc900\.json$/;
+export function offlineProtocol(examId: ExamId = "az104"): string {
+  ExamIdSchema.parse(examId);
+  return examId === "sc900" ? SC900_OFFLINE_PROTOCOL : OFFLINE_PROTOCOL;
+}
+
 export function offlineManifestUrl(examId: ExamId = "az104"): string {
   ExamIdSchema.parse(examId);
   return examId === "sc900" ? "/exams/sc900/offline-manifest.json" : OFFLINE_MANIFEST_URL;
@@ -26,7 +32,7 @@ function fileSchema(examId: ExamId) {
   kind: z.enum(["shell", "data", "image"]),
   releaseId: CleanReleaseIdSchema.optional(),
   questionId: questionId.optional(),
-  questionIds: z.array(questionId).min(1).max(606).optional(),
+  questionIds: z.array(questionId).min(1).max(examId === "sc900" ? 10000 : 606).optional(),
   part: z.enum(["catalog", "question", "discussion", "explanation", "topics", "eligibility", "learning-manifest"]).optional(),
   commentCount: z.number().int().positive().optional(),
 }).strict().superRefine((file, context) => {
@@ -88,9 +94,9 @@ function manifestSchema<E extends ExamId>(examId: E) {
   releaseId: CleanReleaseIdSchema,
   learningReleaseId: CleanReleaseIdSchema.optional(),
   counts: z.object({
-    questions: z.number().int().min(1).max(604),
-    comments: z.number().int().min(0).max(7994),
-    images: z.number().int().min(examId === "az104" ? 1 : 0).max(784),
+    questions: z.number().int().min(1).max(examId === "az104" ? 604 : 10000),
+    comments: z.number().int().min(0).max(examId === "az104" ? 7994 : 1_000_000),
+    images: z.number().int().min(examId === "az104" ? 1 : 0).max(examId === "az104" ? 784 : 10000),
   }).strict(),
   files: z.array(fileSchema(examId)).min(1).max(10000),
 }).strict().superRefine((manifest, context) => {
@@ -99,7 +105,7 @@ function manifestSchema<E extends ExamId>(examId: E) {
   const images = files.filter((file) => file.kind === "image");
   if (new Set(files.map((file) => file.url)).size !== files.length ||
       images.length !== manifest.counts.images || new Set(images.map((file) => file.sha256)).size !== manifest.counts.images ||
-      images.some((file) => file.releaseId !== manifest.releaseId) ||
+      (examId === "az104" && images.some((file) => file.releaseId !== manifest.releaseId)) ||
       current.filter((file) => file.part === "question").length !== manifest.counts.questions ||
       current.reduce((sum, file) => sum + (file.commentCount ?? 0), 0) !== manifest.counts.comments ||
       current.filter((file) => file.part === "catalog").length !== 1 ||
@@ -158,9 +164,13 @@ export async function readOfflineManifest(response: Response, examId: ExamId = "
   return parseOfflineManifest(JSON.parse(new TextDecoder().decode(bytes)), examId);
 }
 
-export const OfflineReferencesSchema = z.array(z.object({
-  releaseId: CleanReleaseIdSchema, questionIds: z.array(questionId).max(606),
-}).strict()).max(20);
+function referencesSchema(examId: ExamId) {
+  return z.array(z.object({
+    releaseId: CleanReleaseIdSchema, questionIds: z.array(questionId).max(examId === "sc900" ? 10000 : 606),
+  }).strict()).max(20);
+}
+export const OfflineReferencesSchema = referencesSchema("az104");
+export const Sc900OfflineReferencesSchema = referencesSchema("sc900");
 export const OfflineStateSchema = z.object({
   status: z.enum(["empty", "downloading", "ready", "paused", "error"]),
   ready: z.boolean(),
@@ -180,7 +190,7 @@ export type OfflineState = z.infer<typeof OfflineStateSchema>;
 export type OfflineReferences = z.infer<typeof OfflineReferencesSchema>;
 
 export function selectOfflineFiles(manifest: OfflineManifest, references: OfflineReferences = []): OfflineFile[] {
-  OfflineReferencesSchema.parse(references);
+  referencesSchema(manifest.examId ?? "az104").parse(references);
   const selected = new Map<string, Set<string>>();
   const neededIds = new Set(manifest.files.filter((file) =>
     file.part === "question" && file.releaseId === manifest.releaseId).map((file) => file.questionId!));
@@ -201,7 +211,7 @@ export function selectOfflineFiles(manifest: OfflineManifest, references: Offlin
   }
   return manifest.files.filter((file) => {
     if (file.kind === "image") return !file.questionIds || file.questionIds.some((id) => neededIds.has(id));
-    if (file.part === "explanation" && manifest.learningReleaseId) {
+    if (manifest.examId !== "sc900" && file.part === "explanation" && manifest.learningReleaseId) {
       return file.releaseId === manifest.learningReleaseId && neededIds.has(file.questionId!);
     }
     return file.kind === "shell" || !file.releaseId || file.releaseId === manifest.releaseId ||

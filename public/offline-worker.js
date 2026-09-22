@@ -11,6 +11,8 @@
  *  - RPC protocol "az104-offline-v1" over postMessage: STATUS / DOWNLOAD /
  *    CANCEL / REMOVE / REMOVE_ALL with optional examId (defaults to az104),
  *    replying with a RESULT and broadcasting exam-scoped STATE.
+ *  - SC-900 messages use "sc900-offline-v1" so already-open AZ-104 clients
+ *    cannot interpret their state as a legacy download.
  *  - AZ-104 keeps its original URLs and cache names; SC-900 is isolated.
  *  - Cache-only serving for requests carrying "X-AZ104-Offline: 1".
  *  - Network-first navigation with a verified /index.html fallback.
@@ -21,11 +23,13 @@
   "use strict";
 
   var PROTOCOL = "az104-offline-v1";
+  var SC900_PROTOCOL = "sc900-offline-v1";
   var EXAM_IDS = ["az104", "sc900"];
   var stores = Object.create(null);
   var clearingAll = false;
 
   function createExamStore(examId) {
+  var RESPONSE_PROTOCOL = examId === "sc900" ? SC900_PROTOCOL : PROTOCOL;
   var ROOT = examId === "sc900" ? "/exams/sc900" : "";
   var MANIFEST_URL = examId === "sc900" ? ROOT + "/offline-manifest.json" : "/data/offline-manifest.json";
   var PUBLIC_MANIFEST_URL = examId === "sc900" ? ROOT + "/manifest.json" : "/data/manifest.json";
@@ -46,7 +50,7 @@
   var MAX_COURSE_BYTES = 4 * 1024 * 1024;
   var MAX_TOTAL_BYTES = 256 * 1024 * 1024;
   var MAX_LEGACY_RELEASES = 20;
-  var MAX_LEGACY_QUESTIONS = 606;
+  var MAX_LEGACY_QUESTIONS = examId === "sc900" ? MAX_FILES : 606;
   var RETRY_ATTEMPTS = 3;
 
   var SHA_RE = /^[a-f0-9]{64}$/;
@@ -259,9 +263,10 @@
       fail("Offline teaching release id is invalid.");
     }
     if (!isPlainObject(candidate.counts) || Object.keys(candidate.counts).length !== 3 ||
-        !Number.isInteger(candidate.counts.questions) || candidate.counts.questions < 1 || candidate.counts.questions > 604 ||
-        !Number.isInteger(candidate.counts.comments) || candidate.counts.comments < 0 || candidate.counts.comments > 7994 ||
-        !Number.isInteger(candidate.counts.images) || candidate.counts.images < (examId === "sc900" ? 0 : 1) || candidate.counts.images > 784) {
+        !Number.isInteger(candidate.counts.questions) || candidate.counts.questions < 1 || candidate.counts.questions > (examId === "sc900" ? MAX_FILES : 604) ||
+        !Number.isInteger(candidate.counts.comments) || candidate.counts.comments < 0 || candidate.counts.comments > (examId === "sc900" ? 1000000 : 7994) ||
+        !Number.isInteger(candidate.counts.images) || candidate.counts.images < (examId === "sc900" ? 0 : 1) ||
+        candidate.counts.images > (examId === "sc900" ? MAX_FILES : 784)) {
       fail("Offline manifest counts do not match the expected release.");
     }
     if (!Array.isArray(candidate.files) || candidate.files.length < 1 || candidate.files.length > MAX_FILES) {
@@ -309,7 +314,7 @@
     if (totalBytes > MAX_TOTAL_BYTES) fail("Offline manifest total size is too large.");
     if (imageCount !== candidate.counts.images) fail("Offline manifest image coverage is incomplete.");
     if (uniqueImageHashes !== candidate.counts.images) fail("Offline manifest has duplicate images.");
-    if (imagesOutsideCurrent) fail("Offline manifest images must belong to the current release.");
+    if (examId === "az104" && imagesOutsideCurrent) fail("Offline manifest images must belong to the current release.");
     if (currentQuestionCount !== candidate.counts.questions) fail("Offline manifest question coverage is incomplete.");
     if (currentCommentSum !== candidate.counts.comments) fail("Offline manifest comment coverage is incomplete.");
     if (currentCatalogCount !== 1) fail("Offline manifest is missing the current catalog.");
@@ -387,7 +392,7 @@
     }
     return manifest.files.filter(function (file) {
       if (file.kind === "image") return !file.questionIds || file.questionIds.some(function (id) { return neededIds[id]; });
-      if (file.part === "explanation" && manifest.learningReleaseId) {
+      if (examId === "az104" && file.part === "explanation" && manifest.learningReleaseId) {
         return file.releaseId === manifest.learningReleaseId && Boolean(neededIds[file.questionId]);
       }
       if (file.kind === "shell") return true;
@@ -662,7 +667,7 @@
   function broadcast(state) {
     return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
       for (var i = 0; i < list.length; i++) {
-        list[i].postMessage({ protocol: PROTOCOL, type: "STATE", examId: examId, state: state });
+        list[i].postMessage({ protocol: RESPONSE_PROTOCOL, type: "STATE", examId: examId, state: state });
       }
     });
   }
@@ -1023,21 +1028,22 @@
 
   self.addEventListener("message", function (event) {
     var data = event.data;
-    if (!data || typeof data !== "object" || data.protocol !== PROTOCOL) return;
+    if (!data || typeof data !== "object" || (data.protocol !== PROTOCOL && data.protocol !== SC900_PROTOCOL)) return;
     var source = event.source;
     var id = typeof data.id === "string" ? data.id : undefined;
-    var examId = data.examId === undefined ? "az104" : data.examId;
+    var examId = data.examId === undefined ? (data.protocol === SC900_PROTOCOL ? "sc900" : "az104") : data.examId;
     var validExam = EXAM_IDS.indexOf(examId) !== -1;
     var store = validExam ? stores[examId] : null;
     function respond(state, error) {
       if (!source || typeof source.postMessage !== "function") return;
-      var message = { protocol: PROTOCOL, type: "RESULT", id: id, examId: examId, state: state };
+      var message = { protocol: examId === "sc900" ? SC900_PROTOCOL : PROTOCOL, type: "RESULT", id: id, examId: examId, state: state };
       if (error) message.error = error;
       source.postMessage(message);
     }
     var task = Promise.resolve().then(function () {
       if (typeof id !== "string" || !id) throw new Error("The offline request is missing an id.");
       if (!store) throw new Error("Unknown offline exam.");
+      if (data.protocol === SC900_PROTOCOL && examId !== "sc900") throw new Error("The offline protocol belongs to another exam.");
       if (["STATUS", "DOWNLOAD", "CANCEL", "REMOVE", "REMOVE_ALL"].indexOf(data.type) === -1) {
         throw new Error("Unknown offline request.");
       }

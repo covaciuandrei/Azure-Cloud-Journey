@@ -34,13 +34,7 @@ export const Sc900LearningDatasetSchema = z.object({
   new Set(value.explanations.map((item) => item.questionId)).size === value.explanations.length,
 "SC900 learning explanations require unique question identities");
 
-export const Sc900StudyReleasePointerSchema = z.object({
-  schemaVersion: z.literal(1),
-  examId: z.literal("sc900"),
-  bankVersion: z.literal(SC900_BANK_VERSION),
-  releaseId: Sc900ReleaseIdSchema,
-  sourceRevision: Sha256Schema,
-}).strict();
+export { Sc900ReleasePointerSchema as Sc900StudyReleasePointerSchema } from "./sc900Bank.js";
 
 export type Sc900LearningExplanation = z.infer<typeof Sc900LearningExplanationSchema>;
 export type Sc900LearningManifest = z.infer<typeof Sc900LearningManifestSchema>;

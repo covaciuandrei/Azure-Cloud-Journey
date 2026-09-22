@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  OFFLINE_PROTOCOL, OfflineStateSchema, offlineManifestUrl, readOfflineManifest,
+  OfflineStateSchema, offlineManifestUrl, offlineProtocol, readOfflineManifest,
   selectOfflineFiles, type OfflineReferences, type OfflineState,
 } from "../../domain/offline.js";
 import type { ExamId } from "../../domain/exams.js";
@@ -13,6 +13,7 @@ const emptyState: OfflineState = {
 };
 
 export function useOfflineDownload(examId: ExamId = "az104") {
+  const protocol = offlineProtocol(examId);
   const supported = import.meta.env.VITE_STUDY_DEMO !== "true" &&
     typeof navigator !== "undefined" && "serviceWorker" in navigator &&
     "caches" in globalThis && window.isSecureContext &&
@@ -44,9 +45,9 @@ export function useOfflineDownload(examId: ExamId = "az104") {
         reject(new Error("The offline download did not respond. Reload and try again."));
       }, type === "STATUS" ? 20_000 : 60_000);
       waiting.current.set(id, { resolve, reject, timer });
-      worker.postMessage({ protocol: OFFLINE_PROTOCOL, id, type, examId, ...(legacyRefs ? { legacyRefs } : {}) });
+      worker.postMessage({ protocol, id, type, examId, ...(legacyRefs ? { legacyRefs } : {}) });
     });
-  }, [examId]);
+  }, [examId, protocol]);
 
   useEffect(() => {
     mounted.current = true;
@@ -59,7 +60,7 @@ export function useOfflineDownload(examId: ExamId = "az104") {
     const updateOnline = () => setOnline(navigator.onLine);
     const receive = (event: MessageEvent<unknown>) => {
       const data = event.data;
-      if (!data || typeof data !== "object" || !("protocol" in data) || data.protocol !== OFFLINE_PROTOCOL) return;
+      if (!data || typeof data !== "object" || !("protocol" in data) || data.protocol !== protocol) return;
       const record = data as Record<string, unknown>;
       if (record.type !== "STATE" && record.type !== "RESULT") return;
       if ((record.examId ?? "az104") !== examId) return;
@@ -109,7 +110,7 @@ export function useOfflineDownload(examId: ExamId = "az104") {
       }
       waiting.current.clear();
     };
-  }, [examId, send, supported]);
+  }, [examId, protocol, send, supported]);
 
   const activate = async () => {
     registration.current = await activateOfflineWorker(navigator.serviceWorker);

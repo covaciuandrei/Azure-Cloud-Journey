@@ -33,7 +33,8 @@ export function createSc900DemoBank() {
     const revision = sc900Hash("synthetic-demo-question", { prompt, options });
     // Provider tokens are format compatibility only; every sentence is an original fixture.
     const occurrence = `examprepper-128-q${String(number).padStart(6, "0")}`;
-    const url = `https://example.invalid/original-sc900-demo/${number}`;
+    const pageNumber = Math.floor(index / 5) + 1;
+    const url = `https://www.examprepper.co/exam/128/${pageNumber}`;
     const value = { kind: "option-selection", optionIds: [options[0]!.id] };
     return Sc900DocumentSchema.parse({
       schemaVersion: 1, examId: "sc900", releaseId,
@@ -41,7 +42,7 @@ export function createSc900DemoBank() {
         schemaVersion: 1, examId: "sc900", id, sourceRevision: revision, kind: "single-select",
         prompt, options, shuffle: { allowed: true }, fixedOptionOrder: options.map((option) => option.id),
         sourceOccurrenceIds: [occurrence], assetIds: [], commentCount: 0,
-        readiness: { grading: "automatic" }, media: [], sources: [{ questionNumber: number, pageNumber: 1, url }],
+        readiness: { grading: "automatic" }, media: [], sources: [{ questionNumber: number, pageNumber, url }],
       },
       answers: {
         schemaVersion: 1, examId: "sc900", id, questionId: id, sourceRevision: revision,

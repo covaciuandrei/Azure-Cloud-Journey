@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { QuestionIdSchema, Sha256Schema, TimestampSchema } from "./schemas.js";
 import { SC900_BANK_VERSION, Sc900ReleaseIdSchema } from "./sc900Bank.js";
-import { Sc900CaptureLedgerSchema } from "./sc900Capture.js";
+import { Sc900CaptureLedgerSchema, Sc900PageNumberSchema, Sc900SourceNumberSchema } from "./sc900Capture.js";
+
+export const Sc900ExpectedCaptureSchema = z.object({
+  questions: Sc900SourceNumberSchema,
+  pages: Sc900PageNumberSchema,
+  receiptSha256: Sha256Schema,
+}).strict();
 
 export const Sc900ReviewTargetSchema = z.object({
   questionId: QuestionIdSchema,
@@ -50,6 +56,7 @@ export const Sc900FinalReviewSchema = z.object({
 export const Sc900PublicationProofSchema = z.object({
   schemaVersion: z.literal(1),
   examId: z.literal("sc900"),
+  expectedCapture: Sc900ExpectedCaptureSchema,
   ledger: Sc900CaptureLedgerSchema,
   review: Sc900PublicationReviewSchema,
 }).strict();
@@ -77,6 +84,7 @@ export const Sc900ApprovalReceiptSchema = z.object({
 });
 
 export type Sc900ReviewTarget = z.infer<typeof Sc900ReviewTargetSchema>;
+export type Sc900ExpectedCapture = z.infer<typeof Sc900ExpectedCaptureSchema>;
 export type Sc900PublicationReview = z.infer<typeof Sc900PublicationReviewSchema>;
 export type Sc900FinalReview = z.infer<typeof Sc900FinalReviewSchema>;
 export type Sc900ApprovalReceipt = z.infer<typeof Sc900ApprovalReceiptSchema>;

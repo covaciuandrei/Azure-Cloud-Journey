@@ -1,12 +1,14 @@
 import { z } from "zod";
 import {
   AnswerValueSchema, CommentSchema, OptionIdSchema, QuestionIdSchema,
-  RichContentSchema, SafeUrlSchema, Sha256Schema, richAssetIds,
+  RichContentSchema, Sha256Schema, richAssetIds, type Inline, type RichContent,
 } from "./schemas.js";
+import { isCredentialFreeUrl, PublicHttpUrlSchema } from "./publicUrls.js";
 import { CleanCountsSchema, CleanReleaseIdSchema, mediaExtension } from "./cleanBank.js";
 import {
-  SC900_EXAM_ID, Sc900OccurrenceIdSchema, Sc900SourceNumberSchema,
-  Sc900CaptureLedgerSchema, sc900OccurrenceId, type Sc900CaptureLedger,
+  SC900_EXAM_ID, SC900_SOURCE_BASE_URL, SC900_SOURCE_PAGE_SIZE,
+  Sc900OccurrenceIdSchema, Sc900SourceNumberSchema, Sc900PageNumberSchema, Sc900SourcePageUrlSchema,
+  Sc900CaptureLedgerSchema, type Sc900CaptureLedger,
 } from "./sc900Capture.js";
 
 export { SC900_EXAM_ID, Sc900OccurrenceIdSchema } from "./sc900Capture.js";
@@ -18,6 +20,13 @@ export const SC900_METADATA_PATHS = {
   learning: "studyMetadata/sc900Learning",
 } as const;
 export const Sc900ReleaseIdSchema = CleanReleaseIdSchema;
+export const Sc900ReleasePointerSchema = z.object({
+  schemaVersion: z.literal(1),
+  examId: z.literal(SC900_EXAM_ID),
+  bankVersion: z.literal(SC900_BANK_VERSION),
+  releaseId: Sc900ReleaseIdSchema,
+  sourceRevision: Sha256Schema,
+}).strict();
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
 const ids = <T extends z.ZodType>(schema: T) => z.array(schema).refine(unique, "IDs must be unique");
 const relativePath = z.string().min(1).refine((value) =>
@@ -27,6 +36,22 @@ const relativePath = z.string().min(1).refine((value) =>
 const directory = z.string().refine((value) =>
   value.endsWith("/") && relativePath.safeParse(value.slice(0, -1)).success,
 "Unsafe SC900 repository-relative directory");
+
+function credentialFreeRichLinks(content: RichContent): boolean {
+  const spans = (values: Inline[]) => values.every((span) => span.type !== "link" || isCredentialFreeUrl(span.href));
+  return content.every((block) => {
+    switch (block.type) {
+      case "text": case "heading": return spans(block.spans);
+      case "quote": return credentialFreeRichLinks(block.blocks);
+      case "list": return block.items.every(credentialFreeRichLinks);
+      case "table": return spans(block.caption) &&
+        block.rows.every((row) => row.cells.every((cell) => credentialFreeRichLinks(cell.blocks)));
+      case "image": case "code": case "separator": return true;
+    }
+  });
+}
+export const Sc900RichContentSchema = RichContentSchema.refine(credentialFreeRichLinks,
+  "Credential-bearing URLs cannot be published.");
 
 export const Sc900CountsSchema = CleanCountsSchema.refine((counts) =>
   counts.sourceQuestions !== undefined && counts.duplicatesGrouped !== undefined &&
@@ -63,7 +88,7 @@ export const Sc900MediaSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   byteLength: z.number().int().positive(),
-  sourceUrls: ids(SafeUrlSchema).nonempty(),
+  sourceUrls: ids(PublicHttpUrlSchema).nonempty(),
 }).strict();
 
 export const Sc900QuestionSchema = z.object({
@@ -72,8 +97,8 @@ export const Sc900QuestionSchema = z.object({
   id: QuestionIdSchema,
   sourceRevision: Sha256Schema,
   kind: z.enum(["single-select", "multi-select", "manual"]),
-  prompt: RichContentSchema.min(1),
-  options: z.array(z.object({ id: OptionIdSchema, content: RichContentSchema.min(1) }).strict()),
+  prompt: Sc900RichContentSchema.min(1),
+  options: z.array(z.object({ id: OptionIdSchema, content: Sc900RichContentSchema.min(1) }).strict()),
   shuffle: z.object({ allowed: z.boolean() }).strict(),
   fixedOptionOrder: ids(OptionIdSchema),
   sourceOccurrenceIds: ids(Sc900OccurrenceIdSchema).nonempty(),
@@ -83,8 +108,8 @@ export const Sc900QuestionSchema = z.object({
   media: z.array(Sc900MediaSchema),
   sources: z.array(z.object({
     questionNumber: Sc900SourceNumberSchema,
-    pageNumber: z.number().int().positive(),
-    url: SafeUrlSchema,
+    pageNumber: Sc900PageNumberSchema,
+    url: Sc900SourcePageUrlSchema,
   }).strict()).nonempty(),
 }).strict().superRefine((question, context) => {
   const issue = (message: string) => context.addIssue({ code: "custom", message });
@@ -97,10 +122,15 @@ export const Sc900QuestionSchema = z.object({
   if (question.kind === "manual" && question.readiness.grading === "automatic") {
     issue("Manual questions cannot be automatically graded");
   }
-  const occurrences = question.sources.map((source) => sc900OccurrenceId(source.questionNumber));
+  const occurrences = question.sources.map((source) => `examprepper-128-q${String(source.questionNumber).padStart(6, "0")}`);
   if (!unique(occurrences) || occurrences.length !== question.sourceOccurrenceIds.length ||
       !occurrences.every((id) => question.sourceOccurrenceIds.includes(id))) {
     issue("SC900 source attribution must match its occurrences");
+  }
+  if (question.sources.some((source) =>
+    source.pageNumber !== Math.floor((source.questionNumber - 1) / SC900_SOURCE_PAGE_SIZE) + 1 ||
+    source.url !== `${SC900_SOURCE_BASE_URL}${source.pageNumber}`)) {
+    issue("SC900 question sources must use their exact five-question source page");
   }
   if (!unique(question.media.map((media) => media.id))) issue("Media IDs must be unique");
 });
@@ -114,16 +144,24 @@ export const Sc900AnswerSchema = z.object({
   originalAnswers: z.array(z.object({
     sourceOccurrenceId: Sc900OccurrenceIdSchema,
     value: AnswerValueSchema,
-    explanation: RichContentSchema,
+    explanation: Sc900RichContentSchema,
     answerAssetIds: ids(Sha256Schema),
     provenance: z.object({
       source: z.literal("examprepper"),
-      url: SafeUrlSchema,
+      url: Sc900SourcePageUrlSchema,
     }).strict(),
   }).strict()).nonempty(),
   effectiveAnswer: z.object({ value: AnswerValueSchema }).strict(),
   provisional: z.boolean(),
-}).strict();
+}).strict().superRefine((answers, context) => {
+  for (const answer of answers.originalAnswers) {
+    const number = Number(answer.sourceOccurrenceId.slice(-6));
+    const page = Math.floor((number - 1) / SC900_SOURCE_PAGE_SIZE) + 1;
+    if (answer.provenance.url !== `${SC900_SOURCE_BASE_URL}${page}`) {
+      context.addIssue({ code: "custom", message: "SC900 original answer provenance must match its occurrence-derived source page" });
+    }
+  }
+});
 
 export const Sc900SummarySchema = z.object({
   id: QuestionIdSchema,
@@ -179,6 +217,12 @@ export const Sc900DocumentSchema = z.object({
       !originals.every((id) => question.sourceOccurrenceIds.includes(id))) {
     issue("Every SC900 source occurrence requires exactly one original answer");
   }
+  for (const answer of answers.originalAnswers) {
+    const source = question.sources.find((item) => item.questionNumber === Number(answer.sourceOccurrenceId.slice(-6)));
+    if (!source || answer.provenance.url !== source.url) {
+      issue("SC900 original answer provenance must match its corresponding question source");
+    }
+  }
   const options = new Set(question.options.map((option) => option.id));
   const values = [answers.effectiveAnswer.value, ...answers.originalAnswers.map((answer) => answer.value)];
   if (values.some((value) => value.kind === "option-selection" &&
@@ -211,6 +255,7 @@ export const Sc900DocumentSchema = z.object({
 export const Sc900CommentSchema = CommentSchema.extend({
   examId: z.literal(SC900_EXAM_ID),
   sourceOccurrenceId: Sc900OccurrenceIdSchema,
+  body: Sc900RichContentSchema,
 }).strict();
 
 export const Sc900DiscussionSchema = z.object({
@@ -281,6 +326,7 @@ export function sc900SchemasForLedger(input: Sc900CaptureLedger) {
 }
 
 export type Sc900Manifest = z.infer<typeof Sc900ManifestSchema>;
+export type Sc900ReleasePointer = z.infer<typeof Sc900ReleasePointerSchema>;
 export type Sc900Catalog = z.infer<typeof Sc900CatalogSchema>;
 export type Sc900Document = z.infer<typeof Sc900DocumentSchema>;
 export type Sc900Question = z.infer<typeof Sc900QuestionSchema>;

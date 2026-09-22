@@ -18,6 +18,13 @@ Tests use original synthetic text and a generated one-pixel image.
   `https://www.examprepper.co/exam/128/<pageNumber>`, without alternate hosts,
   protocols, exams, trailing slashes, queries, or fragments.
   `SC900_SOURCE_URL` and `sc900SourcePageUrl(number)` expose this contract.
+  `Sc900SourcePageUrlSchema` is shared by the capture, question, and original
+  answer schemas. Source question `n` belongs to page `floor((n - 1) / 5) + 1`.
+  Page numbers are bounded to `ceil(999999 / 5)` by the six-digit occurrence
+  representation. These are format/pagination bounds, not expected source
+  coverage. Original-answer provenance must match its occurrence-derived page
+  and the corresponding document question source, even when parsing domain
+  records without the publisher.
   Its `reported: { questions, pages }` is established by verified rendered
   capture, never a guessed count. `pages` contains `pageNumber`, `url`,
   `rawSha256`, and complete `questionNumbers`. `occurrences` contains `id`,
@@ -59,10 +66,25 @@ and media shapes, with explicit SC900 IDs and boundaries. Add `examId` to the
 document, question, answers, discussion, and every comment. Original answers
 are retained one per occurrence. Empty discussions still have a document.
 No captured comments or images may silently disappear.
+SC900 media URLs and nested rich-link targets use the shared public-URL
+credential guard. Publication also scans all input text at entry, so literal
+credential-bearing URLs cannot bypass the typed link checks. Rejection uses a
+generic error without printing, stripping, or rewriting URL values.
+The parsed bank, source, discussion, learning, and relevance records are checked
+again before any source, capture, or release digest is computed.
 
 `Sc900PublicationInput` in `publication.ts` consists of `ledger`, `documents`,
 `discussions`, `topics`, `learning`, `eligibility`, and an
 `assets: ReadonlyMap<string, Uint8Array>` keyed by raw image SHA-256.
+It also requires `expectedCapture: { questions, pages, receiptSha256 }`, supplied
+by the caller from the independently verified source-scope receipt. This is not
+a claim that all questions have been captured. Publication fails unless the
+complete ledger's reported question and page counts exactly match these
+independent expectations. The publisher does not infer expectations from the
+ledger itself or hardcode the source count. The caller verifies the receipt
+bytes and supplies their raw SHA-256; the release identity and private proof
+bind that digest. Prepared releases carry `expectedCapture` for safe rebuilds.
+The capture ledger and canonical source revision wire formats are unchanged.
 Draft records can use the exported `SC900_DRAFT_RELEASE_ID`; media paths must
 use that same draft release until binding.
 
@@ -118,6 +140,11 @@ Question and discussion filenames are `<q_sha>.json`. Media filenames are
 The Firestore release root is `studyBanks/sc900/releases/<r_sha>`. The only
 SC900 metadata pointer paths are `studyMetadata/sc900Bank`,
 `studyMetadata/sc900Topics`, and `studyMetadata/sc900Learning`.
+`Sc900ReleasePointerSchema` and `Sc900ReleasePointer` are exported from
+`src/domain/sc900Bank.ts`. The existing `Sc900StudyReleasePointerSchema` export
+from `sc900Learning.ts` aliases the same schema. Its exact fields are
+`schemaVersion: 1`, `examId: "sc900"`, `bankVersion: "sc900-approved-v1"`,
+`releaseId`, and `sourceRevision`.
 
 ## Review, staging, and later activation approval
 
@@ -139,17 +166,12 @@ SC900 metadata pointer paths are `studyMetadata/sc900Bank`,
    capture, release, review digest, entire file inventory digest, byte total,
    and file count. A self-review cannot turn activation on.
 5. A later external reviewer supplies `Sc900FinalReview` naming the exact plan
-   and review digests. `stageSc900Publication(plan, { finalReview })` validates
-   the existing complete stage against its existing receipt, then atomically
-   promotes only `approval-receipt.json` from false to true as the final write.
-   A release-local lock serializes promotions. Identical approval is idempotent;
-   downgrades, changed approved receipts, stale approvals, and changed stage
-   bytes are rejected. All static files, including inactive availability, stay
-   unchanged.
-6. Alternatively, `writeSc900FinalApproval(plan, finalReview)` validates the
+   and review digests. `writeSc900FinalApproval(plan, finalReview)` validates the
    unchanged stage and stores an immutable approval separately under
    `.data/sc900-publication/approvals/<r_sha>/`, without changing the stage receipt.
-   Neither API changes application availability or a hosting pointer.
+   The immutable stage receipt is never promoted or replaced. Re-staging with
+   a different receipt is rejected even when a valid independent final approval
+   exists. Neither API changes application availability or a hosting pointer.
    The final review is a caller-supplied attestation,
    not authenticated reviewer identity; approval authority must be verified
    outside this local library.
@@ -172,7 +194,7 @@ the existing `publicationFileBytes` helper and preserving exact canonical bytes.
 Map keys are rooted at `exams/sc900/`. Private proof, receipts, and inventory are
 excluded. The result also exposes `manifest`, `catalog`, `documents`,
 `discussions`, `topics`, `learning` (learning manifest), `explanations` (map),
-`eligibility`, `releases`, `receipt`, `inventory`, and `source.directory`.
+`eligibility`, `releases`, `receipt`, `inventory`, `expectedCapture`, and `source.directory`.
 
 An offline generator must validate the separate **live** availability record
 against this bank release, its capture digest, and the independently approved

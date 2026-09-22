@@ -4,14 +4,18 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { CleanDocumentSchema } from "../src/domain/cleanBank.js";
-import { OccurrenceIdSchema } from "../src/domain/schemas.js";
+import { OccurrenceIdSchema, type RichContent } from "../src/domain/schemas.js";
 import { LearningManifestSchema } from "../src/domain/learning.js";
 import { TopicMapSchema } from "../src/domain/topics.js";
 import { SC900_INACTIVE, Sc900AvailabilitySchema } from "../src/domain/examAvailability.js";
 import {
-  Sc900DocumentSchema, Sc900ManifestSchema, sc900FirestoreRoot, sc900SchemasForLedger,
+  Sc900DocumentSchema, Sc900QuestionSchema, Sc900AnswerSchema, Sc900CommentSchema, Sc900MediaSchema,
+  Sc900RichContentSchema, Sc900ManifestSchema,
+  Sc900ReleasePointerSchema, sc900FirestoreRoot, sc900SchemasForLedger,
 } from "../src/domain/sc900Bank.js";
+import { Sc900StudyReleasePointerSchema } from "../src/domain/sc900Learning.js";
 import {
+  SC900_SOURCE_PAGE_SIZE, SC900_MAX_SOURCE_PAGE, Sc900SourcePageUrlSchema,
   Sc900CaptureLedgerSchema, assertSc900SourceNumber, sc900OccurrenceId, sc900SourcePageUrl,
   type Sc900CaptureLedger,
 } from "../src/domain/sc900Capture.js";
@@ -39,14 +43,32 @@ test("SC900 hashes are exam-scoped, canonical and reject non-JSON input", () => 
   assert.throws(() => sc900Hash("../az104", {}));
 });
 
+test("SC900 release pointer aliases share the same strict exam-scoped contract", () => {
+  const pointer = {
+    schemaVersion: 1, examId: "sc900", bankVersion: "sc900-approved-v1",
+    releaseId: SC900_DRAFT_RELEASE_ID, sourceRevision: "a".repeat(64),
+  };
+  assert.equal(Sc900ReleasePointerSchema, Sc900StudyReleasePointerSchema);
+  assert.deepEqual(Sc900ReleasePointerSchema.parse(pointer), pointer);
+  assert.equal(Sc900ReleasePointerSchema.safeParse({ ...pointer, examId: "az104" }).success, false);
+  assert.equal(Sc900ReleasePointerSchema.safeParse({ ...pointer, examId: undefined }).success, false);
+  assert.equal(Sc900ReleasePointerSchema.safeParse({ ...pointer, bankVersion: "approved-7994-v1" }).success, false);
+  assert.equal(Sc900ReleasePointerSchema.safeParse({ ...pointer, releaseId: "../az104" }).success, false);
+});
+
 test("SC900 capture coverage is derived from verified page and occurrence evidence, not AZ104 counts", () => {
   const ledger = fixture().ledger;
   assert.equal(Sc900CaptureLedgerSchema.parse(ledger).reported.questions, 2);
+  const pageCount = Math.ceil(607 / SC900_SOURCE_PAGE_SIZE);
   const large: Sc900CaptureLedger = {
-    ...ledger, reported: { questions: 607, pages: 1 }, assets: [],
-    pages: [{ ...ledger.pages[0]!, questionNumbers: Array.from({ length: 607 }, (_, index) => index + 1) }],
+    ...ledger, reported: { questions: 607, pages: pageCount }, assets: [],
+    pages: Array.from({ length: pageCount }, (_, index) => ({
+      pageNumber: index + 1, url: sc900SourcePageUrl(index + 1), rawSha256: byteSha256(`Synthetic large page ${index + 1}`),
+      questionNumbers: Array.from({ length: Math.min(SC900_SOURCE_PAGE_SIZE, 607 - index * SC900_SOURCE_PAGE_SIZE) },
+        (_, offset) => index * SC900_SOURCE_PAGE_SIZE + offset + 1),
+    })),
     occurrences: Array.from({ length: 607 }, (_, index) => ({
-      id: sc900OccurrenceId(index + 1), questionNumber: index + 1, pageNumber: 1,
+      id: sc900OccurrenceId(index + 1), questionNumber: index + 1, pageNumber: Math.floor(index / SC900_SOURCE_PAGE_SIZE) + 1,
       answerRevealed: true, discussionState: "loaded", expectedCommentCount: 0, parsedCommentCount: 0, commentIds: [], assetIds: [],
     })),
   };
@@ -88,8 +110,11 @@ test("SC900 document boundaries preserve rich/manual/image shapes without weaken
   bounded.manifest.parse(release.manifest);
   const outsideLedger = structuredClone(input.documents[0]!);
   outsideLedger.question.sources[0]!.questionNumber = 607;
+  outsideLedger.question.sources[0]!.pageNumber = Math.floor((607 - 1) / SC900_SOURCE_PAGE_SIZE) + 1;
+  outsideLedger.question.sources[0]!.url = sc900SourcePageUrl(outsideLedger.question.sources[0]!.pageNumber);
   outsideLedger.question.sourceOccurrenceIds = [sc900OccurrenceId(607)];
   outsideLedger.answers.originalAnswers[0]!.sourceOccurrenceId = sc900OccurrenceId(607);
+  outsideLedger.answers.originalAnswers[0]!.provenance.url = outsideLedger.question.sources[0]!.url;
   assert.equal(Sc900DocumentSchema.safeParse(outsideLedger).success, true);
   assert.equal(bounded.document.safeParse(outsideLedger).success, false);
   assert.equal(LearningManifestSchema.safeParse(release.learningManifest).success, false);
@@ -100,11 +125,124 @@ test("SC900 document boundaries preserve rich/manual/image shapes without weaken
   assert.equal(Sc900DocumentSchema.safeParse({ ...input.documents[0], examId: undefined }).success, false);
 });
 
+test("SC900 publication requires independently verified source scope and binds its receipt", () => {
+  const input = fixture();
+  const prepared = prepareSc900Release(input);
+  assert.deepEqual(prepared.expectedCapture, input.expectedCapture);
+  assert.deepEqual(prepareSc900Release(prepared).manifest, prepared.manifest);
+  assert.throws(() => prepareSc900Release({
+    ...input, expectedCapture: { ...input.expectedCapture, questions: input.expectedCapture.questions + 1 },
+  }), /independently verified expected source scope/);
+  assert.throws(() => prepareSc900Release({
+    ...input, expectedCapture: { ...input.expectedCapture, pages: input.expectedCapture.pages + 1 },
+  }), /independently verified expected source scope/);
+  assert.throws(() => prepareSc900Release({
+    ...input, expectedCapture: { ...input.expectedCapture, receiptSha256: "not-a-receipt-sha" },
+  }));
+  const missing = { ...input };
+  Reflect.deleteProperty(missing, "expectedCapture");
+  assert.throws(() => prepareSc900Release(missing));
+  const changedInput = {
+    ...input, expectedCapture: { ...input.expectedCapture, receiptSha256: byteSha256("Different independently verified scope receipt") },
+  };
+  const changedScopeReceipt = prepareSc900Release(changedInput);
+  assert.notEqual(changedScopeReceipt.manifest.releaseId, prepared.manifest.releaseId);
+  assert.equal(changedScopeReceipt.manifest.sourceRevision, prepared.manifest.sourceRevision);
+  assert.equal(changedScopeReceipt.manifest.captureLedgerDigest, prepared.manifest.captureLedgerDigest);
+  const originalPlan = buildSc900StaticPlan(input, review(prepared));
+  assert.throws(() => buildSc900StaticPlan(changedInput, originalPlan.review), /Full SC900 review/);
+  const changedPlan = buildSc900StaticPlan(changedInput, review(changedScopeReceipt));
+  assert.notEqual(changedPlan.planDigest, originalPlan.planDigest);
+  assert.notEqual(changedPlan.reviewDigest, originalPlan.reviewDigest);
+  const oldFinalReview = {
+    schemaVersion: 1 as const, examId: "sc900" as const, releaseId: originalPlan.release.manifest.releaseId,
+    planDigest: originalPlan.planDigest, reviewDigest: originalPlan.reviewDigest,
+    reviewer: "Synthetic independent scope reviewer", reviewedAt: timestamp,
+    independent: true as const, decision: "approve-activation" as const,
+  };
+  assert.equal(createSc900ApprovalReceipt(originalPlan, oldFinalReview).activate, true);
+  assert.throws(() => createSc900ApprovalReceipt(changedPlan, oldFinalReview));
+});
+
+test("SC900 verified 219-question 44-page scope cannot be replaced by a 40-question 8-page capture", () => {
+  const input = fixture();
+  const ledger: Sc900CaptureLedger = {
+    ...input.ledger, reported: { questions: 40, pages: 8 }, assets: [],
+    pages: Array.from({ length: 8 }, (_, index) => ({
+      pageNumber: index + 1, url: sc900SourcePageUrl(index + 1), rawSha256: byteSha256(`Synthetic partial source page ${index + 1}`),
+      questionNumbers: Array.from({ length: 5 }, (_, offset) => index * 5 + offset + 1),
+    })),
+    occurrences: Array.from({ length: 40 }, (_, index) => ({
+      id: sc900OccurrenceId(index + 1), questionNumber: index + 1, pageNumber: Math.floor(index / 5) + 1,
+      answerRevealed: true, discussionState: "loaded", expectedCommentCount: 0, parsedCommentCount: 0, commentIds: [], assetIds: [],
+    })),
+  };
+  Sc900CaptureLedgerSchema.parse(ledger);
+  assert.throws(() => prepareSc900Release({
+    ...input, ledger,
+    expectedCapture: { questions: 219, pages: 44, receiptSha256: byteSha256("Synthetic independently verified full scope receipt") },
+  }), /independently verified expected source scope/);
+});
+
+test("SC900 credential-bearing media and nested rich links are rejected without exposing or rewriting their values", () => {
+  const input = fixture();
+  const token = "SYNTHETIC-NOT-A-CREDENTIAL";
+  const unsafeUrl = `https://example.test/synthetic-pixel.png?sv=synthetic&sig=${token}`;
+  const media = { ...input.documents[0]!.question.media[0]!, sourceUrls: [unsafeUrl] };
+  const mediaResult = Sc900MediaSchema.safeParse(media);
+  assert.equal(mediaResult.success, false);
+  if (!mediaResult.success) assert.equal(JSON.stringify(mediaResult.error).includes(token), false);
+  assert.equal(media.sourceUrls[0], unsafeUrl);
+  assert.equal(Sc900MediaSchema.safeParse({ ...media, sourceUrls: ["https://example.test/synthetic-pixel.png?view=summary"] }).success, true);
+  const spans = [{ type: "link" as const, text: "Synthetic reference", href: unsafeUrl, marks: [] }];
+  const link: RichContent = [{ type: "text", spans }];
+  const nested: RichContent[] = [
+    link,
+    [{ type: "heading", level: 2, spans }],
+    [{ type: "quote", blocks: link }],
+    [{ type: "list", ordered: true, start: 1, items: [link] }],
+    [{ type: "table", caption: spans, rows: [] }],
+    [{ type: "table", caption: [], rows: [{ cells: [{ header: false, rowSpan: 1, colSpan: 1, blocks: link }] }] }],
+  ];
+  for (const content of nested) {
+    const result = Sc900RichContentSchema.safeParse(content);
+    assert.equal(result.success, false);
+    if (!result.success) assert.equal(JSON.stringify(result.error).includes(token), false);
+    assert.equal(Sc900QuestionSchema.safeParse({ ...input.documents[0]!.question, prompt: content }).success, false);
+    assert.equal(Sc900AnswerSchema.safeParse({
+      ...input.documents[0]!.answers,
+      originalAnswers: input.documents[0]!.answers.originalAnswers.map((answer) => ({ ...answer, explanation: content })),
+    }).success, false);
+    assert.equal(Sc900CommentSchema.safeParse({ ...input.discussions[0]!.comments[0], body: content }).success, false);
+  }
+  input.documents[0]!.question.media[0]!.sourceUrls = [unsafeUrl];
+  assert.throws(() => prepareSc900Release(input), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal(error.message, "Credential-bearing URLs cannot be published.");
+    assert.equal(error.message.includes(token), false);
+    return true;
+  });
+  const plainTextInput = fixture();
+  plainTextInput.documents[0]!.question.prompt = text(`Synthetic literal reference: ${unsafeUrl}`);
+  assert.throws(() => prepareSc900Release(plainTextInput), /Credential-bearing URLs cannot be published/);
+  const fullReview = review(prepareSc900Release(fixture()));
+  assert.throws(() => buildSc900StaticPlan(input, fullReview), /Credential-bearing URLs cannot be published/);
+  const richLinkInput = fixture();
+  richLinkInput.documents[0]!.question.prompt = link;
+  assert.throws(() => prepareSc900Release(richLinkInput), /Credential-bearing URLs cannot be published/);
+  assert.throws(() => buildSc900StaticPlan(richLinkInput, fullReview), /Credential-bearing URLs cannot be published/);
+  const parsedMetadataInput = fixture();
+  parsedMetadataInput.learning.explanations[0]!.summary += ` Synthetic reference: ${unsafeUrl}`;
+  Object.setPrototypeOf(parsedMetadataInput.learning, {});
+  assert.throws(() => prepareSc900Release(parsedMetadataInput), /Credential-bearing URLs cannot be published/);
+  assert.throws(() => buildSc900StaticPlan(parsedMetadataInput, fullReview), /Credential-bearing URLs cannot be published/);
+});
+
 test("SC900 capture pins the exact approved source origin, exam and each numbered page", () => {
   const ledger = fixture().ledger;
   assert.equal(ledger.sourceUrl, "https://www.examprepper.co/exam/128/1");
   assert.equal(sc900SourcePageUrl(2), "https://www.examprepper.co/exam/128/2");
-  for (const number of [0, -1, 1.5, 1000000, Number.NaN]) {
+  for (const number of [0, -1, 1.5, SC900_MAX_SOURCE_PAGE + 1, 99999999, Number.NaN]) {
     assert.throws(() => sc900SourcePageUrl(number));
   }
   const invalidUrls = [
@@ -126,16 +264,74 @@ test("SC900 capture pins the exact approved source origin, exam and each numbere
     }).success, false, url);
   }
   const twoPages: Sc900CaptureLedger = {
-    ...ledger, reported: { questions: 2, pages: 2 },
+    ...ledger, reported: { questions: 6, pages: 2 }, assets: [],
     pages: [1, 2].map((number) => ({
       pageNumber: number, url: sc900SourcePageUrl(number), rawSha256: byteSha256(`Synthetic page ${number}`),
-      questionNumbers: [number],
+      questionNumbers: number === 1 ? [1, 2, 3, 4, 5] : [6],
     })),
-    occurrences: ledger.occurrences.map((occurrence) => ({ ...occurrence, pageNumber: occurrence.questionNumber })),
+    occurrences: Array.from({ length: 6 }, (_, index) => ({
+      id: sc900OccurrenceId(index + 1), questionNumber: index + 1, pageNumber: Math.floor(index / SC900_SOURCE_PAGE_SIZE) + 1,
+      answerRevealed: true, discussionState: "loaded", expectedCommentCount: 0, parsedCommentCount: 0, commentIds: [], assetIds: [],
+    })),
   };
   Sc900CaptureLedgerSchema.parse(twoPages);
+  const wrongAttribution = structuredClone(twoPages);
+  wrongAttribution.pages[0]!.questionNumbers.pop();
+  wrongAttribution.pages[1]!.questionNumbers.unshift(5);
+  wrongAttribution.occurrences[4]!.pageNumber = 2;
+  assert.equal(Sc900CaptureLedgerSchema.safeParse(wrongAttribution).success, false);
   twoPages.pages[1]!.url = sc900SourcePageUrl(1);
   assert.equal(Sc900CaptureLedgerSchema.safeParse(twoPages).success, false);
+});
+
+test("SC900 question and answer schemas directly enforce exact bounded source pages", () => {
+  const document = fixture().documents[0]!;
+  assert.equal(SC900_SOURCE_PAGE_SIZE, 5);
+  assert.equal(SC900_MAX_SOURCE_PAGE, Math.ceil(999999 / 5));
+  assert.equal(Sc900SourcePageUrlSchema.safeParse(sc900SourcePageUrl(SC900_MAX_SOURCE_PAGE)).success, true);
+  for (const url of [
+    "https://www.examprepper.co/exam/45/1",
+    "https://www.examprepper.co/exam/128/0",
+    "https://www.examprepper.co/exam/128/01",
+    "https://www.examprepper.co/exam/128/99999999",
+    "https://www.examprepper.co/exam/128/200001",
+    "https://www.examprepper.co/exam/128/1?source=45",
+    "https://example.test/exam/128/1",
+  ]) {
+    assert.equal(Sc900SourcePageUrlSchema.safeParse(url).success, false, url);
+    const question = structuredClone(document.question);
+    question.sources[0]!.url = url;
+    assert.equal(Sc900QuestionSchema.safeParse(question).success, false, url);
+    const answers = structuredClone(document.answers);
+    answers.originalAnswers[0]!.provenance.url = url;
+    assert.equal(Sc900AnswerSchema.safeParse(answers).success, false, url);
+  }
+  for (const pageNumber of [0, -1, 2, SC900_MAX_SOURCE_PAGE + 1, 99999999]) {
+    const question = structuredClone(document.question);
+    question.sources[0]!.pageNumber = pageNumber;
+    question.sources[0]!.url = `https://www.examprepper.co/exam/128/${pageNumber}`;
+    assert.equal(Sc900QuestionSchema.safeParse(question).success, false);
+  }
+  const zeroNumber = structuredClone(document.question);
+  zeroNumber.sources[0]!.questionNumber = 0;
+  zeroNumber.sourceOccurrenceIds = ["examprepper-128-q000000"];
+  assert.equal(Sc900QuestionSchema.safeParse(zeroNumber).success, false);
+  const wrongAnswerPage = structuredClone(document.answers);
+  wrongAnswerPage.originalAnswers[0]!.provenance.url = sc900SourcePageUrl(2);
+  assert.equal(Sc900AnswerSchema.safeParse(wrongAnswerPage).success, false);
+  assert.equal(Sc900DocumentSchema.safeParse({ ...document, answers: wrongAnswerPage }).success, false);
+  const last = structuredClone(document);
+  last.question.sources = [{ questionNumber: 999999, pageNumber: SC900_MAX_SOURCE_PAGE, url: sc900SourcePageUrl(SC900_MAX_SOURCE_PAGE) }];
+  last.question.sourceOccurrenceIds = [sc900OccurrenceId(999999)];
+  last.answers.originalAnswers[0]!.sourceOccurrenceId = sc900OccurrenceId(999999);
+  last.answers.originalAnswers[0]!.provenance.url = sc900SourcePageUrl(SC900_MAX_SOURCE_PAGE);
+  assert.equal(Sc900QuestionSchema.safeParse(last.question).success, true);
+  assert.equal(Sc900AnswerSchema.safeParse(last.answers).success, true);
+  assert.equal(Sc900DocumentSchema.safeParse(last).success, true);
+  last.answers.originalAnswers[0]!.sourceOccurrenceId = sc900OccurrenceId(6);
+  last.answers.originalAnswers[0]!.provenance.url = sc900SourcePageUrl(2);
+  assert.equal(Sc900AnswerSchema.safeParse(last.answers).success, true);
+  assert.equal(Sc900DocumentSchema.safeParse(last).success, false);
 });
 
 test("SC900 loaded empty discussions stay valid and are not mistaken for unverified empty captures", () => {
@@ -269,17 +465,19 @@ test("SC900 staged export is immutable, exact-hash validated, ignored, and rejec
   }
 });
 
-test("SC900 staging promotes only an exact independent approval and leaves all static bytes unchanged", async () => {
+test("SC900 existing stage receipts remain immutable even after an exact independent approval", async () => {
   const workspace = resolve(".data/sc900-bank-tests", randomUUID());
   await mkdir(workspace, { recursive: true });
   try {
     const plan = planFixture();
     const original = await stageSc900Publication(plan, { workspaceRoot: workspace });
     assert.equal(original.receipt.activate, false);
+    const receiptPath = resolve(original.directory, "approval-receipt.json");
+    const originalReceiptBytes = await readFile(receiptPath);
     const finalReview = {
       schemaVersion: 1 as const, examId: "sc900" as const, releaseId: plan.release.manifest.releaseId,
       planDigest: plan.planDigest, reviewDigest: plan.reviewDigest,
-      reviewer: "Synthetic independent promotion reviewer", reviewedAt: timestamp,
+      reviewer: "Synthetic independent approval reviewer", reviewedAt: timestamp,
       independent: true as const, decision: "approve-activation" as const,
     };
     await assert.rejects(stageSc900Publication(plan, {
@@ -288,27 +486,23 @@ test("SC900 staging promotes only an exact independent approval and leaves all s
     await assert.rejects(stageSc900Publication(plan, {
       workspaceRoot: workspace, finalReview: { ...finalReview, planDigest: "f".repeat(64) },
     }));
-    assert.equal(JSON.parse(await readFile(resolve(original.directory, "approval-receipt.json"), "utf8")).activate, false);
-    const promoted = await stageSc900Publication(plan, { workspaceRoot: workspace, finalReview });
-    assert.equal(promoted.directory, original.directory);
-    assert.equal(promoted.receipt.activate, true);
-    await validateSc900StagedExport(promoted.directory, plan, promoted.receipt);
+    await assert.rejects(stageSc900Publication(plan, { workspaceRoot: workspace, finalReview }), /receipt or inventory changed/);
+    const approval = await writeSc900FinalApproval(plan, finalReview, workspace);
+    assert.equal(approval.receipt.activate, true);
+    await assert.rejects(stageSc900Publication(plan, { workspaceRoot: workspace, finalReview }), /receipt or inventory changed/);
+    assert.deepEqual(await readFile(receiptPath), originalReceiptBytes);
+    await validateSc900StagedExport(original.directory, plan, original.receipt);
     for (const file of plan.files) {
-      assert.equal(byteSha256(await readFile(resolve(promoted.directory, file.path))), file.sha256);
+      assert.equal(byteSha256(await readFile(resolve(original.directory, file.path))), file.sha256);
     }
-    assert.deepEqual(JSON.parse(await readFile(resolve(promoted.directory, "exams/sc900/availability.json"), "utf8")), SC900_INACTIVE);
-    assert.deepEqual(await stageSc900Publication(plan, { workspaceRoot: workspace, finalReview }), promoted);
-    await assert.rejects(stageSc900Publication(plan, { workspaceRoot: workspace }), /cannot be downgraded or changed/);
-    await assert.rejects(stageSc900Publication(plan, {
-      workspaceRoot: workspace, finalReview: { ...finalReview, reviewer: "A different independent reviewer" },
-    }), /cannot be downgraded or changed/);
-    await validateSc900StagedExport(promoted.directory, plan, promoted.receipt);
+    assert.deepEqual(JSON.parse(await readFile(resolve(original.directory, "exams/sc900/availability.json"), "utf8")), SC900_INACTIVE);
+    assert.deepEqual(await stageSc900Publication(plan, { workspaceRoot: workspace }), original);
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
 });
 
-test("SC900 stage promotion refuses changed bytes without modifying the pending receipt", async () => {
+test("SC900 re-staging with final review refuses changed bytes without modifying the initial receipt", async () => {
   const workspace = resolve(".data/sc900-bank-tests", randomUUID());
   await mkdir(workspace, { recursive: true });
   try {
@@ -325,7 +519,7 @@ test("SC900 stage promotion refuses changed bytes without modifying the pending 
       finalReview: {
         schemaVersion: 1, examId: "sc900", releaseId: plan.release.manifest.releaseId,
         planDigest: plan.planDigest, reviewDigest: plan.reviewDigest,
-        reviewer: "Synthetic independent promotion reviewer", reviewedAt: timestamp,
+        reviewer: "Synthetic independent approval reviewer", reviewedAt: timestamp,
         independent: true, decision: "approve-activation",
       },
     }), /hash changed/);
@@ -427,6 +621,7 @@ test("SC900 approved loader reconstructs exact proof, never selects a pending or
     }, workspace);
     const explicit = await loadSc900Publication(workspace, { approvalPath: relative(workspace, approval.path) });
     assert.deepEqual(explicit.manifest, plan.release.manifest);
+    assert.deepEqual(explicit.expectedCapture, plan.release.expectedCapture);
     assert.equal(explicit.files.size, plan.files.length);
     assert.equal(explicit.learning.records[plan.release.documents[0]!.question.id]?.sha256,
       plan.release.learningManifest.records[plan.release.documents[0]!.question.id]?.sha256);

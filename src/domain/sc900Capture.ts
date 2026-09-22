@@ -1,11 +1,22 @@
 import { z } from "zod";
-import { CommentIdSchema, SafeUrlSchema, Sha256Schema, TimestampSchema } from "./schemas.js";
+import { CommentIdSchema, Sha256Schema, TimestampSchema } from "./schemas.js";
 
 export const SC900_EXAM_ID = "sc900" as const;
 export const SC900_SOURCE_EXAM_ID = "128" as const;
+export const SC900_SOURCE_BASE_URL = "https://www.examprepper.co/exam/128/" as const;
 export const SC900_SOURCE_URL = "https://www.examprepper.co/exam/128/1" as const;
-export const Sc900OccurrenceIdSchema = z.string().regex(/^examprepper-128-q\d{6}$/);
-export const Sc900SourceNumberSchema = z.number().int().min(1).max(999999);
+export const SC900_SOURCE_PAGE_SIZE = 5;
+export const SC900_MAX_SOURCE_NUMBER = 999999;
+export const SC900_MAX_SOURCE_PAGE = Math.ceil(SC900_MAX_SOURCE_NUMBER / SC900_SOURCE_PAGE_SIZE);
+export const Sc900OccurrenceIdSchema = z.string().regex(/^examprepper-128-q\d{6}$/)
+  .refine((value) => Number(value.slice(-6)) > 0, "SC900 source occurrence numbers must be positive");
+export const Sc900SourceNumberSchema = z.number().int().min(1).max(SC900_MAX_SOURCE_NUMBER);
+export const Sc900PageNumberSchema = z.number().int().min(1).max(SC900_MAX_SOURCE_PAGE);
+export const Sc900SourcePageUrlSchema = z.string().refine((value) => {
+  const page = value.slice(SC900_SOURCE_BASE_URL.length);
+  return value.startsWith(SC900_SOURCE_BASE_URL) && /^[1-9]\d*$/.test(page) &&
+    Sc900PageNumberSchema.safeParse(Number(page)).success;
+}, "Expected the exact SC900 HTTPS source URL with a bounded positive page number");
 const unique = <T>(items: T[]) => new Set(items).size === items.length;
 const ids = <T extends z.ZodType>(schema: T) => z.array(schema).refine(unique, "IDs must be unique");
 
@@ -27,18 +38,18 @@ export const Sc900CaptureLedgerSchema = z.object({
   capturedAt: TimestampSchema,
   reported: z.object({
     questions: Sc900SourceNumberSchema,
-    pages: z.number().int().positive().max(999999),
+    pages: Sc900PageNumberSchema,
   }).strict(),
   pages: z.array(z.object({
-    pageNumber: z.number().int().positive(),
-    url: SafeUrlSchema,
+    pageNumber: Sc900PageNumberSchema,
+    url: Sc900SourcePageUrlSchema,
     rawSha256: Sha256Schema,
-    questionNumbers: ids(Sc900SourceNumberSchema).nonempty(),
+    questionNumbers: ids(Sc900SourceNumberSchema).nonempty().max(SC900_SOURCE_PAGE_SIZE),
   }).strict()).nonempty(),
   occurrences: z.array(z.object({
     id: Sc900OccurrenceIdSchema,
     questionNumber: Sc900SourceNumberSchema,
-    pageNumber: z.number().int().positive(),
+    pageNumber: Sc900PageNumberSchema,
     answerRevealed: z.literal(true),
     discussionState: z.literal("loaded"),
     expectedCommentCount: z.number().int().nonnegative(),
@@ -52,11 +63,13 @@ export const Sc900CaptureLedgerSchema = z.object({
   const numbers = ledger.occurrences.map((item) => item.questionNumber);
   const pages = ledger.pages.map((page) => page.pageNumber);
   const pageNumbers = ledger.pages.flatMap((page) => page.questionNumbers);
-  if (ledger.pages.some((page) => page.url !== `https://www.examprepper.co/exam/128/${page.pageNumber}`)) {
-    issue("SC900 capture page URLs must exactly match the approved source origin, exam and page number");
+  if (ledger.pages.some((page) => page.url !== `${SC900_SOURCE_BASE_URL}${page.pageNumber}` ||
+      page.questionNumbers.some((number) => Math.floor((number - 1) / SC900_SOURCE_PAGE_SIZE) + 1 !== page.pageNumber))) {
+    issue("SC900 capture pages must match the exact source URL and five-question page attribution");
   }
   if (!unique(numbers) || numbers.length !== ledger.reported.questions ||
       numbers.some((number) => number > ledger.reported.questions) ||
+      ledger.reported.pages !== Math.ceil(ledger.reported.questions / SC900_SOURCE_PAGE_SIZE) ||
       !unique(pages) || pages.length !== ledger.reported.pages ||
       pages.some((page) => page > ledger.reported.pages) ||
       !unique(pageNumbers) || pageNumbers.length !== numbers.length ||
@@ -72,7 +85,8 @@ export const Sc900CaptureLedgerSchema = z.object({
   const comments = ledger.occurrences.flatMap((item) => item.commentIds);
   if (!unique(comments)) issue("Captured comment IDs must be globally unique");
   for (const occurrence of ledger.occurrences) {
-    if (occurrence.id !== sc900OccurrenceId(occurrence.questionNumber) ||
+    if (occurrence.id !== `examprepper-128-q${String(occurrence.questionNumber).padStart(6, "0")}` ||
+        occurrence.pageNumber !== Math.floor((occurrence.questionNumber - 1) / SC900_SOURCE_PAGE_SIZE) + 1 ||
         !ledger.pages.find((page) => page.pageNumber === occurrence.pageNumber)
           ?.questionNumbers.includes(occurrence.questionNumber) ||
         occurrence.expectedCommentCount !== occurrence.parsedCommentCount ||
@@ -91,8 +105,8 @@ export function sc900OccurrenceId(questionNumber: number): string {
 }
 
 export function sc900SourcePageUrl(pageNumber: number): string {
-  z.number().int().positive().max(999999).parse(pageNumber);
-  return `https://www.examprepper.co/exam/128/${pageNumber}`;
+  Sc900PageNumberSchema.parse(pageNumber);
+  return `${SC900_SOURCE_BASE_URL}${pageNumber}`;
 }
 
 export function assertSc900SourceNumber(number: number, ledger: Sc900CaptureLedger): void {

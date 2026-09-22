@@ -227,6 +227,10 @@ verified complete UI-capture ledger, including revealed answers, exact original
 assets and loaded discussions. A verified empty discussion is valid; a failed
 or missing response is not evidence of zero comments. Captured discussion is
 retained in full unless a future explicit exclusion-approval contract is added.
+Public attribution, teaching references and rich-content links must not contain
+signed access tokens or credential-bearing URLs. Publication rejects them
+before hashing or exporting, without echoing the values or silently stripping
+query parameters; the private capture remains unchanged.
 
 `tools/sc900/publication.ts` prepares deterministic releases, binds per-question
 review hashes, stages only under ignored `.data/sc900-publication/`, and records

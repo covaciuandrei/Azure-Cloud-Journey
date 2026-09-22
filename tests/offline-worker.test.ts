@@ -13,6 +13,7 @@ import vm from "node:vm";
 const ORIGIN = "https://study-az104.example";
 const MANIFEST_PATH = "/data/offline-manifest.json";
 const PROTOCOL = "az104-offline-v1";
+const SC900_PROTOCOL = "sc900-offline-v1";
 const WORKER_SOURCE = readFileSync(new URL("../public/offline-worker.js", import.meta.url), "utf8");
 
 function sha256Hex(buffer: Buffer): string {
@@ -306,7 +307,7 @@ function createWorker(cacheStorage: FakeCacheStorage, fetchImpl: (input: unknown
 
   async function status(id = "status", examId: "az104" | "sc900" = "az104"): Promise<any> {
     const client = makeClient();
-    await dispatch("message", { data: { protocol: PROTOCOL, id, type: "STATUS", examId }, source: client, _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); } });
+    await dispatch("message", { data: { protocol: examId === "sc900" ? SC900_PROTOCOL : PROTOCOL, id, type: "STATUS", examId }, source: client, _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); } });
     return (client.received[0] as any).state;
   }
 
@@ -324,7 +325,7 @@ function createWorker(cacheStorage: FakeCacheStorage, fetchImpl: (input: unknown
   // pending, then await `wait` themselves.
   async function rpc(type: string, id: string, extra?: Record<string, unknown>): Promise<{ client: ReturnType<typeof makeClient>; wait: Promise<unknown> }> {
     const client = makeClient();
-    const data = { protocol: PROTOCOL, id, type, ...extra };
+    const data = { protocol: extra?.examId === "sc900" ? SC900_PROTOCOL : PROTOCOL, id, type, ...extra };
     const event = { data, source: client, _waits: [] as Promise<unknown>[], waitUntil(p: Promise<unknown>) { this._waits.push(p); } };
     const wait = dispatch("message", event);
     return { client, wait };
@@ -403,6 +404,57 @@ async function bytesOf(response: Response | undefined): Promise<Buffer> {
   if (!response) throw new Error("No response");
   return Buffer.from(await response.arrayBuffer());
 }
+
+test("already-open legacy AZ-104 clients ignore every SC-900 state and unscoped commands remain AZ-104-only", async () => {
+  const az104 = buildFixture("legacy-protocol");
+  const sc900 = buildSc900Fixture("legacy-client-sc-first");
+  const updated = buildSc900Fixture("legacy-client-sc-update");
+  const files = new Map(az104.files);
+  const storage = createCacheStorage();
+  const worker = createWorker(storage, createFakeFetch(files, createServer()));
+  await (await worker.download("legacy-az-download")).event.wait;
+  const legacy = worker.makeClient();
+  await worker.dispatch("message", {
+    data: { protocol: PROTOCOL, id: "legacy-registration", type: "STATUS" },
+    source: legacy, _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); },
+  });
+  const delivered = legacy.received as Array<{
+    protocol: string; type: string; examId?: string;
+    state: { ready: boolean; buildId: string | null; releaseId: string | null };
+  }>;
+  // This is the old hook's filter, intentionally unaware of examId.
+  const understoodByOldClient = () => delivered.filter((message) =>
+    message.protocol === PROTOCOL && (message.type === "STATE" || message.type === "RESULT"));
+  assert.equal(understoodByOldClient()[0]?.state.buildId, az104.manifest.buildId);
+  delivered.length = 0;
+  for (const fixture of [sc900, updated]) {
+    for (const [path, bytes] of fixture.files) files.set(path, bytes);
+    const request = await worker.rpc("DOWNLOAD", `download-${fixture.manifest.buildId}`, { examId: "sc900" });
+    await request.wait;
+    const result = request.client.received.find((message) =>
+      (message as { type: string }).type === "RESULT") as { protocol: string; examId: string };
+    assert.equal(result.protocol, SC900_PROTOCOL);
+    assert.equal(result.examId, "sc900");
+    assert.equal((await worker.status()).buildId, az104.manifest.buildId);
+    assert.equal(understoodByOldClient().length, 0);
+  }
+  await (await worker.rpc("REMOVE", "remove-sc", { examId: "sc900" })).wait;
+  assert.equal((await worker.status()).buildId, az104.manifest.buildId);
+  assert.equal((await worker.status("sc-after-remove", "sc900")).ready, false);
+  assert.ok(delivered.some((message) => message.type === "STATE"));
+  assert.ok(delivered.every((message) => message.protocol === SC900_PROTOCOL && message.examId === "sc900"));
+  assert.equal(understoodByOldClient().length, 0);
+  await (await worker.rpc("DOWNLOAD", "sc-again", { examId: "sc900" })).wait;
+  await (await worker.rpc("REMOVE", "legacy-unscoped-remove")).wait;
+  assert.equal((await worker.status()).ready, false);
+  assert.equal((await worker.status("sc-retained", "sc900")).ready, true);
+  assert.ok(understoodByOldClient().every((message) => message.state.ready === false && message.state.releaseId === null));
+  delivered.length = 0;
+  await (await worker.rpc("REMOVE_ALL", "explicit-all-clear", { examId: "sc900" })).wait;
+  assert.equal((await worker.status("sc-cleared", "sc900")).ready, false);
+  assert.ok(understoodByOldClient().length > 0);
+  assert.ok(understoodByOldClient().every((message) => message.state.ready === false && message.state.buildId === null));
+});
 
 test("SC-900 updates retain AZ-104 active pointers, shell assets and media across activation", async () => {
   const az104 = buildFixture("az-retained");
@@ -582,6 +634,47 @@ test("SC-900 downloads fail closed on inactive, synthetic or mismatched activati
     const state = await worker.status("sc", "sc900");
     assert.equal(state.ready, false);
     assert.match(state.error, /availability|activation/);
+  }
+});
+
+test("SC-900 saved snapshots retain their own topics, teaching and exclusive images", async () => {
+  const current = buildSc900Fixture("sc-current-saved");
+  const archived = buildSc900Fixture("sc-archived-saved");
+  const root = `/exams/sc900/content/${archived.releaseId}`;
+  for (const entry of archived.manifest.files.filter((file) => String(file.url).startsWith(root))) {
+    current.manifest.files.push(entry);
+    current.files.set(String(entry.url), archived.files.get(String(entry.url))!);
+  }
+  const image = Buffer.from("synthetic archived-only image");
+  const imageSha = sha256Hex(image);
+  const imagePath = `${root}/media/${imageSha}.png`;
+  current.files.set(imagePath, image);
+  current.manifest.files.push({
+    url: imagePath, sha256: imageSha, bytes: image.length, kind: "image",
+    releaseId: archived.releaseId, questionIds: archived.questionIds,
+  });
+  current.manifest.counts.images = 1;
+  current.files.set("/exams/sc900/offline-manifest.json", Buffer.from(JSON.stringify(current.manifest)));
+  const server = createServer();
+  const storage = createCacheStorage();
+  const fetcher = createFakeFetch(current.files, server);
+  const worker = createWorker(storage, fetcher);
+  await (await worker.rpc("DOWNLOAD", "sc-current-only", { examId: "sc900" })).wait;
+  assert.equal((await worker.status("sc-current", "sc900")).ready, true);
+  assert.equal((await worker.fetchRequest(imagePath, { headers: { "X-AZ104-Offline": "1" } })).response?.status, 503);
+  await (await worker.rpc("DOWNLOAD", "sc-with-saved", {
+    examId: "sc900", legacyRefs: [{ releaseId: archived.releaseId, questionIds: archived.questionIds }],
+  })).wait;
+  server.offline = true;
+  const restarted = createWorker(storage, fetcher);
+  assert.equal((await restarted.status("sc-saved", "sc900")).ready, true);
+  for (const path of [
+    `${root}/topics.json`, `${root}/eligibility.json`, `${root}/learning/manifest.json`,
+    `${root}/learning/questions/${archived.questionIds[0]}.json`, imagePath,
+  ]) {
+    assert.deepEqual(await bytesOf((await restarted.fetchRequest(path, {
+      headers: { "X-AZ104-Offline": "1" },
+    })).response), current.files.get(path));
   }
 });
 

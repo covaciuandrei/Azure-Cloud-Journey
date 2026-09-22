@@ -8,8 +8,9 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  OFFLINE_AVAILABILITY_MAX_BYTES, OFFLINE_COURSE_MAX_BYTES, OfflineFileSchema, OfflineManifestSchema, Sc900OfflineFileSchema,
-  offlineManifestUrl, parseOfflineManifest, readOfflineManifest, selectOfflineFiles, type OfflineManifest,
+  OFFLINE_AVAILABILITY_MAX_BYTES, OFFLINE_COURSE_MAX_BYTES, OFFLINE_PROTOCOL, SC900_OFFLINE_PROTOCOL,
+  OfflineFileSchema, OfflineManifestSchema, Sc900OfflineFileSchema,
+  offlineManifestUrl, offlineProtocol, parseOfflineManifest, readOfflineManifest, selectOfflineFiles, type OfflineManifest,
 } from "../src/domain/offline.js";
 import { CleanDocumentSchema } from "../src/domain/cleanBank.js";
 import { createOfflineAwareRepository } from "../src/web/offline-repository.js";
@@ -83,6 +84,10 @@ function sc900ManifestFixture(): OfflineManifest {
 test("exam-specific offline manifests preserve legacy defaults and reject foreign file namespaces", () => {
   assert.equal(offlineManifestUrl(), "/data/offline-manifest.json");
   assert.equal(offlineManifestUrl("sc900"), "/exams/sc900/offline-manifest.json");
+  assert.equal(offlineProtocol(), OFFLINE_PROTOCOL);
+  assert.equal(offlineProtocol("az104"), OFFLINE_PROTOCOL);
+  assert.equal(offlineProtocol("sc900"), SC900_OFFLINE_PROTOCOL);
+  assert.notEqual(offlineProtocol("sc900"), OFFLINE_PROTOCOL);
   const fixture = sc900ManifestFixture();
   assert.equal(OfflineManifestSchema.safeParse(fixture).success, true);
   assert.throws(() => parseOfflineManifest(fixture, "az104"));
@@ -137,20 +142,29 @@ test("exam-specific offline manifests preserve legacy defaults and reject foreig
   }).success, false);
 });
 
-test("SC-900 saved release selection includes immutable archived topics with its catalog and question", () => {
+test("SC-900 saved release selection includes its own teaching and only requested archived questions", () => {
   const fixture = sc900ManifestFixture();
   const manifest = parseOfflineManifest({
     ...fixture,
     files: [...fixture.files,
       { kind: "data", url: `/exams/sc900/content/${legacy}/catalog.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "catalog" },
       { kind: "data", url: `/exams/sc900/content/${legacy}/topics.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "topics" },
+      { kind: "data", url: `/exams/sc900/content/${legacy}/learning/manifest.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "learning-manifest" },
       { kind: "data", url: `/exams/sc900/content/${legacy}/questions/q_${hex(5)}.json`, sha256: hex(1), bytes: 1,
         releaseId: legacy, questionId: `q_${hex(5)}`, part: "question" },
+      { kind: "data", url: `/exams/sc900/content/${legacy}/learning/questions/q_${hex(5)}.json`, sha256: hex(1), bytes: 1,
+        releaseId: legacy, questionId: `q_${hex(5)}`, part: "explanation" },
+      { kind: "data", url: `/exams/sc900/content/${legacy}/questions/q_${hex(6)}.json`, sha256: hex(1), bytes: 1,
+        releaseId: legacy, questionId: `q_${hex(6)}`, part: "question" },
+      { kind: "data", url: `/exams/sc900/content/${legacy}/learning/questions/q_${hex(6)}.json`, sha256: hex(1), bytes: 1,
+        releaseId: legacy, questionId: `q_${hex(6)}`, part: "explanation" },
     ],
   }, "sc900");
   assert.equal(selectOfflineFiles(manifest).filter((file) => file.releaseId === legacy).length, 0);
   const selected = selectOfflineFiles(manifest, [{ releaseId: legacy, questionIds: [`q_${hex(5)}`] }]);
-  assert.equal(selected.filter((file) => file.releaseId === legacy).length, 3);
+  assert.equal(selected.filter((file) => file.releaseId === legacy).length, 5);
+  assert.ok(selected.some((file) => file.releaseId === legacy && file.part === "explanation" && file.questionId === `q_${hex(5)}`));
+  assert.ok(!selected.some((file) => file.releaseId === legacy && file.questionId === `q_${hex(6)}`));
 });
 
 test("page-side offline descriptor reading fails closed and bounds streaming input before parsing", async () => {

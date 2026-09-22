@@ -18,10 +18,13 @@ import {
 } from "../../src/domain/sc900Learning.js";
 import { Sc900EligibilityPolicySchema, type Sc900EligibilityPolicy } from "../../src/domain/sc900Eligibility.js";
 import {
-  Sc900ApprovalReceiptSchema, Sc900FinalReviewSchema, Sc900PublicationProofSchema, Sc900PublicationReviewSchema,
+  Sc900ApprovalReceiptSchema, Sc900ExpectedCaptureSchema, Sc900FinalReviewSchema,
+  Sc900PublicationProofSchema, Sc900PublicationReviewSchema,
   type Sc900ApprovalReceipt, type Sc900FinalReview, type Sc900PublicationReview, type Sc900ReviewTarget,
+  type Sc900ExpectedCapture,
 } from "../../src/domain/sc900Publication.js";
 import { richAssetIds } from "../../src/domain/schemas.js";
+import { assertNoCredentialUrls } from "../../src/domain/publicUrls.js";
 import { SC900_INACTIVE, Sc900AvailabilitySchema } from "../../src/domain/examAvailability.js";
 import { mediaExtension } from "../../src/domain/cleanBank.js";
 import { inspectImage } from "../ingest/normalize-assets.js";
@@ -43,6 +46,7 @@ export const SC900_EXPORT_LIMITS = {
 } as const;
 
 export interface Sc900PublicationInput {
+  expectedCapture: Sc900ExpectedCapture;
   ledger: Sc900CaptureLedger;
   documents: Sc900Document[];
   discussions: Sc900Discussion[];
@@ -53,6 +57,7 @@ export interface Sc900PublicationInput {
 }
 
 export interface Sc900PreparedRelease {
+  expectedCapture: Sc900ExpectedCapture;
   ledger: Sc900CaptureLedger;
   manifest: Sc900Manifest;
   catalog: Sc900Catalog;
@@ -95,6 +100,7 @@ const Sc900InventorySchema = z.array(z.object({
 
 export interface Sc900Publication {
   source: { directory: string };
+  expectedCapture: Sc900ExpectedCapture;
   manifest: Sc900Manifest;
   catalog: Sc900Catalog;
   documents: Sc900Document[];
@@ -129,6 +135,7 @@ export function sc900OriginalKeyDigest(document: Sc900Document): string {
 
 function releaseIdentity(input: Omit<Sc900PublicationInput, "assets">): unknown {
   return {
+    expectedCapture: input.expectedCapture,
     ledger: input.ledger,
     documents: input.documents.map(({ releaseId: _release, question, ...document }) => ({
       ...document,
@@ -144,18 +151,23 @@ function releaseIdentity(input: Omit<Sc900PublicationInput, "assets">): unknown 
 
 /** Bind draft release placeholders to one immutable, exam-scoped content identity. Does not approve or write. */
 export function prepareSc900Release(input: Sc900PublicationInput): Sc900PreparedRelease {
+  assertNoCredentialUrls(input);
   assert(input.documents.length * 3 + input.assets.size + 6 <= SC900_EXPORT_LIMITS.files &&
     [...input.assets.values()].reduce((total, bytes) => total + bytes.byteLength, 0) <= SC900_EXPORT_LIMITS.totalBytes,
   "SC900 input exceeds the bounded static export budget");
+  const expectedCapture = Sc900ExpectedCaptureSchema.parse(input.expectedCapture);
   const ledger = Sc900CaptureLedgerSchema.parse(input.ledger);
-  const sourceRevision = sc900SourceRevision(ledger);
-  const captureLedgerDigest = sc900Hash("capture-ledger", ledger);
+  assert(ledger.reported.questions === expectedCapture.questions && ledger.reported.pages === expectedCapture.pages,
+    "SC900 capture ledger does not match the independently verified expected source scope");
   const documents = sorted(input.documents.map((item) => Sc900DocumentSchema.parse(item)), (item) => item.question.id);
   const discussions = sorted(input.discussions.map((item) => Sc900DiscussionSchema.parse(item)), (item) => item.questionId);
   const topics = Sc900TopicMapSchema.parse(input.topics);
   const learning = Sc900LearningDatasetSchema.parse(input.learning);
   learning.explanations = sorted(learning.explanations, (item) => item.questionId);
   const eligibility = Sc900EligibilityPolicySchema.parse(input.eligibility);
+  assertNoCredentialUrls({ expectedCapture, ledger, documents, discussions, topics, learning, eligibility });
+  const sourceRevision = sc900SourceRevision(ledger);
+  const captureLedgerDigest = sc900Hash("capture-ledger", ledger);
   eligibility.reviewedQuestionIds.sort();
   eligibility.activeQuestionIds.sort();
   eligibility.retired = sorted(eligibility.retired, (item) => item.questionId);
@@ -271,7 +283,9 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
   };
   assert(same(eligibility.activeCounts, countsFor(documents.filter((document) =>
     eligibility.activeQuestionIds.includes(document.question.id)))), "SC900 relevance active counts do not match the selected bank");
-  const releaseId = `r_${sc900Hash("release", releaseIdentity({ ledger, documents, discussions, topics, learning, eligibility }))}`;
+  const releaseId = `r_${sc900Hash("release", releaseIdentity({
+    expectedCapture, ledger, documents, discussions, topics, learning, eligibility,
+  }))}`;
   for (const document of documents) {
     document.releaseId = releaseId;
     document.question.media.forEach((media) => {
@@ -312,7 +326,7 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
       sha256: byteSha256(jsonBytes(item)), sourceRevisions: [item.questionSourceRevision],
     }])),
   });
-  return { ledger, manifest, catalog, documents, discussions, topics, learning, learningManifest, eligibility, assets };
+  return { expectedCapture, ledger, manifest, catalog, documents, discussions, topics, learning, learningManifest, eligibility, assets };
 }
 
 export function sc900ReviewTargets(release: Sc900PreparedRelease): Sc900ReviewTarget[] {
@@ -380,7 +394,8 @@ function fileInventory(files: Sc900ExportFile[]) {
 
 function publicationProof(plan: Sc900StaticPlan) {
   return Sc900PublicationProofSchema.parse({
-    schemaVersion: 1, examId: "sc900", ledger: plan.release.ledger, review: plan.review,
+    schemaVersion: 1, examId: "sc900", expectedCapture: plan.release.expectedCapture,
+    ledger: plan.release.ledger, review: plan.review,
   });
 }
 
@@ -497,47 +512,7 @@ export async function validateSc900StagedExport(
   }
 }
 
-async function ensureSc900StageApproval(
-  workspace: string, directory: string, plan: Sc900StaticPlan, requested: Sc900ApprovalReceipt,
-): Promise<void> {
-  const lockPath = resolve(dirname(directory), `.approval-${plan.release.manifest.releaseId}.lock`);
-  let lock;
-  try { lock = await open(lockPath, "wx", 0o600); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new Error("Another SC900 stage approval holds the release lock; inspect that run before retrying");
-    }
-    throw error;
-  }
-  const pending = resolve(dirname(directory), `.receipt-${plan.release.manifest.releaseId}-${randomUUID()}.tmp`);
-  try {
-    const receiptPath = resolve(directory, "approval-receipt.json");
-    const existing = Sc900ApprovalReceiptSchema.parse(JSON.parse(
-      (await readBoundedPrivateFile(workspace, receiptPath, SC900_EXPORT_LIMITS.jsonBytes)).toString("utf8"),
-    ));
-    await validateSc900StagedExport(directory, plan, existing);
-    if (same(existing, requested)) return;
-    assert(!existing.activate && requested.activate && requested.finalReview !== null,
-      "An approved SC900 stage receipt cannot be downgraded or changed");
-    assert(same(requested, createSc900ApprovalReceipt(plan, requested.finalReview)),
-      "SC900 stage promotion requires independent final approval of this exact plan");
-    const handle = await open(pending, "wx", 0o600);
-    try {
-      await handle.writeFile(jsonBytes(requested));
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    await rename(pending, receiptPath);
-    await validateSc900StagedExport(directory, plan, requested);
-  } finally {
-    await rm(pending, { force: true });
-    await lock.close();
-    await rm(lockPath);
-  }
-}
-
-/** Stages immutable bytes locally; only an exact independent approval can promote its receipt once. */
+/** Writes only under ignored .data. It never replaces a live manifest or calls Firebase. */
 export async function stageSc900Publication(
   planInput: Sc900StaticPlan,
   options: { workspaceRoot?: string; finalReview?: Sc900FinalReview } = {},
@@ -558,7 +533,7 @@ export async function stageSc900Publication(
   const directory = resolve(parent, plan.release.manifest.releaseId);
   try {
     await lstat(directory);
-    await ensureSc900StageApproval(workspace, directory, plan, receipt);
+    await validateSc900StagedExport(directory, plan, receipt);
     return { directory, receipt };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -584,7 +559,7 @@ export async function stageSc900Publication(
     try { await rename(pending, directory); }
     catch (error) {
       if (!["EEXIST", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
-      await ensureSc900StageApproval(workspace, directory, plan, receipt);
+      await validateSc900StagedExport(directory, plan, receipt);
     }
     await validateSc900StagedExport(directory, plan, receipt);
     return { directory, receipt };
@@ -697,7 +672,7 @@ export async function loadSc900Publication(
     explanations: Object.keys(learning.records).map((id) => json(`${root}learning/questions/${id}.json`)),
   });
   const plan = buildSc900StaticPlan({
-    ledger: proof.ledger, documents, discussions, learning: dataset,
+    expectedCapture: proof.expectedCapture, ledger: proof.ledger, documents, discussions, learning: dataset,
     topics: Sc900TopicMapSchema.parse(json(`${root}topics.json`)),
     eligibility: Sc900EligibilityPolicySchema.parse(json(`${root}eligibility.json`)),
     assets: new Map(proof.ledger.assets.map((asset) => {
@@ -710,7 +685,8 @@ export async function loadSc900Publication(
   const stagedReceipt = Sc900ApprovalReceiptSchema.parse(await readJson(resolve(stage, "approval-receipt.json"), SC900_EXPORT_LIMITS.jsonBytes));
   await validateSc900StagedExport(stage, plan, stagedReceipt);
   return {
-    source: { directory: stage }, manifest: plan.release.manifest, catalog: plan.release.catalog,
+    source: { directory: stage }, expectedCapture: plan.release.expectedCapture,
+    manifest: plan.release.manifest, catalog: plan.release.catalog,
     documents: plan.release.documents, discussions: plan.release.discussions,
     topics: plan.release.topics, learning: plan.release.learningManifest,
     explanations: new Map(plan.release.learning.explanations.map((item) => [item.questionId, item])),

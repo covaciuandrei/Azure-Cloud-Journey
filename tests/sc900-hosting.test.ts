@@ -154,8 +154,8 @@ test("SC900 Hosting selection is inactive until exact bank and course approvals 
     const savedSelection = await readFile(resolve(root, ".data/sc900-publication/hosting.json"));
     const staged = resolve(root, `.data/sc900-publication/${first.plan.release.manifest.releaseId}/exams/sc900/content/${first.plan.release.manifest.releaseId}/catalog.json`);
     await writeFile(staged, "{}");
-    await assert.rejects(loadSc900HostingPublication(root), /hash changed/);
-    await assert.rejects(selectSc900HostingPublication(second.plan, second.finalReview, root), /hash changed/);
+    await assert.rejects(loadSc900HostingPublication(root), /hash or length differs/);
+    await assert.rejects(selectSc900HostingPublication(second.plan, second.finalReview, root), /hash or length differs/);
     assert.deepEqual(await readFile(resolve(root, ".data/sc900-publication/hosting.json")), savedSelection);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

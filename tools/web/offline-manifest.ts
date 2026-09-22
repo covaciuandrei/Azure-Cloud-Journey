@@ -1,4 +1,4 @@
-import { readFile, lstat } from "node:fs/promises";
+import { readFile, lstat, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   OFFLINE_AVAILABILITY_MAX_BYTES, OFFLINE_MANIFEST_MAX_BYTES, OfflineFileSchema, OfflineManifestSchema,
@@ -39,7 +39,8 @@ async function createFileList(workspace: string, outputDir: string, examId: Exam
     if (!names.has(path)) throw new Error(`Missing offline file: ${path}`);
     const absolute = resolve(root, path);
     const info = await lstat(absolute);
-    schema.parse({ url: `/${path}`, bytes: info.size, sha256: "0".repeat(64), ...properties });
+    const declaredHash = properties.kind === "image" ? /\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/.exec(path)?.[1] : undefined;
+    schema.parse({ url: `/${path}`, bytes: info.size, sha256: declaredHash ?? "0".repeat(64), ...properties });
     const bytes = await readBoundedFile(absolute, Math.min(info.size, 16 * 1024 * 1024));
     if (expected && !bytes.equals(expected)) throw new Error(`Offline file differs from the active approved publication: ${path}`);
     files.push(schema.parse({ url: `/${path}`, sha256: hash(bytes), bytes: bytes.length, ...properties }));
@@ -204,12 +205,33 @@ export async function exportOfflineManifest(workspace = process.cwd(), outputDir
   return manifest;
 }
 
+export async function selectedOfflineExamIds(workspace = process.cwd()): Promise<ExamId[]> {
+  return (await loadSc900HostingPublication(workspace)).active ? ["az104", "sc900"] : ["az104"];
+}
+
+export async function exportSelectedOfflineManifests(workspace = process.cwd(), outputDir = "dist"): Promise<OfflineManifest[]> {
+  const examIds = await selectedOfflineExamIds(workspace);
+  const manifests: OfflineManifest[] = [];
+  for (const examId of examIds) manifests.push(await exportOfflineManifest(workspace, outputDir, examId));
+  if (!examIds.includes("sc900")) {
+    await assertSafeDirectory(workspace, `${outputDir}/exams/sc900`);
+    await rm(resolve(childPath(workspace, outputDir), offlineManifestUrl("sc900").slice(1)), { force: true });
+  }
+  return manifests;
+}
+
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
-  let examId: ExamId = "az104";
+  let examId: ExamId | undefined;
   if (args[0] === "--exam") { examId = ExamIdSchema.parse(args[1]); args.splice(0, 2); }
   if (args.length > 1 || args[0]?.startsWith("--")) throw new Error("Usage: offline-manifest.ts [--exam az104|sc900] [output-directory]");
-  const manifest = await exportOfflineManifest(process.cwd(), args[0] ?? "dist", examId);
-  const current = selectOfflineFiles(manifest);
-  console.log(JSON.stringify({ buildId: manifest.buildId, files: current.length, bytes: current.reduce((sum, file) => sum + file.bytes, 0) }, null, 2));
+  const manifests = examId === undefined
+    ? await exportSelectedOfflineManifests(process.cwd(), args[0] ?? "dist")
+    : [await exportOfflineManifest(process.cwd(), args[0] ?? "dist", examId)];
+  const summaries = manifests.map((manifest) => {
+    const current = selectOfflineFiles(manifest);
+    return { buildId: manifest.buildId, files: current.length, bytes: current.reduce((sum, file) => sum + file.bytes, 0) };
+  });
+  console.log(JSON.stringify(manifests.length === 1 ? summaries[0] :
+    summaries.map((summary, index) => ({ examId: manifests[index]!.examId ?? "az104", ...summary })), null, 2));
 }

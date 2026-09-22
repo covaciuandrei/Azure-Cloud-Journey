@@ -90,6 +90,9 @@ export function sc900BankFixture(): Sc900PublicationInput {
     })) : [],
   }));
   return {
+    expectedCapture: {
+      questions: 2, pages: 1, receiptSha256: byteSha256("Independent synthetic source-scope receipt: two questions, one page"),
+    },
     ledger, documents, discussions, assets: new Map([[assetId, png]]),
     topics: {
       schemaVersion: 1, examId: "sc900", bankVersion: SC900_BANK_VERSION, releaseId: SC900_DRAFT_RELEASE_ID,
