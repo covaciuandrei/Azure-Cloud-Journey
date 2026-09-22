@@ -1,20 +1,23 @@
-import {
-  CleanCatalogSchema, CleanDocumentSchema, CleanDiscussionSchema,
-  CleanQuestionSchema, CleanReleaseIdSchema, assertDiscussionThreads, mediaExtension,
-} from "../domain/cleanBank.js";
-import { STUDY_CURRENT_BANK_PATH } from "../domain/cloud.js";
+import { CleanReleaseIdSchema, mediaExtension } from "../domain/cleanBank.js";
 import { StudyReleasePointerSchema } from "../domain/learning.js";
+import { Sc900StudyReleasePointerSchema } from "../domain/sc900Learning.js";
+import { assertExam, examBaseUrl, examConfig, type ExamId } from "../domain/exams.js";
+import { bankContract, validateDiscussionThreads } from "./bank-contract.js";
 import type { StudyCatalog, StudyDocument, StudyRepository } from "./types.js";
 
 export interface StudyCloudReader {
   document(path: string): Promise<unknown>;
-  comments(questionId: string, expectedCount: number): Promise<unknown[]>;
+  comments(questionId: string, expectedCount: number, releaseId?: string): Promise<unknown[]>;
 }
 
 export function createFirestoreStudyRepository(
   reader: StudyCloudReader, archive: StudyRepository, mediaBaseUrl: string,
+  examId: ExamId = "az104",
 ): StudyRepository {
-  const base = new URL(mediaBaseUrl);
+  const base = new URL(examBaseUrl(mediaBaseUrl, examId));
+  const contract = bankContract(examId);
+  const releaseRoot = (releaseId: string) => examId === "sc900"
+    ? `studyBanks/sc900/releases/${releaseId}` : `studyReleases/${releaseId}`;
   if (!["http:", "https:"].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
     throw new Error("Invalid study media origin.");
   }
@@ -25,9 +28,11 @@ export function createFirestoreStudyRepository(
 
   const loadCurrentCatalog = () => {
     if (!catalogPromise) {
-      const pending = reader.document(STUDY_CURRENT_BANK_PATH).then(async (raw) => {
-        const pointer = StudyReleasePointerSchema.parse(raw);
-        const value = CleanCatalogSchema.parse(await reader.document(`studyReleases/${pointer.releaseId}/catalogs/az104`));
+      const pending = reader.document(examConfig(examId).bankMetadataPath).then(async (raw) => {
+        const pointer = (examId === "sc900" ? Sc900StudyReleasePointerSchema : StudyReleasePointerSchema).parse(raw);
+        if (examId === "sc900") Sc900StudyReleasePointerSchema.parse(pointer);
+        const value: StudyCatalog = contract.catalog.parse(await reader.document(`${releaseRoot(pointer.releaseId)}/catalogs/${examId}`));
+        assertExam(value, examId);
         if (value.releaseId !== pointer.releaseId || value.sourceRevision !== pointer.sourceRevision) {
           throw new Error("Firestore catalog does not match the current study release.");
         }
@@ -57,7 +62,8 @@ export function createFirestoreStudyRepository(
     const existing = questions.get(id);
     if (existing) return existing;
     const pending = (async () => {
-      const document = CleanDocumentSchema.parse(await reader.document(`studyReleases/${catalog.releaseId}/questions/${id}`));
+      const document: StudyDocument = contract.document.parse(await reader.document(`${releaseRoot(catalog.releaseId)}/questions/${id}`));
+      assertExam(document, examId);
       const { question, answers } = document;
       if (document.releaseId !== catalog.releaseId ||
           question.id !== id || question.commentCount !== summary.commentCount ||
@@ -71,6 +77,7 @@ export function createFirestoreStudyRepository(
     return pending;
   };
   return {
+    examId,
     loadCatalog, loadQuestion,
     async loadQuestions(ids, releaseId) {
       if (new Set(ids).size !== ids.length) throw new Error("Duplicate question IDs are not allowed.");
@@ -92,14 +99,21 @@ export function createFirestoreStudyRepository(
       if (catalog.releaseId !== currentCatalog?.releaseId) return archive.loadDiscussion(id, catalog.releaseId);
       const summary = catalog.questions.find((question) => question.id === id);
       if (!summary) throw new Error(`Unknown question ID: ${id}`);
-      if (!summary.discussionEnabled) return { schemaVersion: 1, releaseId: catalog.releaseId, questionId: id, comments: [] };
+      if (!summary.discussionEnabled) return {
+        schemaVersion: 1, ...(examId === "sc900" ? { examId } : {}),
+        releaseId: catalog.releaseId, questionId: id, comments: [],
+      };
       const cached = discussions.get(id);
       if (cached) return cached;
       const pending = (async () => {
-        const comments = await reader.comments(id, summary.commentCount);
-        const result = CleanDiscussionSchema.parse({ schemaVersion: 1, releaseId: catalog.releaseId, questionId: id, comments });
+        const comments = await reader.comments(id, summary.commentCount, catalog.releaseId);
+        const result: Awaited<ReturnType<StudyRepository["loadDiscussion"]>> = contract.discussion.parse({
+          schemaVersion: 1, ...(examId === "sc900" ? { examId } : {}),
+          releaseId: catalog.releaseId, questionId: id, comments,
+        });
+        assertExam(result, examId);
         if (result.comments.length !== summary.commentCount) throw new Error("Firestore discussion is incomplete.");
-        assertDiscussionThreads(result);
+        validateDiscussionThreads(result);
         return result;
       })();
       discussions.set(id, pending);
@@ -110,8 +124,8 @@ export function createFirestoreStudyRepository(
       const version = releaseId ?? currentCatalog?.releaseId;
       if (version && version !== currentCatalog?.releaseId) return archive.mediaUrl(question, assetId, version);
       if (!currentCatalog?.questions.some((item) => item.id === question.id)) throw new Error("Load the catalog before resolving images.");
-      const asset = CleanQuestionSchema.parse(question).media.find((item) => item.id === assetId);
-      if (!asset || asset.objectPath !== `published/az104/${version}/assets/${asset.id}.${mediaExtension(asset.contentType)}`) {
+      const asset = contract.question.parse(question).media.find((item) => item.id === assetId);
+      if (!asset || asset.objectPath !== `published/${examId}/${version}/assets/${asset.id}.${mediaExtension(asset.contentType)}`) {
         throw new Error("Invalid question image reference.");
       }
       return new URL(`content/${version}/media/${asset.id}.${mediaExtension(asset.contentType)}`, base).href;

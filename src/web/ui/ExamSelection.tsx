@@ -1,7 +1,13 @@
 import { Icon } from "../components/Icon.js";
 import type { Course } from "../../domain/course.js";
+import type { ExamId } from "../../domain/exams.js";
+import type { ExamAvailability } from "../exam-availability.js";
+import { SC900_UNAVAILABLE_NOTICE } from "../../domain/examAvailability.js";
 
-export function ExamSelection({ onSelect, course = null }: { onSelect: () => void; course?: Course | null }) {
+export function ExamSelection({ onSelect, course = null, sc900Availability }: {
+  onSelect: (examId: ExamId) => void; course?: Course | null;
+  sc900Availability?: ExamAvailability;
+}) {
   const full = course?.id === "az104";
   return <section className="exam-selection" aria-labelledby="exam-selection-title">
     <header className="exam-selection-heading">
@@ -24,8 +30,26 @@ export function ExamSelection({ onSelect, course = null }: { onSelect: () => voi
           <li><Icon name="history" size={18} /><span><strong>Keep moving forward</strong>Saved sessions, results and learning progress</span></li>
         </ul>
         <div className="exam-card-action">
-          <button className="button button-primary" onClick={onSelect}>Select AZ-104<Icon name="arrow" size={18} /></button>
+          <button className="button button-primary" onClick={() => onSelect("az104")}>Select AZ-104<Icon name="arrow" size={18} /></button>
           <span>Opens your Learn and Practice workspace</span>
+        </div>
+      </article>
+      <article className="exam-card" aria-labelledby="sc900-title">
+        <div className="exam-card-top">
+          <span className="exam-card-symbol"><Icon name="book" size={28} /></span>
+          <span className={sc900Availability?.status === "available" ? "exam-available" : "muted"}>
+            {sc900Availability?.status === "available" ? "Available to study" : "Not yet available"}
+          </span>
+        </div>
+        <span className="exam-code">SC-900</span>
+        <h2 id="sc900-title">Security, Compliance, and Identity Fundamentals</h2>
+        <p>{sc900Availability?.notice ?? SC900_UNAVAILABLE_NOTICE}</p>
+        <p>The planned original course covers four domains. Its announced outline is effective October 21, 2026, reviewed September 22, 2026.</p>
+        <p>Once approved: separate learning progress, question history and offline materials. The 40-question, 45-minute mock is an app practice format, not the real exam's exact question count.</p>
+        <div className="exam-card-action">
+          <button className="button button-primary" disabled={sc900Availability?.status !== "available"}
+            onClick={() => onSelect("sc900")}>Select SC-900<Icon name="arrow" size={18} /></button>
+          <span>Activation requires the approved course and complete reviewed bank</span>
         </div>
       </article>
       <aside className="exam-study-path" aria-labelledby="exam-study-path-title">

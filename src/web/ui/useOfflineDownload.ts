@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  OFFLINE_MANIFEST_URL, OFFLINE_PROTOCOL, OfflineManifestSchema, OfflineStateSchema,
+  OFFLINE_PROTOCOL, OfflineStateSchema, offlineManifestUrl, readOfflineManifest,
   selectOfflineFiles, type OfflineReferences, type OfflineState,
 } from "../../domain/offline.js";
+import type { ExamId } from "../../domain/exams.js";
 import { activateOfflineWorker } from "../offline-worker-activation.js";
 
 const emptyState: OfflineState = {
@@ -11,7 +12,7 @@ const emptyState: OfflineState = {
   downloadBytes: 0, error: null, updatedAt: null,
 };
 
-export function useOfflineDownload() {
+export function useOfflineDownload(examId: ExamId = "az104") {
   const supported = import.meta.env.VITE_STUDY_DEMO !== "true" &&
     typeof navigator !== "undefined" && "serviceWorker" in navigator &&
     "caches" in globalThis && window.isSecureContext &&
@@ -19,18 +20,21 @@ export function useOfflineDownload() {
       ["localhost", "127.0.0.1"].includes(location.hostname)));
   const [online, setOnline] = useState(() => navigator.onLine);
   const [forceDownload, setForceDownload] = useState(false);
-  const [state, setState] = useState<OfflineState>(emptyState);
+  const [snapshot, setSnapshot] = useState({ examId, state: emptyState });
+  const state = snapshot.examId === examId ? snapshot.state : emptyState;
   const [initialized, setInitialized] = useState(!supported);
   const [preparing, setPreparing] = useState(false);
   const [issue, setIssue] = useState<string | null>(null);
   const [storageNote, setStorageNote] = useState<string | null>(null);
   const registration = useRef<ServiceWorkerRegistration | null>(null);
   const mounted = useRef(false);
+  const currentExam = useRef(examId);
+  currentExam.current = examId;
   const waiting = useRef(new Map<string, {
     resolve: (state: OfflineState) => void; reject: (error: Error) => void; timer: number;
   }>());
 
-  const send = useCallback(async (type: "STATUS" | "DOWNLOAD" | "CANCEL" | "REMOVE", legacyRefs?: OfflineReferences) => {
+  const send = useCallback(async (type: "STATUS" | "DOWNLOAD" | "CANCEL" | "REMOVE" | "REMOVE_ALL", legacyRefs?: OfflineReferences) => {
     const worker = registration.current?.active;
     if (!worker) throw new Error("Offline support has not activated yet.");
     const id = crypto.randomUUID();
@@ -40,24 +44,31 @@ export function useOfflineDownload() {
         reject(new Error("The offline download did not respond. Reload and try again."));
       }, type === "STATUS" ? 20_000 : 60_000);
       waiting.current.set(id, { resolve, reject, timer });
-      worker.postMessage({ protocol: OFFLINE_PROTOCOL, id, type, ...(legacyRefs ? { legacyRefs } : {}) });
+      worker.postMessage({ protocol: OFFLINE_PROTOCOL, id, type, examId, ...(legacyRefs ? { legacyRefs } : {}) });
     });
-  }, []);
+  }, [examId]);
 
   useEffect(() => {
     mounted.current = true;
+    setSnapshot({ examId, state: emptyState });
+    setForceDownload(false);
+    setPreparing(false);
+    setIssue(null);
+    setInitialized(!supported);
+    let closed = false;
     const updateOnline = () => setOnline(navigator.onLine);
     const receive = (event: MessageEvent<unknown>) => {
       const data = event.data;
       if (!data || typeof data !== "object" || !("protocol" in data) || data.protocol !== OFFLINE_PROTOCOL) return;
       const record = data as Record<string, unknown>;
       if (record.type !== "STATE" && record.type !== "RESULT") return;
+      if ((record.examId ?? "az104") !== examId) return;
       const parsed = OfflineStateSchema.safeParse(record.state);
       if (!parsed.success) {
         setIssue("The offline download reported invalid status. Reload before using it.");
         return;
       }
-      setState(parsed.data);
+      setSnapshot({ examId, state: parsed.data });
       if (!parsed.data.ready) setForceDownload(false);
       if (record.type === "RESULT" && typeof record.id === "string") {
         const request = waiting.current.get(record.id);
@@ -74,7 +85,7 @@ export function useOfflineDownload() {
     if (supported) {
       navigator.serviceWorker.addEventListener("message", receive);
       void navigator.serviceWorker.getRegistration("/").then(async (value) => {
-        if (!mounted.current) return;
+        if (closed) return;
         if (value?.active) {
           if (new URL(value.active.scriptURL).pathname !== "/offline-worker.js") {
             throw new Error("A different service worker manages this origin; its caches were left untouched.");
@@ -83,11 +94,12 @@ export function useOfflineDownload() {
           await send("STATUS");
         }
       }).catch((error: unknown) => {
-        if (mounted.current) setIssue(error instanceof Error ? error.message : "Offline status could not be loaded.");
-      }).finally(() => { if (mounted.current) setInitialized(true); });
+        if (!closed) setIssue(error instanceof Error ? error.message : "Offline status could not be loaded.");
+      }).finally(() => { if (!closed) setInitialized(true); });
     }
     return () => {
       mounted.current = false;
+      closed = true;
       window.removeEventListener("online", updateOnline);
       window.removeEventListener("offline", updateOnline);
       navigator.serviceWorker?.removeEventListener("message", receive);
@@ -97,7 +109,7 @@ export function useOfflineDownload() {
       }
       waiting.current.clear();
     };
-  }, [send, supported]);
+  }, [examId, send, supported]);
 
   const activate = async () => {
     registration.current = await activateOfflineWorker(navigator.serviceWorker);
@@ -116,11 +128,8 @@ export function useOfflineDownload() {
           setStorageNote("Persistent storage was not granted. Your browser may remove downloaded files.");
         }
       } else setStorageNote("Your browser may remove downloaded files when storage is low.");
-      const response = await fetch(OFFLINE_MANIFEST_URL, { cache: "no-store", redirect: "error", credentials: "omit" });
-      if (!response.ok) throw new Error("This app build does not provide an offline download.");
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength > 4 * 1024 * 1024) throw new Error("Offline manifest is too large.");
-      const manifest = OfflineManifestSchema.parse(JSON.parse(new TextDecoder().decode(bytes)));
+      const response = await fetch(offlineManifestUrl(examId), { cache: "no-store", redirect: "error", credentials: "omit" });
+      const manifest = await readOfflineManifest(response, examId);
       const files = selectOfflineFiles(manifest, legacyRefs);
       const required = files.reduce((sum, file) => sum + file.bytes, 0);
       if (navigator.storage?.estimate) {
@@ -130,25 +139,29 @@ export function useOfflineDownload() {
           throw new Error(`Not enough browser storage. Free at least ${Math.ceil(required * 1.15 / 1_000_000)} MB before downloading.`);
         }
       }
+      if (!mounted.current || currentExam.current !== examId) return;
       await activate();
+      if (!mounted.current || currentExam.current !== examId) return;
       await send("DOWNLOAD", legacyRefs);
     } catch (error) {
-      setIssue(error instanceof Error ? error.message : "The offline download could not start.");
-    } finally { if (mounted.current) setPreparing(false); }
+      if (mounted.current && currentExam.current === examId) {
+        setIssue(error instanceof Error ? error.message : "The offline download could not start.");
+      }
+    } finally { if (mounted.current && currentExam.current === examId) setPreparing(false); }
   };
 
-  const control = async (type: "CANCEL" | "REMOVE") => {
+  const control = async (type: "CANCEL" | "REMOVE" | "REMOVE_ALL") => {
     setIssue(null);
     try {
       await send(type);
-      if (type === "REMOVE") setForceDownload(false);
+      if (type !== "CANCEL") setForceDownload(false);
     } catch (error) { setIssue(error instanceof Error ? error.message : "Offline files could not be updated."); }
   };
   const useDownload = !online || forceDownload;
   return {
-    supported, initialized, online, useDownload, state, preparing, hasWorker: Boolean(registration.current?.active),
+    examId, supported, initialized, online, useDownload, state, preparing, hasWorker: Boolean(registration.current?.active),
     issue: issue ?? state.error, storageNote, download,
-    cancel: () => control("CANCEL"), remove: () => control("REMOVE"),
+    cancel: () => control("CANCEL"), remove: () => control("REMOVE"), removeAll: () => control("REMOVE_ALL"),
     useCopy: () => setForceDownload(true), useOnline: () => setForceDownload(false),
   };
 }

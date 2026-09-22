@@ -34,8 +34,9 @@ export function examIdOf(value: { examId?: ExamId | undefined }): ExamId {
   return value.examId === undefined ? "az104" : ExamIdSchema.parse(value.examId);
 }
 
-export function assertExam(value: { examId?: ExamId | undefined }, expected: ExamId): void {
-  if (examIdOf(value) !== ExamIdSchema.parse(expected)) {
+export function assertExam(value: object, expected: ExamId): void {
+  const actual = "examId" in value && value.examId !== undefined ? ExamIdSchema.parse(value.examId) : "az104";
+  if (actual !== ExamIdSchema.parse(expected)) {
     throw new Error(`The data belongs to a different exam, not ${examConfig(expected).code}.`);
   }
 }

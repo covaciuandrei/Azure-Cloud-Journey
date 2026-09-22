@@ -1,11 +1,21 @@
 import type { StudyDocument, StudyRepository } from "./types.js";
+import { assertExam, ExamIdSchema, type ExamId } from "../domain/exams.js";
 
 export function createOfflineAwareRepository(
   primary: StudyRepository,
   downloaded: StudyRepository,
   useDownload: () => boolean,
   localBaseUrl: string,
+  examId: ExamId = "az104",
 ): StudyRepository {
+  ExamIdSchema.parse(examId);
+  assertExam(primary, examId);
+  assertExam(downloaded, examId);
+  const localOrigin = new URL(localBaseUrl);
+  if (!["http:", "https:"].includes(localOrigin.protocol) || localOrigin.username || localOrigin.password) {
+    throw new Error("Invalid offline cache origin.");
+  }
+  const mediaPath = new RegExp(`^${examId === "sc900" ? "/exams/sc900" : ""}/content/r_[a-f0-9]{64}/media/[a-f0-9]{64}\\.(png|jpg|gif|webp)$`);
   const owners = new WeakMap<StudyDocument["question"], StudyRepository>();
   const choose = () => useDownload() ? downloaded : primary;
   const load = async <T>(read: (repository: StudyRepository) => Promise<T>): Promise<{ value: T; owner: StudyRepository }> => {
@@ -19,6 +29,7 @@ export function createOfflineAwareRepository(
     }
   };
   return {
+    examId,
     async loadExplanation(document) {
       return (await load((repository) => {
         if (!repository.loadExplanation) throw new Error("Teaching explanations are unavailable for this source.");
@@ -43,7 +54,11 @@ export function createOfflineAwareRepository(
       const owner = owners.get(question);
       if (!owner) throw new Error("Load the question before resolving downloaded images.");
       const original = new URL(owner.mediaUrl(question, assetId, releaseId));
-      return useDownload() ? new URL(original.pathname, localBaseUrl).href : original.href;
+      if (!useDownload()) return original.href;
+      if (!mediaPath.test(original.pathname) || original.search || original.hash || /%|\\/.test(original.href)) {
+        throw new Error("The image is outside this exam's offline package.");
+      }
+      return new URL(original.pathname, localOrigin).href;
     },
   };
 }

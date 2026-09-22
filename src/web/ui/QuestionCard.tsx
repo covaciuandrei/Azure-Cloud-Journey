@@ -4,7 +4,7 @@ import { gradeResponse, type PracticeResponse, type SelfAssessment } from "../en
 import { answerImageContent, splitStandaloneImages } from "../image-presentation.js";
 import type { StudyDocument, StudyRepository } from "../types.js";
 import { AnswerDetails, DiscussionBelow } from "./AnswerDetails.js";
-import { topicLabel } from "../../domain/topics.js";
+import { studyTopicLabel as topicLabel } from "../../domain/examTopics.js";
 import { useExplanation } from "./useExplanation.js";
 
 export function AnswerStatus({ provisional }: { provisional: boolean }) {

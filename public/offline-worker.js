@@ -1,5 +1,5 @@
 /*
- * AZ-104 offline download service worker.
+ * Per-exam offline download service worker.
  *
  * Plain classic script (no imports, no build step). Registered by the app at
  * scope "/" so it can serve a verified, same-origin snapshot of the app shell,
@@ -9,8 +9,9 @@
  * Contracts implemented here (see src/domain/offline.ts for the shared shape
  * that the manifest generator and the page also honor):
  *  - RPC protocol "az104-offline-v1" over postMessage: STATUS / DOWNLOAD /
- *    CANCEL / REMOVE, replying with a RESULT and broadcasting STATE.
- *  - Manifest contract at /data/offline-manifest.json.
+ *    CANCEL / REMOVE / REMOVE_ALL with optional examId (defaults to az104),
+ *    replying with a RESULT and broadcasting exam-scoped STATE.
+ *  - AZ-104 keeps its original URLs and cache names; SC-900 is isolated.
  *  - Cache-only serving for requests carrying "X-AZ104-Offline: 1".
  *  - Network-first navigation with a verified /index.html fallback.
  *  - Cache-first serving of known, hash-verified immutable files.
@@ -20,18 +21,26 @@
   "use strict";
 
   var PROTOCOL = "az104-offline-v1";
-  var MANIFEST_URL = "/data/offline-manifest.json";
-  var OWN_PREFIX = "az104-offline-";
+  var EXAM_IDS = ["az104", "sc900"];
+  var stores = Object.create(null);
+  var clearingAll = false;
+
+  function createExamStore(examId) {
+  var ROOT = examId === "sc900" ? "/exams/sc900" : "";
+  var MANIFEST_URL = examId === "sc900" ? ROOT + "/offline-manifest.json" : "/data/offline-manifest.json";
+  var PUBLIC_MANIFEST_URL = examId === "sc900" ? ROOT + "/manifest.json" : "/data/manifest.json";
+  var OWN_PREFIX = examId + "-offline-";
   var META_CACHE = OWN_PREFIX + "meta";
   var MEDIA_CACHE = OWN_PREFIX + "media";
   var DATA_CACHE_PREFIX = OWN_PREFIX + "data-";
-  var META_ACTIVE_PATH = "/__az104_offline_meta__/active.json";
-  var META_JOB_PATH = "/__az104_offline_meta__/job.json";
+  var META_ACTIVE_PATH = "/__" + examId + "_offline_meta__/active.json";
+  var META_JOB_PATH = "/__" + examId + "_offline_meta__/job.json";
   var EXCLUDED_PREFIXES = ["/__/", "/api/", "/auth/", "/users/", "/private/", "/.data/"];
   var CONCURRENCY = 5;
   var BROADCAST_EVERY = 10;
   var PERSIST_EVERY = 25;
   var MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
+  var MAX_AVAILABILITY_BYTES = 8000;
   var MAX_FILES = 10000;
   var MAX_FILE_BYTES = 16 * 1024 * 1024;
   var MAX_COURSE_BYTES = 4 * 1024 * 1024;
@@ -44,9 +53,15 @@
   var RELEASE_RE = /^r_[a-f0-9]{64}$/;
   var QUESTION_RE = /^q_[a-f0-9]{64}$/;
   var SHELL_ASSET_RE = /^\/assets\/[a-zA-Z0-9_.-]+-[a-zA-Z0-9_-]+\.(js|css)$/;
-  var MEDIA_PATH_RE = /^\/content\/r_[a-f0-9]{64}\/media\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/;
+  var MEDIA_PATH_RE = new RegExp("^" + ROOT + "/content/r_[a-f0-9]{64}/media/([a-f0-9]{64})\\.(png|jpg|gif|webp)$");
   var SYNTHETIC_MEDIA_RE = /^\/offline-assets\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/;
-  var COURSE_PATH_RE = /^\/courses\/c_[a-f0-9]{64}\/(?:networking|az104)\.json$/;
+  var COURSE_PATH_RE = examId === "sc900"
+    ? /^\/exams\/sc900\/course\/releases\/c_[a-f0-9]{64}\/sc900\.json$/
+    : /^\/courses\/c_[a-f0-9]{64}\/(?:networking|az104)\.json$/;
+  var MUTABLE_PATHS = examId === "sc900" ? [
+    MANIFEST_URL, PUBLIC_MANIFEST_URL, ROOT + "/availability.json", ROOT + "/course/current.json",
+  ] :
+    [MANIFEST_URL, "/data/manifest.json", "/data/topics.json", "/data/learning.json", "/data/eligibility.json", "/data/course.json"];
 
   // ---------------------------------------------------------------------
   // Small helpers
@@ -143,7 +158,7 @@
     }
     if (file.kind === "image") {
       if (file.releaseId && !file.questionId && !file.part && file.commentCount === undefined &&
-          new RegExp("^/content/" + file.releaseId + "/media/" + file.sha256 + "\\.(png|jpg|gif|webp)$").test(file.url)) {
+          new RegExp("^" + ROOT + "/content/" + file.releaseId + "/media/" + file.sha256 + "\\.(png|jpg|gif|webp)$").test(file.url)) {
         return file.url;
       }
       return undefined;
@@ -151,21 +166,28 @@
     // kind === "data"
     if (!file.releaseId) {
       if (!file.part && !file.questionId && file.commentCount === undefined &&
-          (["/data/manifest.json", "/data/topics.json", "/data/learning.json", "/data/eligibility.json", "/data/course.json"].indexOf(file.url) !== -1 ||
+          (MUTABLE_PATHS.slice(1).indexOf(file.url) !== -1 ||
             COURSE_PATH_RE.test(file.url))) return file.url;
       return undefined;
     }
     if (file.part === "catalog" && !file.questionId && file.commentCount === undefined) {
-      return "/content/" + file.releaseId + "/catalog.json";
+      return ROOT + "/content/" + file.releaseId + "/catalog.json";
+    }
+    if (examId === "sc900" && !file.questionId && file.commentCount === undefined &&
+        ["topics", "eligibility", "learning-manifest"].indexOf(file.part) !== -1) {
+      return ROOT + "/content/" + file.releaseId + "/" +
+        (file.part === "learning-manifest" ? "learning/manifest" : file.part) + ".json";
     }
     if (file.questionId && file.part === "question" && file.commentCount === undefined) {
-      return "/content/" + file.releaseId + "/questions/" + file.questionId + ".json";
+      return ROOT + "/content/" + file.releaseId + "/questions/" + file.questionId + ".json";
     }
     if (file.questionId && file.part === "discussion" && file.commentCount !== undefined) {
-      return "/content/" + file.releaseId + "/discussions/" + file.questionId + ".json";
+      return ROOT + "/content/" + file.releaseId + "/discussions/" + file.questionId + ".json";
     }
     if (file.questionId && file.part === "explanation" && file.commentCount === undefined) {
-      return "/teaching/" + file.releaseId + "/questions/" + file.questionId + ".json";
+      return examId === "sc900"
+        ? ROOT + "/content/" + file.releaseId + "/learning/questions/" + file.questionId + ".json"
+        : "/teaching/" + file.releaseId + "/questions/" + file.questionId + ".json";
     }
     return undefined;
   }
@@ -187,8 +209,12 @@
     if (!Number.isInteger(file.bytes) || file.bytes <= 0 || file.bytes > MAX_FILE_BYTES) {
       fail("Offline manifest file size is invalid.");
     }
-    if (COURSE_PATH_RE.test(file.url) && file.bytes > MAX_COURSE_BYTES) {
-      fail("Course content exceeds the 4 MiB offline limit.");
+    if (file.url === "/exams/sc900/availability.json" && file.bytes > MAX_AVAILABILITY_BYTES) {
+      fail("SC-900 availability exceeds the 8,000 byte offline limit.");
+    }
+    if ((COURSE_PATH_RE.test(file.url) || (file.kind === "data" && (!file.releaseId || file.part === "learning-manifest"))) &&
+        file.bytes > MAX_COURSE_BYTES) {
+      fail("Course or manifest content exceeds the 4 MiB offline limit.");
     }
     if (["shell", "data", "image"].indexOf(file.kind) === -1) fail("Offline manifest file kind is invalid.");
     if (file.releaseId !== undefined && (typeof file.releaseId !== "string" || !RELEASE_RE.test(file.releaseId))) {
@@ -205,7 +231,7 @@
         fail("Offline image question owners are invalid.");
       }
     }
-    if (file.part !== undefined && ["catalog", "question", "discussion", "explanation"].indexOf(file.part) === -1) {
+    if (file.part !== undefined && ["catalog", "question", "discussion", "explanation", "topics", "eligibility", "learning-manifest"].indexOf(file.part) === -1) {
       fail("Offline manifest file part is invalid.");
     }
     if (file.commentCount !== undefined && (!Number.isInteger(file.commentCount) || file.commentCount <= 0)) {
@@ -217,12 +243,15 @@
 
   function validateManifestObject(candidate) {
     if (!isPlainObject(candidate)) fail("Offline manifest is invalid.");
-    var allowedTop = ["schemaVersion", "buildId", "releaseId", "learningReleaseId", "counts", "files"];
+    var allowedTop = ["schemaVersion", "examId", "buildId", "releaseId", "learningReleaseId", "counts", "files"];
     var topKeys = Object.keys(candidate);
     for (var i = 0; i < topKeys.length; i++) {
       if (allowedTop.indexOf(topKeys[i]) === -1) fail("Offline manifest has an unexpected field.");
     }
     if (candidate.schemaVersion !== 1) fail("Offline manifest schema version is unsupported.");
+    if ((candidate.examId === undefined ? "az104" : candidate.examId) !== examId) {
+      fail("Offline manifest belongs to a different exam.");
+    }
     if (typeof candidate.buildId !== "string" || !SHA_RE.test(candidate.buildId)) fail("Offline manifest build id is invalid.");
     if (typeof candidate.releaseId !== "string" || !RELEASE_RE.test(candidate.releaseId)) fail("Offline manifest release id is invalid.");
     if (candidate.learningReleaseId !== undefined &&
@@ -232,7 +261,7 @@
     if (!isPlainObject(candidate.counts) || Object.keys(candidate.counts).length !== 3 ||
         !Number.isInteger(candidate.counts.questions) || candidate.counts.questions < 1 || candidate.counts.questions > 604 ||
         !Number.isInteger(candidate.counts.comments) || candidate.counts.comments < 0 || candidate.counts.comments > 7994 ||
-        !Number.isInteger(candidate.counts.images) || candidate.counts.images < 1 || candidate.counts.images > 784) {
+        !Number.isInteger(candidate.counts.images) || candidate.counts.images < (examId === "sc900" ? 0 : 1) || candidate.counts.images > 784) {
       fail("Offline manifest counts do not match the expected release.");
     }
     if (!Array.isArray(candidate.files) || candidate.files.length < 1 || candidate.files.length > MAX_FILES) {
@@ -261,7 +290,7 @@
       totalBytes += file.bytes;
       if (file.url === "/index.html") hasIndex = true;
       if (file.kind === "shell" && file.url.indexOf("/assets/") === 0 && file.url.endsWith(".js")) hasShellScript = true;
-      if (file.url === "/data/manifest.json") manifestJsonCount++;
+      if (file.url === PUBLIC_MANIFEST_URL) manifestJsonCount++;
       if (file.kind === "image") {
         imageCount++;
         if (!imageHashes[file.sha256]) { imageHashes[file.sha256] = true; uniqueImageHashes++; }
@@ -287,6 +316,10 @@
     if (!hasIndex) fail("Offline manifest is missing the application shell.");
     if (!hasShellScript) fail("Offline manifest is missing a compiled application script.");
     if (manifestJsonCount !== 1) fail("Offline manifest is missing the public data manifest.");
+    if (examId === "sc900" && (!urls[ROOT + "/availability.json"] || !urls[ROOT + "/course/current.json"] ||
+        candidate.files.filter(function (file) { return COURSE_PATH_RE.test(file.url); }).length !== 1)) {
+      fail("SC-900 offline packages require availability and the exact course publication.");
+    }
     for (i2 = 0; i2 < candidate.files.length; i2++) {
       var discussion = candidate.files[i2];
       if (discussion.part === "discussion" && !allQuestionKeys[discussion.releaseId + "/" + discussion.questionId]) {
@@ -362,7 +395,7 @@
       if (file.releaseId === manifest.releaseId) return true;
       var set = selected[file.releaseId];
       if (!set) return false;
-      return file.part === "catalog" || Boolean(set[file.questionId]);
+      return ["catalog", "topics", "eligibility", "learning-manifest"].indexOf(file.part) !== -1 || Boolean(set[file.questionId]);
     });
   }
 
@@ -442,6 +475,8 @@
   }
 
   function verifyActiveIntegrity(index) {
+    if (examId === "sc900" && (!index.filesByUrl[ROOT + "/availability.json"] ||
+        !index.filesByUrl[ROOT + "/course/current.json"])) return Promise.resolve(false);
     return self.caches.has(index.dataCacheName).then(function (hasData) {
       if (!hasData) return false;
       return openData(index.dataCacheName).then(function (dataCache) {
@@ -627,7 +662,7 @@
   function broadcast(state) {
     return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
       for (var i = 0; i < list.length; i++) {
-        list[i].postMessage({ protocol: PROTOCOL, type: "STATE", state: state });
+        list[i].postMessage({ protocol: PROTOCOL, type: "STATE", examId: examId, state: state });
       }
     });
   }
@@ -664,6 +699,7 @@
         if (buffer.byteLength !== entry.bytes) throw new Error("Offline download size mismatch for " + entry.url + ".");
         return crypto.subtle.digest("SHA-256", buffer).then(function (digest) {
           if (toHex(digest) !== entry.sha256) throw new Error("Offline download hash mismatch for " + entry.url + ".");
+          validateEntryContent(job, entry, buffer);
           return { buffer: buffer, headers: headers };
         });
       }).catch(function (error) {
@@ -674,6 +710,28 @@
     return tryOnce();
   }
 
+  function validateEntryContent(job, entry, buffer) {
+    if (examId !== "sc900" || entry.url !== ROOT + "/availability.json") return;
+    var record;
+    try { record = JSON.parse(new TextDecoder().decode(buffer)); }
+    catch (error) { fail("SC-900 offline availability is not valid JSON."); }
+    var keys = ["schemaVersion", "examId", "activated", "kind", "bankReleaseId", "courseReleaseId",
+      "sourceCaptureDigest", "approvedBy", "approvedAt"];
+    var course = job.plan.find(function (file) { return COURSE_PATH_RE.test(file.url); });
+    if (!isPlainObject(record) || Object.keys(record).length !== keys.length ||
+        Object.keys(record).some(function (key) { return keys.indexOf(key) === -1; }) ||
+        record.schemaVersion !== 1 || record.examId !== "sc900" || record.activated !== true ||
+        record.kind !== "approved-source" || record.bankReleaseId !== job.state.releaseId ||
+        !course || course.url !== ROOT + "/course/releases/" + record.courseReleaseId + "/sc900.json" ||
+        typeof record.sourceCaptureDigest !== "string" || !SHA_RE.test(record.sourceCaptureDigest) ||
+        typeof record.approvedBy !== "string" || !record.approvedBy.trim() ||
+        typeof record.approvedAt !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(record.approvedAt) ||
+        !Number.isFinite(Date.parse(record.approvedAt))) {
+      fail("SC-900 offline availability does not activate this exact approved bank and course.");
+    }
+  }
+
   function processEntry(job, entry) {
     var cacheName = entry.kind === "image" ? MEDIA_CACHE : job.state.dataCacheName;
     function verifiedBytes(response) {
@@ -681,7 +739,9 @@
       return boundedResponseBytes(response, entry.bytes, "Cached offline file exceeds its size limit.").then(function (buffer) {
         if (buffer.byteLength !== entry.bytes) return null;
         return crypto.subtle.digest("SHA-256", buffer).then(function (digest) {
-          return toHex(digest) === entry.sha256 ? { buffer: buffer, headers: cachedHeaders(response, entry) } : null;
+          if (toHex(digest) !== entry.sha256) return null;
+          validateEntryContent(job, entry, buffer);
+          return { buffer: buffer, headers: cachedHeaders(response, entry) };
         });
       }).catch(function (error) {
         if (error instanceof RangeError) return null;
@@ -731,6 +791,29 @@
     });
   }
 
+  function validateSc900Activation(job) {
+    if (examId !== "sc900") return Promise.resolve();
+    return openData(job.state.dataCacheName).then(function (cache) {
+      return Promise.all([ROOT + "/availability.json", PUBLIC_MANIFEST_URL, ROOT + "/course/current.json"].map(function (path) {
+        return cache.match(metaRequest(path)).then(function (response) {
+          if (!response) fail("SC-900 offline activation metadata is missing.");
+          return boundedResponseBytes(response, path.endsWith("/availability.json") ? MAX_AVAILABILITY_BYTES : MAX_MANIFEST_BYTES,
+            "SC-900 offline activation metadata exceeds its size limit.");
+        }).then(function (buffer) { return JSON.parse(new TextDecoder().decode(buffer)); });
+      }));
+    }).then(function (records) {
+      var availability = records[0], bank = records[1], pointer = records[2];
+      var course = job.plan.find(function (file) { return COURSE_PATH_RE.test(file.url); });
+      if (!isPlainObject(bank) || bank.examId !== "sc900" || bank.releaseId !== job.state.releaseId ||
+          bank.captureLedgerDigest !== availability.sourceCaptureDigest ||
+          !isPlainObject(pointer) || pointer.schemaVersion !== 3 || pointer.id !== "sc900" || pointer.active !== true ||
+          pointer.releaseId !== availability.courseReleaseId || !course ||
+          pointer.url !== course.url.slice(1) || pointer.sha256 !== course.sha256) {
+        fail("SC-900 offline activation differs from its approved capture, bank, or course.");
+      }
+    });
+  }
+
   function finalizeSuccess(job) {
     if (job.controller.cancelled) return finalizeCancelled(job);
     var activeMeta = {
@@ -738,7 +821,9 @@
       totalFiles: job.state.totalFiles, totalBytes: job.state.totalBytes, dataCacheName: job.state.dataCacheName,
       files: job.plan.map(function (f) { return { url: f.url, sha256: f.sha256, bytes: f.bytes, kind: f.kind }; }),
     };
-    return storeManifestDescriptor(job.state.dataCacheName, job.rawManifestBytes)
+    return validateSc900Activation(job).then(function () {
+      return storeManifestDescriptor(job.state.dataCacheName, job.rawManifestBytes);
+    })
       .then(function () {
         if (job.controller.cancelled) return finalizeCancelled(job).then(function () { return false; });
         job.committing = true;
@@ -881,7 +966,7 @@
     var wait;
     if (currentJob) {
       if (!currentJob.committing) { currentJob.controller.cancelled = true; currentJob.controller.abort(); }
-      wait = currentJob.promise;
+      wait = currentJob.promise.catch(function () {});
     } else {
       wait = Promise.resolve();
     }
@@ -898,49 +983,7 @@
     }).finally(function () { removing = false; });
   }
 
-  // ---------------------------------------------------------------------
-  // RPC message handling
-  // ---------------------------------------------------------------------
-
-  self.addEventListener("message", function (event) {
-    var data = event.data;
-    if (!data || typeof data !== "object" || data.protocol !== PROTOCOL) return;
-    var source = event.source;
-    var id = typeof data.id === "string" ? data.id : undefined;
-    function respond(state, error) {
-      if (!source || typeof source.postMessage !== "function") return;
-      var message = { protocol: PROTOCOL, type: "RESULT", id: id, state: state };
-      if (error) message.error = error;
-      source.postMessage(message);
-    }
-    var task = Promise.resolve().then(function () {
-      if (typeof id !== "string" || !id) throw new Error("The offline request is missing an id.");
-      if (["STATUS", "DOWNLOAD", "CANCEL", "REMOVE"].indexOf(data.type) === -1) {
-        throw new Error("Unknown offline request.");
-      }
-      if (data.type === "DOWNLOAD") return handleDownload(data.legacyRefs, respond);
-      if (data.type === "STATUS") return computeStatus().then(respond);
-      if (data.type === "CANCEL") return cancelJob().then(function (state) { respond(state); });
-      return removeAll().then(function (state) { respond(state); });
-    }).catch(function (error) {
-      var message = error instanceof Error ? error.message : "The offline request failed.";
-      return computeStatus().catch(function () { return emptyState(); }).then(function (state) {
-        respond(state, message);
-      });
-    });
-    event.waitUntil(task);
-  });
-
-  // ---------------------------------------------------------------------
-  // Install / activate lifecycle
-  // ---------------------------------------------------------------------
-
-  self.addEventListener("install", function (event) {
-    event.waitUntil(self.skipWaiting());
-  });
-
-  self.addEventListener("activate", function (event) {
-    event.waitUntil(self.clients.claim().then(function () {
+  function activate() {
       activeIndexCache = null;
       return Promise.all([readMetaJson(META_ACTIVE_PATH), readMetaJson(META_JOB_PATH)]).then(function (results) {
         var active = results[0];
@@ -958,6 +1001,70 @@
           return Promise.all(deletions);
         });
       });
+  }
+
+  return {
+    status: computeStatus, download: handleDownload, cancel: cancelJob, remove: removeAll,
+    activate: activate, lookup: lookupActiveCacheResponse, emptyState: emptyState,
+    shell: function () {
+      return loadActiveIndex(false).then(function (index) {
+        if (!index) return null;
+        return lookupActiveCacheResponse("/index.html").then(function (response) {
+          return response ? { updatedAt: index.updatedAt, response: response } : null;
+        });
+      });
+    },
+    isMutable: function (pathname) { return MUTABLE_PATHS.indexOf(pathname) !== -1; },
+    isExcluded: isExcludedPath,
+  };
+  }
+
+  EXAM_IDS.forEach(function (examId) { stores[examId] = createExamStore(examId); });
+
+  self.addEventListener("message", function (event) {
+    var data = event.data;
+    if (!data || typeof data !== "object" || data.protocol !== PROTOCOL) return;
+    var source = event.source;
+    var id = typeof data.id === "string" ? data.id : undefined;
+    var examId = data.examId === undefined ? "az104" : data.examId;
+    var validExam = EXAM_IDS.indexOf(examId) !== -1;
+    var store = validExam ? stores[examId] : null;
+    function respond(state, error) {
+      if (!source || typeof source.postMessage !== "function") return;
+      var message = { protocol: PROTOCOL, type: "RESULT", id: id, examId: examId, state: state };
+      if (error) message.error = error;
+      source.postMessage(message);
+    }
+    var task = Promise.resolve().then(function () {
+      if (typeof id !== "string" || !id) throw new Error("The offline request is missing an id.");
+      if (!store) throw new Error("Unknown offline exam.");
+      if (["STATUS", "DOWNLOAD", "CANCEL", "REMOVE", "REMOVE_ALL"].indexOf(data.type) === -1) {
+        throw new Error("Unknown offline request.");
+      }
+      if (data.type === "STATUS") return store.status().then(respond);
+      if (clearingAll) throw new Error("Offline copies are being removed. Try again when removal finishes.");
+      if (data.type === "DOWNLOAD") return store.download(data.legacyRefs, respond);
+      if (data.type === "CANCEL") return store.cancel().then(function (state) { respond(state); });
+      if (data.type === "REMOVE") return store.remove().then(function (state) { respond(state); });
+      clearingAll = true;
+      return Promise.all(EXAM_IDS.map(function (key) { return stores[key].remove(); }))
+        .then(function () { respond(store.emptyState()); })
+        .finally(function () { clearingAll = false; });
+    }).catch(function (error) {
+      var message = error instanceof Error ? error.message : "The offline request failed.";
+      return (store ? store.status() : Promise.resolve(stores.az104.emptyState()))
+        .catch(function () { return stores.az104.emptyState(); }).then(function (state) { respond(state, message); });
+    });
+    event.waitUntil(task);
+  });
+
+  self.addEventListener("install", function (event) {
+    event.waitUntil(self.skipWaiting());
+  });
+
+  self.addEventListener("activate", function (event) {
+    event.waitUntil(self.clients.claim().then(function () {
+      return Promise.all(EXAM_IDS.map(function (examId) { return stores[examId].activate(); }));
     }));
   });
 
@@ -971,8 +1078,22 @@
     });
   }
 
-  function handleOfflineOnly(pathname) {
-    return lookupActiveCacheResponse(pathname).then(function (hit) {
+  function lookupActiveCacheResponse(pathname, examId) {
+    var owner = pathname.indexOf("/exams/sc900/") === 0 ? "sc900" : "az104";
+    if (examId && examId !== owner && pathname !== "/index.html" && pathname !== "/favicon.svg" &&
+        pathname !== "/offline-worker.js" && pathname.indexOf("/assets/") !== 0 &&
+        pathname.indexOf("/offline-assets/") !== 0) return Promise.resolve(undefined);
+    var shared = pathname === "/index.html" || pathname === "/favicon.svg" || pathname === "/offline-worker.js" ||
+      pathname.indexOf("/assets/") === 0 || pathname.indexOf("/offline-assets/") === 0;
+    var selected = examId || owner;
+    return stores[selected].lookup(pathname).then(function (hit) {
+      if (hit || examId || !shared) return hit;
+      return stores[selected === "az104" ? "sc900" : "az104"].lookup(pathname);
+    });
+  }
+
+  function handleOfflineOnly(pathname, examId) {
+    return lookupActiveCacheResponse(pathname, examId).then(function (hit) {
       return hit || unavailableResponse(pathname);
     });
   }
@@ -985,8 +1106,11 @@
 
   function handleNavigation(request) {
     return fetch(request).catch(function (error) {
-      return lookupActiveCacheResponse("/index.html").then(function (hit) {
-        if (hit) return hit;
+      // Hash routes are not sent in navigation requests. Use the newest shared
+      // shell, while retaining every installed package's hashed assets.
+      return Promise.all(EXAM_IDS.map(function (examId) { return stores[examId].shell(); })).then(function (shells) {
+        var newest = shells.filter(Boolean).sort(function (a, b) { return b.updatedAt - a.updatedAt; })[0];
+        if (newest) return newest.response;
         throw error;
       });
     });
@@ -998,13 +1122,16 @@
     var url;
     try { url = new URL(request.url); } catch (error) { return; }
     if (url.origin !== self.location.origin) return;
-    if (isExcludedPath(url.pathname)) return;
-    var offlineOnly = request.headers.get("X-AZ104-Offline") === "1";
-    if (offlineOnly) { event.respondWith(handleOfflineOnly(url.pathname)); return; }
+    if (stores.az104.isExcluded(url.pathname)) return;
+    var examHeader = request.headers.get("X-Study-Exam");
+    var offlineOnly = request.headers.get("X-AZ104-Offline") === "1" || request.headers.get("X-Study-Offline") === "1";
+    if (offlineOnly) {
+      event.respondWith(examHeader && EXAM_IDS.indexOf(examHeader) === -1
+        ? unavailableResponse(url.pathname) : handleOfflineOnly(url.pathname, examHeader));
+      return;
+    }
     if (request.mode === "navigate") { event.respondWith(handleNavigation(request)); return; }
-    if (url.pathname === MANIFEST_URL || url.pathname === "/data/manifest.json" ||
-        url.pathname === "/data/topics.json" || url.pathname === "/data/learning.json" ||
-        url.pathname === "/data/eligibility.json" || url.pathname === "/data/course.json") {
+    if (EXAM_IDS.some(function (examId) { return stores[examId].isMutable(url.pathname); })) {
       event.respondWith(fetch(request).catch(function () { return handleOfflineOnly(url.pathname); }));
       return;
     }

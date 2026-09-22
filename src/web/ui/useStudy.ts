@@ -3,12 +3,16 @@ import { createStudyRepository } from "../data.js";
 import { createDemoRepository } from "../demo-repository.js";
 import { createFirestoreStudyRepository } from "../firestore-repository.js";
 import { createStudyCloudReader } from "../firestore-source.js";
-import { STUDY_HOSTING_ORIGIN, STUDY_LEARNING_PATH, STUDY_TOPICS_PATH } from "../../domain/cloud.js";
+import { STUDY_HOSTING_ORIGIN } from "../../domain/cloud.js";
+import { assertExam, examConfig, type ExamId } from "../../domain/exams.js";
+import { Sc900LearningManifestSchema } from "../../domain/sc900Learning.js";
 import type { DataSource } from "../profile-storage.js";
 import { useAccountPractice } from "./useAccountPractice.js";
 import { createOfflineAwareRepository } from "../offline-repository.js";
 import { createHttpTopicLoader, createTopicLoader, withQuestionTopics } from "../topic-repository.js";
-import { TOPIC_IDS, TopicSelectionSchema, matchesTopics, type TopicId } from "../../domain/topics.js";
+import {
+  topicIdsForExam, parseTopicSelection, matchesStudyTopics as matchesTopics, type StudyTopicId as TopicId,
+} from "../../domain/examTopics.js";
 import { httpLearningReader, withLearningExplanations } from "../learning-repository.js";
 import { httpEligibilityLoader, withCurrentQuestions } from "../eligibility-repository.js";
 import {
@@ -29,39 +33,48 @@ export function answered(response: PracticeResponse | undefined, grading?: "auto
     : response.selectedIds.length > 0;
 }
 
-export function useStudy(uid: string | null = null, useDownload = false, autoResume = true) {
-  const profile = useAccountPractice(uid, !useDownload);
+export function useStudy(uid: string | null = null, useDownload = false, autoResume = true, examId: ExamId = "az104") {
+  const profile = useAccountPractice(uid, !useDownload, examId);
+  const TOPIC_IDS = topicIdsForExam(examId);
   const { saved } = profile;
   const offlineRef = useRef(useDownload);
   offlineRef.current = useDownload;
   const [repositories] = useState(() => {
     const base = new URL(import.meta.env.BASE_URL, window.location.origin).href;
     if (import.meta.env.VITE_STUDY_DEMO === "true") {
-      return { snapshot: createDemoRepository(base), firebase: null };
+      return { snapshot: createDemoRepository(base, fetch, examId), firebase: null };
     }
-    const snapshotCore = createStudyRepository(base);
+    const snapshotCore = createStudyRepository(base, fetch, examId);
     const snapshot = withCurrentQuestions(withLearningExplanations(
-      withQuestionTopics(snapshotCore, createHttpTopicLoader(base)), httpLearningReader(base)), httpEligibilityLoader(base));
+      withQuestionTopics(snapshotCore, createHttpTopicLoader(base, fetch, examId)), httpLearningReader(base, fetch, examId)), httpEligibilityLoader(base, fetch, examId));
     const offlineFetch: typeof fetch = (input, init) => {
       const headers = new Headers(init?.headers);
       headers.set("X-AZ104-Offline", "1");
       return fetch(input, { ...init, headers });
     };
     const downloaded = withCurrentQuestions(withLearningExplanations(
-      withQuestionTopics(createStudyRepository(base, offlineFetch), createHttpTopicLoader(base, offlineFetch)),
-      httpLearningReader(base, offlineFetch)), httpEligibilityLoader(base, offlineFetch));
+      withQuestionTopics(createStudyRepository(base, offlineFetch, examId), createHttpTopicLoader(base, offlineFetch, examId)),
+      httpLearningReader(base, offlineFetch, examId)), httpEligibilityLoader(base, offlineFetch, examId));
     const wrap = (primary: typeof snapshot) =>
-      createOfflineAwareRepository(primary, downloaded, () => offlineRef.current, base);
-    const cloud = uid ? createStudyCloudReader(uid) : null;
+      createOfflineAwareRepository(primary, downloaded, () => offlineRef.current, base, examId);
+    const cloud = uid ? createStudyCloudReader(uid, examId) : null;
+    const httpTopics = createHttpTopicLoader(base, fetch, examId);
     return {
       snapshot: wrap(snapshot),
       firebase: cloud ? wrap(withCurrentQuestions(withLearningExplanations(withQuestionTopics(
-        createFirestoreStudyRepository(cloud, snapshotCore, STUDY_HOSTING_ORIGIN),
-        createTopicLoader(() => cloud.document(STUDY_TOPICS_PATH)),
+        createFirestoreStudyRepository(cloud, snapshotCore, STUDY_HOSTING_ORIGIN, examId),
+        createTopicLoader((releaseId) => examId === "sc900" && releaseId
+          ? httpTopics(releaseId) : cloud.document(examConfig(examId).topicsMetadataPath), examId),
       ), {
-        manifest: () => cloud.document(STUDY_LEARNING_PATH),
-        explanation: (releaseId, questionId) => cloud.document(`studyExplanations/${releaseId}/questions/${questionId}`),
-      }), httpEligibilityLoader(base))) : null,
+        manifest: async (releaseId) => {
+          const value = await cloud.document(examConfig(examId).learningMetadataPath);
+          return examId === "sc900" && releaseId && Sc900LearningManifestSchema.parse(value).releaseId !== releaseId
+            ? httpLearningReader(base, fetch, examId).manifest(releaseId) : value;
+        },
+        explanation: (releaseId, questionId) => cloud.document(examId === "sc900"
+          ? `studyBanks/sc900/releases/${releaseId}/explanations/${questionId}`
+          : `studyExplanations/${releaseId}/questions/${questionId}`),
+      }), httpEligibilityLoader(base, fetch, examId))) : null,
     };
   });
   const repository = repositories[profile.dataSource] ?? repositories.snapshot;
@@ -94,6 +107,7 @@ export function useStudy(uid: string | null = null, useDownload = false, autoRes
     lastRepository.current = repository;
     setCatalogError(null);
     repository.loadCatalog().then((value) => {
+      assertExam(value, examId);
       if (mounted) setCatalog(value);
     }).catch((error: unknown) => { if (mounted) setCatalogError(messageOf(error)); });
     return () => { mounted = false; };
@@ -109,11 +123,12 @@ export function useStudy(uid: string | null = null, useDownload = false, autoRes
     const current = attemptRef.current;
     if (!current) { setNotice("No session is open."); return; }
     try {
+      assertExam(current, examId);
       const next = reduceAttempt(current, action, documentsRef.current, Date.now());
       if (next !== current) commit(next, next.status === "completed" && current.status !== "completed");
     }
     catch (error) { setNotice(messageOf(error)); }
-  }, [commit]);
+  }, [commit, examId]);
 
   useEffect(() => {
     if (attempt?.status !== "active" || attempt.mode !== "exam") return;
@@ -136,6 +151,7 @@ export function useStudy(uid: string | null = null, useDownload = false, autoRes
     restoredOnce.current = true;
     setBusy("Opening saved session...");
     try {
+      assertExam(record, examId);
       const data = await repositoryFor(record.dataSource ?? "snapshot").loadQuestions(record.questionIds, record.releaseId);
       validateAttemptDocuments(record, data);
       documentsRef.current = data;
@@ -153,7 +169,7 @@ export function useStudy(uid: string | null = null, useDownload = false, autoRes
       setNotice(`This session could not be opened: ${messageOf(error)}`);
       setView("library");
     } finally { setBusy(null); }
-  }, [repositoryFor, profile.commitRecord]);
+  }, [repositoryFor, profile.commitRecord, examId]);
 
   useEffect(() => {
     if (!autoResume || !catalog || !profile.ready || restoredOnce.current) return;
@@ -174,7 +190,7 @@ export function useStudy(uid: string | null = null, useDownload = false, autoRes
     setConfirmation(null);
     setBusy(`Loading ${mode === "exam" ? 40 : size} questions...`);
     try {
-      const selection = TopicSelectionSchema.parse(topics);
+      const selection = parseTopicSelection(topics, examId);
       if (!selection.length) throw new Error("Select at least one topic.");
       const id = crypto.randomUUID();
       const pool = catalog.questions.filter((question) =>
@@ -183,7 +199,7 @@ export function useStudy(uid: string | null = null, useDownload = false, autoRes
       if (pool.length < requested) throw new Error(`Only ${pool.length} questions match the selected topics; ${requested} are required.`);
       const ids = sampleQuestionIds(pool, mode === "exam" ? 40 : size, id);
       const data = await repository.loadQuestions(ids, catalog.releaseId);
-      const value = createAttempt({ mode, documents: data, id, seed: id, now: Date.now(), dataSource: profile.dataSource });
+      const value = createAttempt({ examId, mode, documents: data, id, seed: id, now: Date.now(), dataSource: profile.dataSource });
       documentsRef.current = data;
       setDocuments(data);
       commit(value, true);

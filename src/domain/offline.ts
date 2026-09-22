@@ -1,14 +1,25 @@
 import { z } from "zod";
 import { CleanReleaseIdSchema } from "./cleanBank.js";
 import { MAX_COURSE_BYTES } from "./courseCatalog.js";
+import { ExamIdSchema, type ExamId } from "./exams.js";
 
 export const OFFLINE_PROTOCOL = "az104-offline-v1";
 export const OFFLINE_MANIFEST_URL = "/data/offline-manifest.json";
+export const OFFLINE_MANIFEST_MAX_BYTES = 4 * 1024 * 1024;
+export const OFFLINE_AVAILABILITY_MAX_BYTES = 8_000;
 export const OFFLINE_COURSE_MAX_BYTES = MAX_COURSE_BYTES;
 const courseUrl = /^\/courses\/c_[a-f0-9]{64}\/(?:networking|az104)\.json$/;
+const sc900CourseUrl = /^\/exams\/sc900\/course\/releases\/c_[a-f0-9]{64}\/sc900\.json$/;
+export function offlineManifestUrl(examId: ExamId = "az104"): string {
+  ExamIdSchema.parse(examId);
+  return examId === "sc900" ? "/exams/sc900/offline-manifest.json" : OFFLINE_MANIFEST_URL;
+}
+
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const questionId = z.string().regex(/^q_[a-f0-9]{64}$/);
-export const OfflineFileSchema = z.object({
+function fileSchema(examId: ExamId) {
+  const root = examId === "sc900" ? "/exams/sc900" : "";
+  return z.object({
   url: z.string(),
   sha256: sha,
   bytes: z.number().int().positive().max(16 * 1024 * 1024),
@@ -16,12 +27,20 @@ export const OfflineFileSchema = z.object({
   releaseId: CleanReleaseIdSchema.optional(),
   questionId: questionId.optional(),
   questionIds: z.array(questionId).min(1).max(606).optional(),
-  part: z.enum(["catalog", "question", "discussion", "explanation"]).optional(),
+  part: z.enum(["catalog", "question", "discussion", "explanation", "topics", "eligibility", "learning-manifest"]).optional(),
   commentCount: z.number().int().positive().optional(),
 }).strict().superRefine((file, context) => {
   let expected: string | undefined;
-  if (courseUrl.test(file.url) && file.bytes > OFFLINE_COURSE_MAX_BYTES) {
-    context.addIssue({ code: "custom", message: "Course content exceeds the 4 MiB offline limit." });
+  if (file.url === "/exams/sc900/availability.json" && file.bytes > OFFLINE_AVAILABILITY_MAX_BYTES) {
+    context.addIssue({ code: "custom", message: "SC-900 availability exceeds the 8,000 byte offline limit." });
+  }
+  if ((courseUrl.test(file.url) || sc900CourseUrl.test(file.url) ||
+      (file.kind === "data" && (!file.releaseId || file.part === "learning-manifest"))) &&
+      file.bytes > OFFLINE_COURSE_MAX_BYTES) {
+    context.addIssue({ code: "custom", message: "Course or manifest content exceeds the 4 MiB offline limit." });
+  }
+  if (!file.url.startsWith("/") || /[\\%?#]/.test(file.url) || file.url.includes("..") || file.url.startsWith("//")) {
+    context.addIssue({ code: "custom", message: "Offline file path is unsafe." });
   }
   if (file.questionIds && (file.kind !== "image" || new Set(file.questionIds).size !== file.questionIds.length)) {
     context.addIssue({ code: "custom", message: "Only images may declare unique question owners." });
@@ -32,34 +51,48 @@ export const OfflineFileSchema = z.object({
     if (file.releaseId || file.questionId || file.part || file.commentCount) expected = undefined;
   } else if (file.kind === "image") {
     if (file.releaseId && !file.questionId && !file.part && !file.commentCount &&
-        new RegExp(`^/content/${file.releaseId}/media/${file.sha256}\\.(png|jpg|gif|webp)$`).test(file.url)) expected = file.url;
+        new RegExp(`^${root}/content/${file.releaseId}/media/${file.sha256}\\.(png|jpg|gif|webp)$`).test(file.url)) expected = file.url;
   } else if (!file.releaseId) {
     if (!file.part && !file.questionId && !file.commentCount &&
-        (["/data/manifest.json", "/data/topics.json", "/data/learning.json", "/data/eligibility.json", "/data/course.json"].includes(file.url) ||
-          courseUrl.test(file.url))) expected = file.url;
+        (examId === "az104"
+          ? ["/data/manifest.json", "/data/topics.json", "/data/learning.json", "/data/eligibility.json", "/data/course.json"].includes(file.url) ||
+            courseUrl.test(file.url)
+          : ["/exams/sc900/manifest.json", "/exams/sc900/availability.json", "/exams/sc900/course/current.json"].includes(file.url) ||
+            sc900CourseUrl.test(file.url))) expected = file.url;
   } else if (file.part === "catalog" && !file.questionId && !file.commentCount) {
-    expected = `/content/${file.releaseId}/catalog.json`;
+    expected = `${root}/content/${file.releaseId}/catalog.json`;
+  } else if (examId === "sc900" && !file.questionId && !file.commentCount &&
+      (file.part === "topics" || file.part === "eligibility" || file.part === "learning-manifest")) {
+    expected = `${root}/content/${file.releaseId}/${file.part === "learning-manifest" ? "learning/manifest" : file.part}.json`;
   } else if (file.questionId && file.part === "question" && !file.commentCount) {
-    expected = `/content/${file.releaseId}/questions/${file.questionId}.json`;
+    expected = `${root}/content/${file.releaseId}/questions/${file.questionId}.json`;
   } else if (file.questionId && file.part === "discussion" && file.commentCount) {
-    expected = `/content/${file.releaseId}/discussions/${file.questionId}.json`;
+    expected = `${root}/content/${file.releaseId}/discussions/${file.questionId}.json`;
   } else if (file.questionId && file.part === "explanation" && !file.commentCount) {
-    expected = `/teaching/${file.releaseId}/questions/${file.questionId}.json`;
+    expected = examId === "sc900"
+      ? `${root}/content/${file.releaseId}/learning/questions/${file.questionId}.json`
+      : `/teaching/${file.releaseId}/questions/${file.questionId}.json`;
   }
   if (!expected || file.url !== expected) context.addIssue({ code: "custom", message: "File is outside the offline allowlist." });
 });
+}
 
-export const OfflineManifestSchema = z.object({
+export const OfflineFileSchema = fileSchema("az104");
+export const Sc900OfflineFileSchema = fileSchema("sc900");
+
+function manifestSchema<E extends ExamId>(examId: E) {
+  return z.object({
   schemaVersion: z.literal(1),
+  examId: examId === "az104" ? z.literal(examId).optional() : z.literal(examId),
   buildId: sha,
   releaseId: CleanReleaseIdSchema,
   learningReleaseId: CleanReleaseIdSchema.optional(),
   counts: z.object({
     questions: z.number().int().min(1).max(604),
     comments: z.number().int().min(0).max(7994),
-    images: z.number().int().min(1).max(784),
+    images: z.number().int().min(examId === "az104" ? 1 : 0).max(784),
   }).strict(),
-  files: z.array(OfflineFileSchema).min(1).max(10000),
+  files: z.array(fileSchema(examId)).min(1).max(10000),
 }).strict().superRefine((manifest, context) => {
   const files = manifest.files;
   const current = files.filter((file) => file.releaseId === manifest.releaseId);
@@ -72,7 +105,7 @@ export const OfflineManifestSchema = z.object({
       current.filter((file) => file.part === "catalog").length !== 1 ||
       !files.some((file) => file.url === "/index.html") ||
       !files.some((file) => file.kind === "shell" && file.url.endsWith(".js") && file.url.startsWith("/assets/")) ||
-      files.filter((file) => file.url === "/data/manifest.json").length !== 1 ||
+      files.filter((file) => file.url === (examId === "az104" ? "/data/manifest.json" : "/exams/sc900/manifest.json")).length !== 1 ||
       files.reduce((sum, file) => sum + file.bytes, 0) > 256 * 1024 * 1024) {
     context.addIssue({ code: "custom", message: "Offline manifest coverage/counts are inconsistent." });
   }
@@ -84,7 +117,46 @@ export const OfflineManifestSchema = z.object({
   if (images.some((file) => file.questionIds?.some((id) => !questionIds.has(id)))) {
     context.addIssue({ code: "custom", message: "An offline image references an unknown question." });
   }
+  if (examId === "sc900" &&
+      (files.filter((file) => file.url === "/exams/sc900/availability.json").length !== 1 ||
+       files.filter((file) => file.url === "/exams/sc900/course/current.json").length !== 1 ||
+       files.filter((file) => sc900CourseUrl.test(file.url)).length !== 1)) {
+    context.addIssue({ code: "custom", message: "SC-900 offline packages require availability and the exact course publication." });
+  }
 });
+}
+export const Az104OfflineManifestSchema = manifestSchema("az104");
+export const Sc900OfflineManifestSchema = manifestSchema("sc900");
+export const OfflineManifestSchema = z.union([Az104OfflineManifestSchema, Sc900OfflineManifestSchema]);
+
+export function parseOfflineManifest(value: unknown, examId: ExamId = "az104"): OfflineManifest {
+  ExamIdSchema.parse(examId);
+  return examId === "sc900" ? Sc900OfflineManifestSchema.parse(value) : Az104OfflineManifestSchema.parse(value);
+}
+
+export async function readOfflineManifest(response: Response, examId: ExamId = "az104"): Promise<OfflineManifest> {
+  if (!response.ok) throw new Error("This exam does not provide an approved offline download.");
+  if (!response.body) throw new Error("The offline manifest is empty.");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > OFFLINE_MANIFEST_MAX_BYTES) {
+        void reader.cancel().catch(() => {});
+        throw new Error("Offline manifest exceeds the 4 MiB size limit.");
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return parseOfflineManifest(JSON.parse(new TextDecoder().decode(bytes)), examId);
+}
 
 export const OfflineReferencesSchema = z.array(z.object({
   releaseId: CleanReleaseIdSchema, questionIds: z.array(questionId).max(606),
@@ -133,6 +205,7 @@ export function selectOfflineFiles(manifest: OfflineManifest, references: Offlin
       return file.releaseId === manifest.learningReleaseId && neededIds.has(file.questionId!);
     }
     return file.kind === "shell" || !file.releaseId || file.releaseId === manifest.releaseId ||
-      (selected.has(file.releaseId) && (file.part === "catalog" || selected.get(file.releaseId)!.has(file.questionId!)));
+      (selected.has(file.releaseId) && (["catalog", "topics", "eligibility", "learning-manifest"].includes(file.part ?? "") ||
+        selected.get(file.releaseId)!.has(file.questionId!)));
   });
 }

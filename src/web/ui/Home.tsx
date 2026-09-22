@@ -1,6 +1,7 @@
 import type { PracticeAttempt } from "../engine.js";
 import type { StudyCatalog } from "../types.js";
 import { Icon } from "../components/Icon.js";
+import { examConfig, examIdOf } from "../../domain/exams.js";
 
 export function Home({ catalog, activeAttempt, onPractice, onExam, onLibrary, onResume, signedIn = false }: {
   catalog: StudyCatalog; activeAttempt: PracticeAttempt | null;
@@ -8,8 +9,9 @@ export function Home({ catalog, activeAttempt, onPractice, onExam, onLibrary, on
   onResume: (attempt: PracticeAttempt) => void;
   signedIn?: boolean;
 }) {
+  const exam = examConfig(examIdOf(catalog));
   return <section className="landing-page">
-    <div className="landing-heading"><h1>AZ-104 practice</h1>
+    <div className="landing-heading"><h1>{exam.code} practice</h1>
       <p>Practice questions, explanations, and source discussions. Choose a mode to begin.</p></div>
     {activeAttempt && <div className="landing-resume">
       <div><strong>Continue your session</strong><p>{activeAttempt.mode === "exam" ? "Exam" : "Practice"}:
@@ -21,7 +23,7 @@ export function Home({ catalog, activeAttempt, onPractice, onExam, onLibrary, on
         <h2>Practice</h2><p>10, 20, 30, or 40 questions. Reveal feedback after each answer, with no time limit.</p>
         <button className="button button-primary" onClick={onPractice}>Set up practice</button></article>
       <article><span className="practice-mode-icon"><Icon name="clock" size={22} /></span>
-        <h2>Exam</h2><p>40 questions in 60 minutes. Review your answers and explanations when the session ends.</p>
+        <h2>Exam</h2><p>{exam.mockQuestionCount} questions in {exam.mockDurationMinutes} minutes. Review your answers and explanations when the session ends.</p>
         <button className="button button-secondary" onClick={onExam}>Set up exam</button></article>
       <article><span className="practice-mode-icon"><Icon name="book" size={22} /></span>
         <h2>Question library</h2><p>Search all {catalog.counts.questions} questions and open any question or discussion directly.</p>

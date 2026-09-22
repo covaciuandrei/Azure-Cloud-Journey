@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { assertExam, ExamIdSchema, examConfig, examIdOf, type ExamId } from "../domain/exams.js";
+import { bankContract } from "./bank-contract.js";
 import type { QuestionSummary, StudyDocument } from "./types.js";
 
 export type PracticeMode = "exam" | "free";
@@ -28,6 +30,7 @@ export interface PracticeScore {
 
 export interface PracticeAttempt {
   schemaVersion: 1;
+  examId?: ExamId | undefined;
   id: string;
   releaseId: string;
   dataSource?: "firebase" | "snapshot" | undefined;
@@ -91,6 +94,7 @@ const timestamp = z.number().int().nonnegative().finite();
 
 export const PracticeAttemptSchema = z.object({
   schemaVersion: z.literal(1),
+  examId: ExamIdSchema.optional(),
   id: z.string().min(1),
   releaseId: z.string().min(1),
   dataSource: z.enum(["firebase", "snapshot"]).optional(),
@@ -139,9 +143,10 @@ export const PracticeAttemptSchema = z.object({
     }
   }
   if (attempt.mode === "exam") {
-    if (attempt.deadline !== attempt.startedAt + 3_600_000) {
+    const duration = examConfig(examIdOf(attempt)).mockDurationMinutes * 60_000;
+    if (attempt.deadline !== attempt.startedAt + duration) {
       context.addIssue({
-        code: "custom", path: ["deadline"], message: "Exam deadline must be one hour after start",
+        code: "custom", path: ["deadline"], message: "Exam deadline must match this exam's practice duration",
       });
     }
   } else if (attempt.deadline !== null) {
@@ -261,6 +266,13 @@ function validateDocument(document: StudyDocument): void {
     throw new Error(`Question ${questionId} and its answer use different source revisions`);
   }
   sourceOrderedOptionIds(document);
+  const examId = examIdOf(document);
+  bankContract(examId).document.parse({
+    schemaVersion: document.schemaVersion,
+    ...(examId === "sc900" ? { examId } : {}),
+    releaseId: document.releaseId, question: document.question, answers: document.answers,
+    discussionEnabled: document.discussionEnabled,
+  });
 }
 
 export function optionOrder(document: StudyDocument, seed: string): string[] {
@@ -303,6 +315,7 @@ function generatedId(now: number): string {
 }
 
 export function createAttempt(input: {
+  examId?: ExamId;
   mode: PracticeMode;
   documents: StudyDocument[];
   now?: number;
@@ -310,6 +323,7 @@ export function createAttempt(input: {
   seed?: string;
   dataSource?: "firebase" | "snapshot";
 }): PracticeAttempt {
+  const examId = ExamIdSchema.parse(input.examId ?? "az104");
   const now = input.now ?? Date.now();
   if (!Number.isInteger(now) || now < 0) throw new Error("Attempt start time must be a non-negative integer");
   const expectedSizes = input.mode === "exam" ? [40] : [10, 20, 30, 40];
@@ -321,6 +335,7 @@ export function createAttempt(input: {
     );
   }
   input.documents.forEach(validateDocument);
+  input.documents.forEach((document) => assertExam(document, examId));
   const questionIds = input.documents.map((document) => document.question.id);
   if (!unique(questionIds)) throw new Error("Practice documents contain duplicate question IDs");
   const releaseId = input.documents[0]?.releaseId;
@@ -341,6 +356,7 @@ export function createAttempt(input: {
 
   const attempt: PracticeAttempt = {
     schemaVersion: 1,
+    ...(input.examId ? { examId } : {}),
     id,
     releaseId,
     ...(input.dataSource ? { dataSource: input.dataSource } : {}),
@@ -351,7 +367,7 @@ export function createAttempt(input: {
     responses,
     currentIndex: 0,
     startedAt: now,
-    deadline: input.mode === "exam" ? now + 3_600_000 : null,
+    deadline: input.mode === "exam" ? now + examConfig(examId).mockDurationMinutes * 60_000 : null,
     finishedAt: null,
     status: "active",
     score: null,
@@ -383,6 +399,7 @@ export function validateAttemptDocuments(
   for (const questionId of attempt.questionIds) {
     const document = byId.get(questionId);
     if (document === undefined) throw new Error(`Restored attempt is missing question ${questionId}`);
+    assertExam(document, examIdOf(attempt));
     if (document.releaseId !== attempt.releaseId) {
       throw new Error(`Question ${questionId} belongs to a different release`);
     }

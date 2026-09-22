@@ -58,7 +58,7 @@ export const TopicMapSchema = z.object({
 }).strict().refine((value) => Object.keys(value.assignments).length === 606, "Every source question identity needs topics.");
 export type TopicMap = z.infer<typeof TopicMapSchema>;
 
-export function matchesTopics(topicIds: readonly TopicId[] | undefined, selected: readonly TopicId[]): boolean {
+export function matchesTopics(topicIds: readonly string[] | undefined, selected: readonly string[]): boolean {
   if (!topicIds?.length) throw new Error("Question topic classification is missing.");
   return topicIds.some((id) => selected.includes(id));
 }

@@ -31,11 +31,57 @@ function hex(seed: string): string {
 
 interface ManifestObject {
   schemaVersion: 1;
+  examId?: "az104" | "sc900";
   buildId: string;
   releaseId: string;
   learningReleaseId?: string;
   counts: { questions: number; comments: number; images: number };
   files: Array<Record<string, unknown>>;
+}
+
+function buildSc900Fixture(seed = "sc900"): Fixture {
+  const releaseId = `r_${hex(seed)}`;
+  const questionId = `q_${hex(`${seed}-question`)}`;
+  const files = new Map<string, Buffer>();
+  const entries: Array<Record<string, unknown>> = [];
+  const root = "/exams/sc900";
+  const add = (path: string, value: string, properties: Record<string, unknown>) => {
+    const bytes = Buffer.from(value);
+    files.set(path, bytes);
+    entries.push({ url: path, sha256: sha256Hex(bytes), bytes: bytes.length, ...properties });
+  };
+  add("/index.html", `<html>${seed}</html>`, { kind: "shell" });
+  add(`/assets/index-${hex(seed)}.js`, `console.log("${seed}");`, { kind: "shell" });
+  add(`${root}/manifest.json`, JSON.stringify({ examId: "sc900", releaseId, captureLedgerDigest: hex(`capture-${seed}`) }), { kind: "data" });
+  add(`${root}/availability.json`, JSON.stringify({
+    schemaVersion: 1, examId: "sc900", activated: true, kind: "approved-source",
+    bankReleaseId: releaseId, courseReleaseId: `c_${hex(seed)}`, sourceCaptureDigest: hex(`capture-${seed}`),
+    approvedBy: "synthetic fixture coordinator", approvedAt: "2026-09-22T00:00:00Z",
+  }), { kind: "data" });
+  const coursePath = `${root}/course/releases/c_${hex(seed)}/sc900.json`;
+  const courseContent = JSON.stringify({ examId: "sc900", seed });
+  add(`${root}/course/current.json`, JSON.stringify({
+    schemaVersion: 3, id: "sc900", active: true, releaseId: `c_${hex(seed)}`,
+    url: coursePath.slice(1), sha256: sha256Hex(Buffer.from(courseContent)),
+  }), { kind: "data" });
+  add(coursePath, courseContent, { kind: "data" });
+  add(`${root}/content/${releaseId}/catalog.json`, JSON.stringify({ releaseId }), { kind: "data", releaseId, part: "catalog" });
+  add(`${root}/content/${releaseId}/questions/${questionId}.json`, JSON.stringify({ questionId }), {
+    kind: "data", releaseId, questionId, part: "question",
+  });
+  for (const part of ["topics", "eligibility", "learning-manifest"]) {
+    add(`${root}/content/${releaseId}/${part === "learning-manifest" ? "learning/manifest" : part}.json`,
+      JSON.stringify({ examId: "sc900", part }), { kind: "data", releaseId, part });
+  }
+  add(`${root}/content/${releaseId}/learning/questions/${questionId}.json`, JSON.stringify({ questionId, teaching: seed }), {
+    kind: "data", releaseId, questionId, part: "explanation",
+  });
+  const manifest: ManifestObject = {
+    schemaVersion: 1, examId: "sc900", buildId: hex(`build-${seed}`), releaseId, learningReleaseId: releaseId,
+    counts: { questions: 1, comments: 0, images: 0 }, files: entries,
+  };
+  files.set(`${root}/offline-manifest.json`, Buffer.from(JSON.stringify(manifest)));
+  return { manifest, files, releaseId, legacyReleaseId: "", questionIds: [questionId], legacyQuestionIds: [], imageShas: [] };
 }
 
 interface Fixture {
@@ -205,7 +251,7 @@ function createFakeFetch(filesMap: Map<string, Buffer>, server: FakeServer) {
     const raw = typeof input === "string" ? input : (input as { url: string }).url;
     const pathname = new URL(raw, ORIGIN).pathname;
     if (server.offline) throw new TypeError("network request failed");
-    if (pathname !== MANIFEST_PATH) {
+    if (pathname !== MANIFEST_PATH && pathname !== "/exams/sc900/offline-manifest.json") {
       server.fetchLog.push(pathname);
       if (server.blockGate) await server.blockGate.promise;
       if (server.hangAfter !== undefined) {
@@ -258,9 +304,9 @@ function createWorker(cacheStorage: FakeCacheStorage, fetchImpl: (input: unknown
     return client;
   }
 
-  async function status(id = "status"): Promise<any> {
+  async function status(id = "status", examId: "az104" | "sc900" = "az104"): Promise<any> {
     const client = makeClient();
-    await dispatch("message", { data: { protocol: PROTOCOL, id, type: "STATUS" }, source: client, _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); } });
+    await dispatch("message", { data: { protocol: PROTOCOL, id, type: "STATUS", examId }, source: client, _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); } });
     return (client.received[0] as any).state;
   }
 
@@ -357,6 +403,215 @@ async function bytesOf(response: Response | undefined): Promise<Buffer> {
   if (!response) throw new Error("No response");
   return Buffer.from(await response.arrayBuffer());
 }
+
+test("SC-900 updates retain AZ-104 active pointers, shell assets and media across activation", async () => {
+  const az104 = buildFixture("az-retained");
+  const first = buildSc900Fixture("sc-first");
+  const second = buildSc900Fixture("sc-second");
+  const sharedSha = az104.imageShas[0]!;
+  const sharedBytes = az104.files.get(`/content/${az104.releaseId}/media/${sharedSha}.png`)!;
+  const sharedPath = `/exams/sc900/content/${first.releaseId}/media/${sharedSha}.png`;
+  first.manifest.counts.images = 1;
+  first.manifest.files.push({ url: sharedPath, kind: "image", releaseId: first.releaseId, sha256: sharedSha, bytes: sharedBytes.length });
+  first.files.set(sharedPath, sharedBytes);
+  first.files.set("/exams/sc900/offline-manifest.json", Buffer.from(JSON.stringify(first.manifest)));
+  const files = new Map([...az104.files, ...first.files]);
+  for (const [path, bytes] of az104.files) if (!path.startsWith("/exams/")) files.set(path, bytes);
+  const storage = createCacheStorage();
+  const server = createServer();
+  const fetcher = createFakeFetch(files, server);
+  const worker = createWorker(storage, fetcher);
+  await (await worker.download("az-initial")).event.wait;
+  const azState = await worker.status();
+  const azCacheNames = (await storage.keys()).filter((name) => name.startsWith("az104-offline-"));
+  const azPointer = await bytesOf(await (await storage.open("az104-offline-meta")).match(`${ORIGIN}/__az104_offline_meta__/active.json`));
+  for (const [path, bytes] of first.files) files.set(path, bytes);
+  await (await worker.rpc("DOWNLOAD", "sc-first", { examId: "sc900" })).wait;
+  assert.equal((await worker.status("sc-state", "sc900")).buildId, first.manifest.buildId);
+  for (const [path, bytes] of second.files) files.set(path, bytes);
+  await (await worker.rpc("DOWNLOAD", "sc-second", { examId: "sc900" })).wait;
+  assert.equal((await worker.status("sc-state", "sc900")).buildId, second.manifest.buildId);
+  assert.equal((await (await storage.open("sc900-offline-media")).keys()).length, 0);
+  assert.equal((await (await storage.open("az104-offline-media")).keys()).length, az104.manifest.counts.images);
+  assert.deepEqual((await storage.keys()).filter((name) => name.startsWith("az104-offline-")), azCacheNames);
+  assert.deepEqual(await bytesOf(await (await storage.open("az104-offline-meta")).match(`${ORIGIN}/__az104_offline_meta__/active.json`)), azPointer);
+  const restarted = createWorker(storage, fetcher);
+  await restarted.dispatch("activate", { _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); } });
+  server.offline = true;
+  const navigation = await restarted.fetchRequest("/", { mode: "navigate" });
+  assert.deepEqual(await bytesOf(navigation.response), second.files.get("/index.html"));
+  assert.equal((await restarted.status()).buildId, azState.buildId);
+  assert.equal((await restarted.status("sc-state", "sc900")).buildId, second.manifest.buildId);
+  for (const path of [
+    "/data/manifest.json", "/assets/index-abc123.js",
+    `/content/${az104.releaseId}/questions/${az104.questionIds[0]}.json`,
+    `/content/${az104.releaseId}/media/${az104.imageShas[0]}.png`,
+  ]) {
+    const hit = await restarted.fetchRequest(path, { headers: { "X-AZ104-Offline": "1" } });
+    assert.deepEqual(await bytesOf(hit.response), az104.files.get(path));
+  }
+  const scPath = `/exams/sc900/content/${second.releaseId}/questions/${second.questionIds[0]}.json`;
+  assert.deepEqual(await bytesOf((await restarted.fetchRequest(scPath, {
+    headers: { "X-Study-Offline": "1", "X-Study-Exam": "sc900" },
+  })).response), second.files.get(scPath));
+  assert.deepEqual(await bytesOf((await restarted.fetchRequest("/exams/sc900/availability.json", {
+    headers: { "X-Study-Offline": "1", "X-Study-Exam": "sc900" },
+  })).response), second.files.get("/exams/sc900/availability.json"));
+  for (const path of [
+    `/exams/sc900/content/${second.releaseId}/topics.json`,
+    `/exams/sc900/content/${second.releaseId}/eligibility.json`,
+    `/exams/sc900/content/${second.releaseId}/learning/manifest.json`,
+    `/exams/sc900/content/${second.releaseId}/learning/questions/${second.questionIds[0]}.json`,
+  ]) {
+    assert.deepEqual(await bytesOf((await restarted.fetchRequest(path, {
+      headers: { "X-Study-Offline": "1", "X-Study-Exam": "sc900" },
+    })).response), second.files.get(path));
+  }
+  const missingOld = await restarted.fetchRequest(`/exams/sc900/content/${first.releaseId}/questions/${first.questionIds[0]}.json`, {
+    headers: { "X-Study-Offline": "1" },
+  });
+  assert.equal(missingOld.response?.status, 503);
+  const foreign = await restarted.fetchRequest("/data/manifest.json", { headers: { "X-Study-Offline": "1", "X-Study-Exam": "sc900" } });
+  assert.equal(foreign.response?.status, 503);
+  const unknown = await restarted.fetchRequest(scPath, { headers: { "X-Study-Offline": "1", "X-Study-Exam": "unknown" } });
+  assert.equal(unknown.response?.status, 503);
+});
+
+test("per-exam remove leaves the other package intact and REMOVE_ALL clears only exam-owned caches", async () => {
+  const az104 = buildFixture("az-remove");
+  const sc900 = buildSc900Fixture("sc-remove");
+  const storage = createCacheStorage();
+  // Matching shell URLs must contain the expected bytes for the current package.
+  const files = new Map(az104.files);
+  const fetcher = createFakeFetch(files, createServer());
+  const current = createWorker(storage, fetcher);
+  await (await current.download("az")).event.wait;
+  for (const [path, bytes] of sc900.files) files.set(path, bytes);
+  await (await current.rpc("DOWNLOAD", "sc", { examId: "sc900" })).wait;
+  assert.equal((await current.status()).ready, true);
+  assert.equal((await current.status("sc", "sc900")).ready, true);
+  await (await current.rpc("REMOVE", "remove-sc", { examId: "sc900" })).wait;
+  assert.equal((await current.status()).ready, true);
+  assert.equal((await current.status("sc", "sc900")).ready, false);
+  await (await current.rpc("DOWNLOAD", "sc-again", { examId: "sc900" })).wait;
+  await storage.open("account-cache");
+  await (await current.rpc("REMOVE_ALL", "clear", { examId: "sc900" })).wait;
+  assert.deepEqual((await storage.keys()).filter((name) => /^(az104|sc900)-offline-(data-|media)/.test(name)), []);
+  assert.equal(await storage.has("account-cache"), true);
+  assert.equal((await current.status()).ready, false);
+  assert.equal((await current.status("sc", "sc900")).ready, false);
+});
+
+test("SC-900 fails closed without its manifest and refuses foreign manifests and paths", async () => {
+  const sc900 = buildSc900Fixture("sc-reject");
+  const manifestPath = "/exams/sc900/offline-manifest.json";
+  const root = `/exams/sc900/course/releases/c_${hex("sc-reject")}`;
+  const invalidFiles = [
+    { url: "/data/manifest.json", bytes: 1 },
+    { url: `/content/${sc900.releaseId}/catalog.json`, bytes: 1 },
+    { url: `${root}/az104.json`, bytes: 1 },
+    { url: `${root}/../sc900.json`, bytes: 1 },
+    { url: `${root}/%2e%2e/sc900.json`, bytes: 1 },
+    { url: `${root}\\sc900.json`, bytes: 1 },
+    { url: `${root}/sc900.json?auth=secret`, bytes: 1 },
+    { url: `${root}/sc900.json#fragment`, bytes: 1 },
+    { url: `https://example.test${root}/sc900.json`, bytes: 1 },
+    { url: `//example.test${root}/sc900.json`, bytes: 1 },
+    { url: `${root}/sc900.json`, bytes: 4 * 1024 * 1024 + 1 },
+    { url: "/exams/sc900/course/current.json", bytes: 4 * 1024 * 1024 + 1 },
+    { url: "/exams/sc900/availability.json", bytes: 8_001 },
+  ];
+  const candidates = [
+    null,
+    { ...sc900.manifest, examId: undefined },
+    { ...sc900.manifest, examId: "az104" },
+    { ...sc900.manifest, files: sc900.manifest.files.filter((file) => file.url !== "/exams/sc900/availability.json") },
+    ...invalidFiles.map((file) => ({
+      ...sc900.manifest, files: [...sc900.manifest.files, { kind: "data", sha256: hex("bad"), ...file }],
+    })),
+  ];
+  for (const candidate of candidates) {
+    const files = new Map(sc900.files);
+    if (candidate) files.set(manifestPath, Buffer.from(JSON.stringify(candidate)));
+    else files.delete(manifestPath);
+    const server = createServer();
+    const worker = createWorker(createCacheStorage(), createFakeFetch(files, server));
+    const request = await worker.rpc("DOWNLOAD", "rejected", { examId: "sc900" });
+    await request.wait;
+    assert.equal(typeof (request.client.received[0] as { error?: string }).error, "string");
+    assert.equal((await worker.status("sc", "sc900")).ready, false);
+    assert.deepEqual(server.fetchLog, []);
+  }
+});
+
+test("unknown exam commands cannot start a download or delete an installed package", async () => {
+  const storage = createCacheStorage();
+  await storage.open("az104-offline-media");
+  const worker = createWorker(storage, createFakeFetch(new Map(), createServer()));
+  for (const type of ["DOWNLOAD", "REMOVE", "REMOVE_ALL"]) {
+    const request = await worker.rpc(type, type, { examId: "../az104" });
+    await request.wait;
+    assert.match((request.client.received[0] as { error: string }).error, /Unknown offline exam/);
+    assert.equal(await storage.has("az104-offline-media"), true);
+  }
+});
+
+test("SC-900 downloads fail closed on inactive, synthetic or mismatched activation records", async () => {
+  const fixture = buildSc900Fixture("sc-activation");
+  const path = "/exams/sc900/availability.json";
+  const valid = JSON.parse(fixture.files.get(path)!.toString("utf8")) as Record<string, unknown>;
+  for (const record of [
+    { schemaVersion: 1, examId: "sc900", activated: false },
+    { ...valid, kind: "original-synthetic-demo" },
+    { ...valid, bankReleaseId: `r_${hex("another-bank")}` },
+    { ...valid, courseReleaseId: `c_${hex("another-course")}` },
+    { ...valid, sourceCaptureDigest: hex("another-capture") },
+    { ...valid, approvedBy: " " },
+    { ...valid, approvedAt: "not-a-date" },
+    { ...valid, extra: "unapproved metadata" },
+  ]) {
+    const files = new Map(fixture.files);
+    const bytes = Buffer.from(JSON.stringify(record));
+    const manifest = structuredClone(fixture.manifest);
+    const entry = manifest.files.find((file) => file.url === path)!;
+    Object.assign(entry, { sha256: sha256Hex(bytes), bytes: bytes.length });
+    files.set(path, bytes);
+    files.set("/exams/sc900/offline-manifest.json", Buffer.from(JSON.stringify(manifest)));
+    const worker = createWorker(createCacheStorage(), createFakeFetch(files, createServer()));
+    await (await worker.rpc("DOWNLOAD", "activation", { examId: "sc900" })).wait;
+    const state = await worker.status("sc", "sc900");
+    assert.equal(state.ready, false);
+    assert.match(state.error, /availability|activation/);
+  }
+});
+
+test("SC-900 descriptor and course downloads cancel oversized streams at the 4 MiB bound", async () => {
+  const fixture = buildSc900Fixture("sc-stream");
+  const descriptorPath = "/exams/sc900/offline-manifest.json";
+  const coursePath = fixture.manifest.files.find((file) => String(file.url).includes("/course/releases/c_"))!.url as string;
+  for (const path of [descriptorPath, coursePath]) {
+    const files = new Map(fixture.files);
+    const manifest = structuredClone(fixture.manifest);
+    if (path === coursePath) manifest.files.find((file) => file.url === path)!.bytes = 4 * 1024 * 1024;
+    files.set(descriptorPath, Buffer.from(JSON.stringify(manifest)));
+    const fetcher = createFakeFetch(files, createServer());
+    let cancelled = 0;
+    let pulled = 0;
+    const worker = createWorker(createCacheStorage(), async (input) => {
+      const url = typeof input === "string" ? input : (input as { url: string }).url;
+      if (new URL(url, ORIGIN).pathname !== path) return fetcher(input);
+      return new Response(new ReadableStream<Uint8Array>({
+        pull(controller) { pulled++; controller.enqueue(new Uint8Array(1024 * 1024)); },
+        cancel() { cancelled++; },
+      }));
+    });
+    const request = await worker.rpc("DOWNLOAD", "oversized", { examId: "sc900" });
+    await request.wait;
+    assert.equal((await worker.status("sc", "sc900")).ready, false);
+    assert.equal(cancelled, path === descriptorPath ? 1 : 3);
+    assert.ok(pulled <= (path === descriptorPath ? 6 : 18));
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Tests

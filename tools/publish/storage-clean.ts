@@ -9,6 +9,7 @@ import { buildOfflineManifest } from "../web/offline-manifest.js";
 import { readTopicMap } from "../topics/data.js";
 import { loadStudyPublication, publicationFileBytes } from "../learning/publication.js";
 import { loadCoursePublication } from "../course/publication.js";
+import { loadSc900HostingPublication } from "../web/sc900-publication.js";
 import { inspectBucketPrivacy, type BucketPrivacyReport } from "./bucket-privacy.js";
 import { pacificQuotaDay } from "./quota.js";
 
@@ -611,6 +612,8 @@ export async function validateHostingTree(plan: CleanPlan): Promise<{ files: num
   const expected = new Map(publication.files);
   const course = await loadCoursePublication();
   for (const [path, value] of course.files) expected.set(path, { kind: "json", value });
+  const sc900 = await loadSc900HostingPublication();
+  for (const [path, value] of sc900.files) expected.set(path, value);
   const index = await readFile("dist/index.html", "utf8");
   const compiledAssets = new Set([...index.matchAll(/(?:src|href)=["']\/(assets\/[^"']+)["']/g)].map((match) => match[1]!));
   let bytes = 0;
@@ -635,6 +638,12 @@ export async function validateHostingTree(plan: CleanPlan): Promise<{ files: num
       if (content.toString("utf8") !== `${JSON.stringify(expectedManifest, null, 2)}\n`) {
         throw new Error("Hosting offline manifest does not match the actual sanitized build.");
       }
+    } else if (path === "exams/sc900/offline-manifest.json") {
+      if (!sc900.active) throw new Error("An inactive SC900 exam cannot ship an offline package.");
+      const expectedManifest = await buildOfflineManifest(process.cwd(), "dist", "sc900");
+      if (content.toString("utf8") !== `${JSON.stringify(expectedManifest, null, 2)}\n`) {
+        throw new Error("SC900 offline manifest differs from its approved immutable publication.");
+      }
     } else if (path === "data/topics.json") {
       if (content.toString("utf8") !== `${JSON.stringify(await readTopicMap(), null, 2)}\n`) {
         throw new Error("Hosting topic data differs from the validated classification map.");
@@ -653,6 +662,9 @@ export async function validateHostingTree(plan: CleanPlan): Promise<{ files: num
       !paths.includes("data/course.json") || !paths.includes(course.pointer.url)) {
     throw new Error("Hosting dist is missing the offline worker or its verified download manifest.");
   }
+  if (sc900.active && !paths.includes("exams/sc900/offline-manifest.json")) {
+    throw new Error("Active SC900 Hosting publication is missing its verified offline manifest.");
+  }
   if ([...compiledAssets].some((asset) => !paths.includes(asset))) throw new Error("Compiled Hosting asset is missing.");
   return { files: paths.length, bytes };
 }
@@ -664,9 +676,20 @@ export async function hostingBuildIdentity(): Promise<{ distDigest: string; sour
     ...(await regularFiles("tools/learning")).map((path) => `tools/learning/${path}`),
     ...(await regularFiles("tools/eligibility")).map((path) => `tools/eligibility/${path}`),
     ...(await regularFiles("tools/course")).map((path) => `tools/course/${path}`),
+    ...(await regularFiles("tools/sc900")).map((path) => `tools/sc900/${path}`),
     ...(await regularFiles("content/networking")).map((path) => `content/networking/${path}`),
+    ...(await regularFiles("content/az104")).map((path) => `content/az104/${path}`),
+    ...(await regularFiles("content/sc900")).map((path) => `content/sc900/${path}`),
     "index.html", "public/favicon.svg", "public/offline-worker.js", "package.json", "package-lock.json", "tsconfig.json", "vite.config.ts",
   ].sort();
+  const selectionPath = ".data/sc900-publication/hosting.json";
+  try {
+    await lstat(selectionPath);
+    sourceFiles.push(selectionPath);
+    sourceFiles.sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   const compiledTimes = await Promise.all(distFiles.filter((path) => /^assets\/.*\.js$/.test(path))
     .map(async (path) => (await lstat(`dist/${path}`)).mtimeMs));
   if (!compiledTimes.length) throw new Error("No compiled JavaScript build found.");

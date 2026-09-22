@@ -1,11 +1,16 @@
 import { EligibilityPolicySchema, retirementFor, type EligibilityPolicy } from "../domain/eligibility.js";
 import type { StudyCatalog, StudyDocument, StudyRepository } from "./types.js";
+import { Sc900EligibilityPolicySchema } from "../domain/sc900Eligibility.js";
+import { assertExam, examBaseUrl, type ExamId } from "../domain/exams.js";
+import { loadSc900Manifest } from "./sc900-http.js";
 
-export function httpEligibilityLoader(baseUrl: string, fetcher: typeof fetch = fetch) {
-  const base = new URL(baseUrl);
+export function httpEligibilityLoader(baseUrl: string, fetcher: typeof fetch = fetch, examId: ExamId = "az104") {
+  const base = new URL(examBaseUrl(baseUrl, examId));
   if (!["http:", "https:"].includes(base.protocol) || base.username || base.password) throw new Error("Invalid relevance-policy origin.");
   return async () => {
-    const response = await fetcher(new URL("data/eligibility.json", base).href, {
+    const path = examId === "sc900"
+      ? `content/${(await loadSc900Manifest(baseUrl, fetcher)).releaseId}/eligibility.json` : "data/eligibility.json";
+    const response = await fetcher(new URL(path, base).href, {
       cache: "no-store", credentials: "same-origin", redirect: "error",
     });
     if (!response.ok) throw new Error("The current question list could not be loaded. Retry online or update the offline download.");
@@ -15,16 +20,22 @@ export function httpEligibilityLoader(baseUrl: string, fetcher: typeof fetch = f
 }
 
 export function withCurrentQuestions(repository: StudyRepository, readPolicy: () => Promise<unknown>): StudyRepository {
+  const examId = repository.examId ?? "az104";
   let pending: Promise<EligibilityPolicy> | undefined;
   const policy = () => {
     if (!pending) {
-      const next = readPolicy().then((value) => EligibilityPolicySchema.parse(value));
+      const next = readPolicy().then((value) => {
+        const parsed = (examId === "sc900" ? Sc900EligibilityPolicySchema : EligibilityPolicySchema).parse(value);
+        assertExam(parsed, examId);
+        return parsed;
+      });
       pending = next;
       void next.catch(() => { if (pending === next) pending = undefined; });
     }
     return pending;
   };
   const currentCatalog = async (catalog: StudyCatalog) => {
+    assertExam(catalog, examId);
     const eligibility = await policy();
     const active = new Set(eligibility.activeQuestionIds);
     const reviewed = new Set(eligibility.reviewedQuestionIds);
@@ -40,6 +51,7 @@ export function withCurrentQuestions(repository: StudyRepository, readPolicy: ()
     return { ...catalog, questions, counts: eligibility.activeCounts };
   };
   const mark = async (document: StudyDocument): Promise<StudyDocument> => {
+    assertExam(document, examId);
     const retired = retirementFor(await policy(), document.question);
     return retired ? { ...document, retirement: retired } : document;
   };

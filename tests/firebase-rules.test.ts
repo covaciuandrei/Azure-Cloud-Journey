@@ -12,6 +12,7 @@ import {
 
 const projectId = "demo-az104-study";
 const publicAsset = `published/az104/release-1/assets/${"a".repeat(64)}.png`;
+const sc900Asset = `published/sc900/r_${"c".repeat(64)}/assets/${"d".repeat(64)}.webp`;
 const privateAsset = "private/az104/raw/page-1.json";
 const stagingAsset = `staging/az104/release-1/assets/${"a".repeat(64)}.png`;
 const protectedAssets = [
@@ -20,6 +21,12 @@ const protectedAssets = [
   "published/az104/release-1/archives/page-1.json",
   "published/az104/release-1/assets/nested/raw.json",
   "published/another-exam/release-1/assets/image.png",
+  `published/sc900/release-1/assets/${"d".repeat(64)}.webp`,
+  `published/sc900/r_${"c".repeat(64)}/assets/image.webp`,
+  `published/sc900/r_${"c".repeat(64)}/assets/${"d".repeat(64)}.json`,
+  `published/sc900/r_${"c".repeat(64)}/assets/nested/${"d".repeat(64)}.webp`,
+  `staging/sc900/r_${"c".repeat(64)}/assets/${"d".repeat(64)}.webp`,
+  `published/sc900/r_${"c".repeat(64)}/archives/page.json`,
   "unrecognized/image.png",
 ];
 const privateDocuments = [
@@ -92,7 +99,7 @@ describe(
           batch.set(firestore.doc(path), { published: true });
         }
         await batch.commit();
-        for (const path of [publicAsset, ...protectedAssets]) {
+        for (const path of [publicAsset, sc900Asset, ...protectedAssets]) {
           await context.storage().ref(path).putString("synthetic test fixture", "raw");
         }
       });
@@ -302,6 +309,173 @@ describe(
       }
       await assertFails(member.collection(`studyExplanations/${release}/questions`).get());
       await assertFails(member.doc("studyExplanations/unapproved/questions/not-a-question").get());
+    });
+
+    it("isolates SC900 practice envelopes, revisions and bounded sessions from AZ104", async () => {
+      const alice = environment.authenticatedContext("alice", { email_verified: true }).firestore();
+      const bob = environment.authenticatedContext("bob", { email_verified: true }).firestore();
+      const anonymous = environment.unauthenticatedContext().firestore();
+      const unverified = environment.authenticatedContext("alice", { email_verified: false }).firestore();
+      const ids = Array.from({ length: 10 }, (_, i) => `q_${String(i).padStart(64, "a")}`);
+      const attempt = {
+        schemaVersion: 1, examId: "sc900", id: "same-session-id", releaseId: `r_${"a".repeat(64)}`,
+        mode: "free", size: 10, questionIds: ids,
+        optionOrders: Object.fromEntries(ids.map((id) => [id, []])),
+        responses: Object.fromEntries(ids.map((id) => [id, {
+          selectedIds: [], note: "", submitted: false, flagged: false, selfAssessment: null,
+        }])),
+        currentIndex: 0, startedAt: 100, deadline: null, finishedAt: null, status: "active", score: null,
+      };
+      const activePath = "users/alice/exams/sc900/state/active";
+      const sessionsPath = "users/alice/exams/sc900/sessions";
+      const active = { schemaVersion: 1, examId: "sc900", revision: "sc-revision",
+        attempt, updatedAt: serverTimestamp() };
+      await assertSucceeds(alice.doc(activePath).set(active));
+      await assertSucceeds(alice.doc(activePath).get());
+      for (const client of [bob, anonymous, unverified]) {
+        await assertFails(client.doc(activePath).get());
+        await assertFails(client.doc(activePath).set(active));
+        await assertFails(client.collection(sessionsPath).limit(20).get());
+      }
+      const { examId: ignoredExam, ...legacyAttempt } = attempt;
+      const { examId: ignoredEnvelope, ...legacyEnvelope } = active;
+      for (const invalid of [
+        legacyEnvelope, { ...active, examId: "az104" }, { ...active, extra: true },
+        { ...active, attempt: legacyAttempt },
+        { ...active, attempt: { ...attempt, examId: "az104" } },
+        { ...active, attempt: { ...attempt, extra: true } },
+        { ...active, updatedAt: 123 },
+      ]) await assertFails(alice.doc(activePath).set(invalid));
+      await assertFails(alice.doc("users/alice/state/active").set(active));
+      await assertFails(alice.doc("users/alice/state/active").set(legacyEnvelope));
+      await assertFails(alice.doc("users/bob/exams/sc900/state/active").set(active));
+      await assertFails(alice.doc("users/alice/exams/az500/state/active").set(active));
+      await assertFails(alice.doc(activePath).delete());
+      await assertFails(alice.collection("users/alice/exams/sc900/state").get());
+      await assertSucceeds(alice.doc(activePath).set({ ...active, attempt: null }));
+      await assertFails(alice.doc(activePath).set({ ...legacyEnvelope, attempt: null }));
+
+      const emptyBucket = { correct: 0, incorrect: 0, unanswered: 0, total: 0 };
+      const completed = { ...attempt, status: "completed", finishedAt: 1_000,
+        score: { automatic: { correct: 0, incorrect: 0, unanswered: 10, total: 10 },
+          provisional: emptyBucket, manual: emptyBucket, totalQuestions: 10 } };
+      const history = { schemaVersion: 1, examId: "sc900", attempt: completed,
+        finishedAt: 1_000, updatedAt: serverTimestamp() };
+      await assertSucceeds(alice.doc(`${sessionsPath}/${attempt.id}`).set(history));
+      await assertSucceeds(alice.collection(sessionsPath).orderBy("finishedAt", "desc").limit(20).get());
+      await assertSucceeds(alice.doc(`${sessionsPath}/${attempt.id}`).get());
+      await assertFails(bob.doc(`${sessionsPath}/${attempt.id}`).get());
+      await assertFails(bob.doc(`${sessionsPath}/${attempt.id}`).set(history));
+      await assertFails(alice.collection(sessionsPath).get());
+      await assertFails(alice.collection(sessionsPath).limit(21).get());
+      await assertFails(alice.doc(`${sessionsPath}/wrong-id`).set(history));
+      await assertFails(alice.doc(`${sessionsPath}/${attempt.id}`).set({ ...history, examId: "az104" }));
+      await assertFails(alice.doc(`${sessionsPath}/${attempt.id}`).set({ ...history, extra: true }));
+      await assertFails(alice.doc(`${sessionsPath}/${attempt.id}`).set({ ...history,
+        attempt: { ...completed, examId: "az104" } }));
+      const { examId: ignoredHistoryExam, ...legacyHistory } = history;
+      await assertFails(alice.doc(`${sessionsPath}/${attempt.id}`).set(legacyHistory));
+      await assertFails(alice.doc(`users/alice/history/${attempt.id}`).set(history));
+      await assertFails(alice.doc(`${sessionsPath}/${attempt.id}`).delete());
+      assert.equal(ignoredExam, ignoredEnvelope);
+      assert.equal(ignoredHistoryExam, "sc900");
+    });
+
+    it("requires the SC900 45-minute mock deadline without changing AZ104's deadline", async () => {
+      const alice = environment.authenticatedContext("alice", { email_verified: true }).firestore();
+      const ids = Array.from({ length: 40 }, (_, index) => `q_${String(index).padStart(64, "a")}`);
+      const attempt = {
+        schemaVersion: 1, examId: "sc900", id: "timed-session", releaseId: `r_${"a".repeat(64)}`,
+        mode: "exam", size: 40, questionIds: ids,
+        optionOrders: Object.fromEntries(ids.map((id) => [id, []])),
+        responses: Object.fromEntries(ids.map((id) => [id, {}])),
+        currentIndex: 0, startedAt: 100, deadline: 2_700_100, finishedAt: null, status: "active", score: null,
+      };
+      const active = { schemaVersion: 1, examId: "sc900", revision: "timed-revision",
+        attempt, updatedAt: serverTimestamp() };
+      const scPath = "users/alice/exams/sc900/state/active";
+      await assertSucceeds(alice.doc(scPath).set(active));
+      await assertFails(alice.doc(scPath).set({ ...active, attempt: { ...attempt, deadline: 3_600_100 } }));
+      await assertSucceeds(alice.doc("users/alice/state/active").set({
+        ...active, examId: "az104", attempt: { ...attempt, examId: "az104", deadline: 3_600_100 },
+      }));
+      await assertFails(alice.doc("users/alice/state/active").set({
+        ...active, examId: "az104", attempt: { ...attempt, examId: "az104" },
+      }));
+    });
+
+    it("allows only bounded read-only SC900 bank data with immutable release paths", async () => {
+      const release = `r_${"c".repeat(64)}`;
+      const question = `q_${"d".repeat(64)}`;
+      const comment = `c_${"e".repeat(64)}`;
+      const root = `studyBanks/sc900/releases/${release}`;
+      const paths = [
+        "studyMetadata/sc900Bank", "studyMetadata/sc900Topics", "studyMetadata/sc900Learning",
+        `${root}/catalogs/sc900`, `${root}/questions/${question}`,
+        `${root}/explanations/${question}`, `${root}/comments/${comment}`,
+      ];
+      await environment.withSecurityRulesDisabled(async (context) => {
+        const batch = context.firestore().batch();
+        for (const path of paths) batch.set(context.firestore().doc(path), { questionId: question, examId: "sc900" });
+        await batch.commit();
+      });
+      const member = environment.authenticatedContext("reader", { email_verified: true }).firestore();
+      const anonymous = environment.unauthenticatedContext().firestore();
+      const unverified = environment.authenticatedContext("reader", { email_verified: false }).firestore();
+      const claimedAdmin = environment.authenticatedContext("admin", { email_verified: true, admin: true }).firestore();
+      for (const path of paths) {
+        await assertSucceeds(member.doc(path).get());
+        await assertFails(anonymous.doc(path).get());
+        await assertFails(unverified.doc(path).get());
+        for (const client of [member, anonymous, claimedAdmin]) {
+          await assertFails(client.doc(path).set({ changed: true }));
+          await assertFails(client.doc(path).update({ examId: "az104" }));
+          await assertFails(client.doc(path).delete());
+        }
+      }
+      await assertSucceeds(member.collection(`${root}/comments`).where("questionId", "==", question).limit(100).get());
+      await assertFails(member.collection(`${root}/comments`).get());
+      await assertFails(member.collection(`${root}/comments`).limit(101).get());
+      await assertFails(anonymous.collection(`${root}/comments`).limit(100).get());
+      for (const suffix of ["questions", "explanations", "catalogs"]) {
+        await assertFails(member.collection(`${root}/${suffix}`).limit(20).get());
+      }
+      for (const path of [
+        `${root}/catalogs/az104`, `${root}/questions/not-a-question`, `${root}/comments/not-a-comment`,
+        `${root}/questions/${question}/private/metadata`, `${root}/reviews/${question}`,
+        `studyBanks/sc900/releases/latest/catalogs/sc900`,
+        `studyBanks/az104/releases/${release}/catalogs/sc900`, root,
+      ]) {
+        await assertFails(member.doc(path).get());
+        await assertFails(member.doc(path).set({ published: true }));
+      }
+      await assertFails(member.collection("studyMetadata").get());
+    });
+
+    it("allows only immutable hashed SC900 asset reads without permitting client writes", async () => {
+      const storage = environment.unauthenticatedContext().storage();
+      const metadata = await assertSucceeds(storage.ref(sc900Asset).getMetadata());
+      const response = await fetch(
+        `http://${emulatorHosts.storage}/v0/b/${metadata.bucket}/o/${encodeURIComponent(sc900Asset)}?alt=media`,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "synthetic test fixture");
+      for (const path of ["published/sc900", `published/sc900/r_${"c".repeat(64)}/assets`]) {
+        await assertFails(storage.ref(path).listAll());
+      }
+      for (const context of [
+        environment.unauthenticatedContext(),
+        environment.authenticatedContext("alice", { email_verified: true }),
+        environment.authenticatedContext("claimed-admin", { admin: true }),
+      ]) {
+        const asset = context.storage().ref(sc900Asset);
+        await assertFails(Promise.resolve(asset.putString("replacement")));
+        await assertFails(asset.updateMetadata({ contentType: "text/plain" }));
+        await assertFails(asset.delete());
+        await assertFails(Promise.resolve(context.storage().ref(
+          `published/sc900/r_${"c".repeat(64)}/assets/${"e".repeat(64)}.png`,
+        ).putString("new")));
+      }
     });
 
     it("allows anonymous published-asset metadata and token-free media reads", async () => {

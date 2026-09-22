@@ -20,6 +20,15 @@ service cloud.firestore {
     match /studyMetadata/az104Learning {
       allow get: if signedInStudyUser();
     }
+    match /studyMetadata/sc900Bank {
+      allow get: if signedInStudyUser();
+    }
+    match /studyMetadata/sc900Topics {
+      allow get: if signedInStudyUser();
+    }
+    match /studyMetadata/sc900Learning {
+      allow get: if signedInStudyUser();
+    }
     match /studyReleases/{releaseId}/catalogs/az104 {
       allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$');
     }
@@ -31,25 +40,51 @@ service cloud.firestore {
       allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
         && questionId.matches('^q_[a-f0-9]{64}$');
     }
+    match /studyBanks/sc900/releases/{releaseId} {
+      match /catalogs/sc900 {
+        allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$');
+      }
+      match /questions/{questionId} {
+        allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
+          && questionId.matches('^q_[a-f0-9]{64}$');
+      }
+      match /explanations/{questionId} {
+        allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
+          && questionId.matches('^q_[a-f0-9]{64}$');
+      }
+      match /comments/{commentId} {
+        allow get: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
+          && commentId.matches('^c_[a-f0-9]{64}$');
+        allow list: if signedInStudyUser() && releaseId.matches('^r_[a-f0-9]{64}$')
+          && request.query.limit != null && request.query.limit <= 100;
+      }
+    }
 
     function cleanStudyImport(importId, releaseId) {
       return importId == 'import_96c1ceb6c7e36dce153640fa9604a6761e0ad7bae0f8012bf00ef49198c81001'
         && releaseId == 'r_61ae993f4534c2d7b370d43a31ccc51c025bac080f0459df307f4d3ecaa7f296';
     }
 
-    function validAttempt(attempt, status) {
+    function validExam(value, examId) {
+      return (examId == 'az104' && !('examId' in value))
+        || ('examId' in value && value.examId == examId);
+    }
+
+    function validAttempt(attempt, status, examId) {
       return attempt is map
         && attempt.keys().hasAll(['schemaVersion', 'id', 'releaseId', 'mode', 'size', 'questionIds',
           'optionOrders', 'responses', 'currentIndex', 'startedAt', 'deadline', 'finishedAt', 'status', 'score'])
-        && attempt.keys().hasOnly(['schemaVersion', 'id', 'releaseId', 'dataSource', 'mode', 'size', 'questionIds',
+        && attempt.keys().hasOnly(['schemaVersion', 'examId', 'id', 'releaseId', 'dataSource', 'mode', 'size', 'questionIds',
           'optionOrders', 'responses', 'currentIndex', 'startedAt', 'deadline', 'finishedAt', 'status', 'score'])
         && attempt.schemaVersion == 1
+        && validExam(attempt, examId)
         && attempt.id is string && attempt.id.size() > 0 && attempt.id.size() <= 128
         && attempt.id.matches('^[A-Za-z0-9_-]+$')
         && attempt.releaseId.matches('^r_[a-f0-9]{64}$')
         && (!('dataSource' in attempt) || attempt.dataSource in ['firebase', 'snapshot'])
         && attempt.status == status
-        && ((attempt.mode == 'exam' && attempt.size == 40 && attempt.deadline == attempt.startedAt + 3600000)
+        && ((attempt.mode == 'exam' && attempt.size == 40
+          && attempt.deadline == attempt.startedAt + (examId == 'sc900' ? 2700000 : 3600000))
           || (attempt.mode == 'free' && attempt.size in [10, 20, 30, 40] && attempt.deadline == null))
         && attempt.startedAt is int && attempt.startedAt >= 0
         && attempt.currentIndex is int && attempt.currentIndex >= 0 && attempt.currentIndex < attempt.size
@@ -60,6 +95,28 @@ service cloud.firestore {
         && ((status == 'active' && attempt.finishedAt == null && attempt.score == null)
           || (status == 'completed' && attempt.finishedAt is int && attempt.finishedAt >= attempt.startedAt
             && attempt.score is map));
+    }
+
+    function validActiveState(data, examId) {
+      return data.keys().hasAll(['schemaVersion', 'revision', 'attempt', 'updatedAt'])
+        && data.keys().hasOnly(['schemaVersion', 'examId', 'revision', 'attempt', 'updatedAt'])
+        && validExam(data, examId)
+        && data.schemaVersion == 1
+        && data.revision is string
+        && data.revision.matches('^[A-Za-z0-9_-]{1,128}$')
+        && data.updatedAt == request.time
+        && (data.attempt == null || validAttempt(data.attempt, 'active', examId));
+    }
+
+    function validSession(data, attemptId, examId) {
+      return data.keys().hasAll(['schemaVersion', 'attempt', 'finishedAt', 'updatedAt'])
+        && data.keys().hasOnly(['schemaVersion', 'examId', 'attempt', 'finishedAt', 'updatedAt'])
+        && validExam(data, examId)
+        && data.schemaVersion == 1
+        && data.updatedAt == request.time
+        && data.attempt.id == attemptId
+        && data.finishedAt == data.attempt.finishedAt
+        && validAttempt(data.attempt, 'completed', examId);
     }
 
     match /importRuns/{importId}/firestoreOnly/{releaseId} {
@@ -82,24 +139,27 @@ service cloud.firestore {
     match /users/{uid}/state/active {
       allow get: if ownAccount(uid);
       allow create, update: if ownAccount(uid)
-        && request.resource.data.keys().hasOnly(['schemaVersion', 'revision', 'attempt', 'updatedAt'])
-        && request.resource.data.schemaVersion == 1
-        && request.resource.data.revision is string
-        && request.resource.data.revision.matches('^[A-Za-z0-9_-]{1,128}$')
-        && request.resource.data.updatedAt == request.time
-        && (request.resource.data.attempt == null || validAttempt(request.resource.data.attempt, 'active'));
+        && validActiveState(request.resource.data, 'az104');
     }
 
     match /users/{uid}/history/{attemptId} {
       allow get: if ownAccount(uid);
       allow list: if ownAccount(uid) && request.query.limit != null && request.query.limit <= 20;
       allow create, update: if ownAccount(uid)
-        && request.resource.data.keys().hasOnly(['schemaVersion', 'attempt', 'finishedAt', 'updatedAt'])
-        && request.resource.data.schemaVersion == 1
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.attempt.id == attemptId
-        && request.resource.data.finishedAt == request.resource.data.attempt.finishedAt
-        && validAttempt(request.resource.data.attempt, 'completed');
+        && validSession(request.resource.data, attemptId, 'az104');
+    }
+
+    match /users/{uid}/exams/sc900/state/active {
+      allow get: if ownAccount(uid);
+      allow create, update: if ownAccount(uid)
+        && validActiveState(request.resource.data, 'sc900');
+    }
+
+    match /users/{uid}/exams/sc900/sessions/{attemptId} {
+      allow get: if ownAccount(uid);
+      allow list: if ownAccount(uid) && request.query.limit != null && request.query.limit <= 20;
+      allow create, update: if ownAccount(uid)
+        && validSession(request.resource.data, attemptId, 'sc900');
     }
 
     function publishedQuestion(questionId) {

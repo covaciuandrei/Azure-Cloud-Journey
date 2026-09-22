@@ -6,7 +6,7 @@ import {
 import { CleanCountsSchema, CleanReleaseIdSchema, mediaExtension } from "./cleanBank.js";
 import {
   SC900_EXAM_ID, Sc900OccurrenceIdSchema, Sc900SourceNumberSchema,
-  sc900OccurrenceId,
+  Sc900CaptureLedgerSchema, sc900OccurrenceId, type Sc900CaptureLedger,
 } from "./sc900Capture.js";
 
 export { SC900_EXAM_ID, Sc900OccurrenceIdSchema } from "./sc900Capture.js";
@@ -248,6 +248,36 @@ export const Sc900DiscussionSchema = z.object({
 
 export function sc900FirestoreRoot(releaseId: string): string {
   return `studyBanks/sc900/releases/${Sc900ReleaseIdSchema.parse(releaseId)}`;
+}
+
+export function sc900SchemasForLedger(input: Sc900CaptureLedger) {
+  const ledger = Sc900CaptureLedgerSchema.parse(input);
+  const byNumber = new Map(ledger.occurrences.map((item) => [item.questionNumber, item]));
+  const pages = new Map(ledger.pages.map((page) => [page.pageNumber, page]));
+  const verifyQuestion = (question: Sc900Question, context: z.RefinementCtx) => {
+    if (question.sources.some((source) =>
+      byNumber.get(source.questionNumber)?.pageNumber !== source.pageNumber ||
+      pages.get(source.pageNumber)?.url !== source.url)) {
+      context.addIssue({ code: "custom", message: "SC900 source attribution is outside the verified capture ledger" });
+    }
+  };
+  return {
+    question: Sc900QuestionSchema.superRefine(verifyQuestion),
+    document: Sc900DocumentSchema.superRefine((document, context) => verifyQuestion(document.question, context)),
+    catalog: Sc900CatalogSchema.superRefine((catalog, context) => {
+      const numbers = catalog.questions.flatMap((question) => question.sourceNumbers);
+      if (numbers.length !== byNumber.size || numbers.some((number) => !byNumber.has(number))) {
+        context.addIssue({ code: "custom", message: "SC900 catalog must cover the exact verified source numbers" });
+      }
+    }),
+    manifest: Sc900ManifestSchema.superRefine((manifest, context) => {
+      if (manifest.counts.sourceQuestions !== ledger.reported.questions ||
+          manifest.counts.images !== ledger.assets.length ||
+          manifest.counts.comments !== ledger.occurrences.reduce((total, item) => total + item.parsedCommentCount, 0)) {
+        context.addIssue({ code: "custom", message: "SC900 manifest counts must match the complete verified capture ledger" });
+      }
+    }),
+  };
 }
 
 export type Sc900Manifest = z.infer<typeof Sc900ManifestSchema>;

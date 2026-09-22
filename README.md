@@ -11,7 +11,9 @@ source and original learning material; it is not the current web host.
 
 Choose **AZ-104: Azure Administrator** on the opening screen, then enter
 **Learn** or **Practice & exams**. Existing lesson and practice links still open
-directly. AZ-104 is currently the only available exam.
+directly. AZ-104 remains available. The SC-900 workspace is implemented but stays
+disabled until its complete authorized source capture, original course and
+teaching explanations have independent, exact-hash publication approvals.
 
 ## What is included
 
@@ -68,8 +70,8 @@ The built demo is written to `dist-demo/`; its preview runs at
 | In Git | Not in Git |
 | --- | --- |
 | Application source, styles, domain contracts and tests | OAuth credentials, tokens and private environment files |
-| Original course inputs in `content/networking/` and `content/az104/` | The downloaded third-party practice bank, comments and images |
-| Synthetic demo question generation | Generated `public/data`, `content`, `teaching` and `courses` exports |
+| Original course inputs in `content/networking/`, `content/az104/` and `content/sc900/` | The downloaded third-party practice bank, comments and images |
+| Synthetic demo question generation | Generated `public/data`, `content`, `teaching`, `courses` and `exams` exports |
 | Firebase rules and deployment safeguards | Browser profiles, account histories, emulator logs and caches |
 | Dependency lockfile and public-source CI | Private working artifacts, quota journals and deployment receipts |
 
@@ -159,6 +161,88 @@ Exam deadlines use wall-clock time and continue while reading lessons. Old
 attempts retain their original release, keys, answer order, deadline and scores.
 Retired questions are excluded from new sessions without deleting historical
 attempts.
+
+## SC-900 publication status
+
+SC-900 uses a separate exam context, not the AZ-104 bank with different labels.
+Its planned original course has **4 domains, 12 modules, 26 lessons and 58
+announced objectives**. The English study guide reviewed on **September 22,
+2026** announces an effective date of **October 21, 2026**. This is a future
+outline at review time; no verified earlier English outline is claimed.
+
+Once independently approved and activated, SC-900 offers free practice in sets
+of 10, 20, 30 or 40 and a **40-question, 45-minute mock**. Forty questions is the
+app's practice format, not a claim about the actual exam's exact question count.
+AZ-104 keeps its existing 40-question, 60-minute mock and published content.
+
+Legacy `#home`, `#learn`, `#learn/<lesson>` and `#practice` links, browser keys,
+AZ-104 account paths and course releases remain unchanged. SC-900 uses
+`#/sc900/home`, `#/sc900/learn`, `#/sc900/learn/<lesson>` and `#/sc900/practice`.
+Its guest/account state, pending sync queue, history and learning progress are
+isolated. Switching exams retains open attempts and wall-clock deadlines.
+SC-900 account practice is scoped under `users/<uid>/exams/sc900/`; learning
+progress remains device-only, matching AZ-104.
+
+Static SC-900 files live under `exams/sc900/`. `manifest.json` points to immutable
+`content/r_<sha>/` question, discussion, media, topic, eligibility and teaching
+files. Teaching uses `content/r_<sha>/learning/manifest.json` and
+`learning/questions/<question>.json`. The course pointer is
+`course/current.json`, with content in `course/releases/c_<sha>/sc900.json`.
+`availability.json` is inactive by default and never enables an empty,
+unreviewed or synthetic production bank. Offline packages and active pointers
+are separate per exam; removing one download preserves the other and does not
+erase progress.
+
+The public-source demo never substitutes for missing production data. For an
+explicit SC-900 source demo, set `VITE_STUDY_SC900_DEMO=true` when running
+`npm run demo` or `npm run build:demo`. This still requires the independently
+approved, explicitly activated SC-900 course; it adds exactly **10 original
+synthetic SC-900 samples** with prominent demo notices, not a production bank.
+Without those course approvals, the command fails rather than showing a
+partially available exam.
+
+### SC-900 authoring and guarded publication
+
+Read `content/sc900/authoring-contract.json`, `curriculum.json`, `objectives.json`
+and `publication-plan.json`. Original modules retain the existing authored
+module shape with the allocated SC-900 IDs. Partial checks do not approve
+publication:
+
+```bash
+node --import tsx tools/course/validate.ts --exam sc900 --module sc-security-foundations
+node --import tsx tools/course/validate.ts --exam sc900 --domain sc-concepts
+node --import tsx tools/course/assemble.ts --exam sc900
+```
+
+Full course assembly requires all domain/module approvals plus exact curriculum,
+objective and coverage digests. Its version-3 pointer stays inactive unless
+`loadCoursePublication(workspace, "sc900", { activate: true })` receives a
+coordinator approval in `content/sc900/review-approvals/activation.json` binding
+the exact release ID and byte hash.
+
+The separate bank contract is in `src/domain/sc900*.ts`; stable namespaced hashes
+are in `tools/sc900/canonical.ts`. Generic schemas do not guess source totals.
+The publisher requires independently supplied capture-scope counts and a
+verified complete UI-capture ledger, including revealed answers, exact original
+assets and loaded discussions. A verified empty discussion is valid; a failed
+or missing response is not evidence of zero comments. Captured discussion is
+retained in full unless a future explicit exclusion-approval contract is added.
+
+`tools/sc900/publication.ts` prepares deterministic releases, binds per-question
+review hashes, stages only under ignored `.data/sc900-publication/`, and records
+independent final approval separately from immutable staged content.
+`selectSc900HostingPublication` in `tools/web/sc900-publication.ts` is a
+parent-controlled local API that combines those approvals with the activated
+course, preserves archived releases and atomically selects a complete Hosting
+bundle. The normal export and Hosting guard revalidate its files. Neither API
+deploys to Firebase.
+
+The SC-900 Firestore/Storage publisher is intentionally a **nonexecuting,
+quota-guarded planning interface**, not an upload command. The parent must
+complete and approve cloud encoding/staging/atomic-pointer application before
+enabling the Firestore source. Existing shared quota journals and conservative
+limits are not reset or split per exam. Missing capture, approvals or cloud
+execution are reported blockers, not successful production publication.
 
 ## Full local application
 

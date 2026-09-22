@@ -6,6 +6,7 @@ import { assertSafeDirectory, childPath, regularFiles } from "./bank.js";
 import { readTopicMap } from "../topics/data.js";
 import { loadStudyPublication, publicationFileBytes } from "../learning/publication.js";
 import { loadCoursePublication } from "../course/publication.js";
+import { loadSc900HostingPublication } from "./sc900-publication.js";
 
 export interface ExportSnapshotOptions {
   workspaceRoot?: string;
@@ -40,6 +41,8 @@ export async function exportSnapshot(options: ExportSnapshotOptions = {}): Promi
   if (!bank.eligibility) throw new Error("A complete approved question-relevance policy is required before exporting this app.");
   const course = await loadCoursePublication(workspace);
   for (const [path, value] of course.files) bank.files.set(path, { kind: "json", value });
+  const sc900 = await loadSc900HostingPublication(workspace);
+  for (const [path, value] of sc900.files) bank.files.set(path, value);
   const topics = await readTopicMap(workspace);
   if (topics.sourceRevision !== bank.manifest.sourceRevision ||
       bank.releases.some((release) => release.catalog.questions.some((question) => !topics.assignments[question.id]))) {
@@ -60,12 +63,10 @@ export async function exportSnapshot(options: ExportSnapshotOptions = {}): Promi
     }
   }
   let bytes = 0;
-  const paths = [
-    ...[...bank.files.keys()].filter((path) => !["data/manifest.json", "data/learning.json", "data/course.json"].includes(path)).sort(),
-    "data/course.json",
-    "data/learning.json",
-    "data/manifest.json",
-  ];
+  const pointers = ["data/course.json", "data/learning.json", "data/manifest.json",
+    "exams/sc900/manifest.json", "exams/sc900/course/current.json", "exams/sc900/availability.json"];
+  const paths = [...[...bank.files.keys()].filter((path) => !pointers.includes(path)).sort(),
+    ...pointers.filter((path) => bank.files.has(path))];
   for (const path of paths) {
     const file = bank.files.get(path);
     if (!file) throw new Error(`Missing publication file: ${path}`);

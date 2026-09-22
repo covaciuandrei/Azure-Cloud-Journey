@@ -13,7 +13,7 @@ import { OfflineControls } from "./OfflineControls.js";
 import { offlineSessionReferences } from "../offline-references.js";
 import { readPractice } from "../storage.js";
 import type { Course } from "../../domain/course.js";
-import type { TopicId } from "../../domain/topics.js";
+import type { StudyTopicId as TopicId } from "../../domain/examTopics.js";
 import { CoursePage } from "../course/CoursePage.js";
 import { loadCourse } from "../course/repository.js";
 import { courseLabel } from "../course/catalog.js";
@@ -22,41 +22,32 @@ import { parseLearningRoute } from "../course/navigation.js";
 import { Icon } from "../components/Icon.js";
 import { Welcome } from "./Welcome.js";
 import { ExamSelection } from "./ExamSelection.js";
+import { EXAM_IDS, examConfig, type ExamId } from "../../domain/exams.js";
+import { checkSc900Availability, type ExamAvailability } from "../exam-availability.js";
+import { createStudyRepository } from "../data.js";
+import { createDemoRepository } from "../demo-repository.js";
+import { SC900_DEMO_NOTICE } from "../../domain/sc900Demo.js";
+
+function navigateHash(hash: string) {
+  if (window.location.hash !== hash) window.history.pushState(null, "", hash);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.scrollTo({ top: 0 });
+}
 
 export default function App() {
   const account = useAccount();
-  const offline = useOfflineDownload();
-  if (!account.ready) return <main className="app-main"><p role="status">Opening your study workspace...</p></main>;
-  if (!offline.online && !offline.initialized) return <main className="app-main"><p role="status">Opening the offline download...</p></main>;
-  return <AccountWorkspace key={account.user ? `account:${account.user.uid}` : "guest"} account={account} offline={offline} />;
-}
-
-function AccountWorkspace({ account, offline }: { account: ReturnType<typeof useAccount>; offline: OfflineDownload }) {
-  const user = account.user;
-  const demoMode = import.meta.env.VITE_STUDY_DEMO === "true";
-  const [route, setRoute] = useState(() => parseLearningRoute(window.location.hash));
-  const [resumePracticeOnLoad] = useState(() => parseLearningRoute(window.location.hash).section === "practice");
-  const study = useStudy(user?.uid ?? null, offline.useDownload, resumePracticeOnLoad);
-  const [course, setCourse] = useState<Course | null>(null);
-  const [courseError, setCourseError] = useState<string | null>(null);
-  const [courseRetry, setCourseRetry] = useState(0);
-  const [practiceTopics, setPracticeTopics] = useState<TopicId[] | undefined>();
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const toolsToggle = useRef<HTMLButtonElement>(null);
-  const learning = useCourseProgress(user?.uid ?? null, course);
-  const navigate = (section: typeof route.section, lessonId: string | null = null) => {
-    const hash = section === "exams" ? "#exams" : section === "welcome" ? "#home" : section === "practice" ? "#practice" : lessonId ? `#learn/${lessonId}` : "#learn";
-    if (window.location.hash !== hash) window.history.pushState(null, "", hash);
-    setRoute(parseLearningRoute(hash));
-    window.scrollTo({ top: 0 });
-  };
-  const openPractice = (view: StudyView = "home", topics?: TopicId[]) => {
-    setPracticeTopics(topics);
-    study.openView(view);
-    navigate("practice");
-  };
+  const [navigation, setNavigation] = useState(() => {
+    const route = parseLearningRoute(window.location.hash);
+    const active = route.examId ?? "az104";
+    const routes: Partial<Record<ExamId, typeof route>> = { [active]: route };
+    return { active, routes };
+  });
   useEffect(() => {
-    const changed = () => setRoute(parseLearningRoute(window.location.hash));
+    const changed = () => {
+      const route = parseLearningRoute(window.location.hash);
+      const active = route.examId ?? "az104";
+      setNavigation((current) => ({ active, routes: { ...current.routes, [active]: route } }));
+    };
     window.addEventListener("popstate", changed);
     window.addEventListener("hashchange", changed);
     return () => {
@@ -64,18 +55,94 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
       window.removeEventListener("hashchange", changed);
     };
   }, []);
+  if (!account.ready) return <main className="app-main"><p role="status">Opening your study workspace...</p></main>;
+  return <>{EXAM_IDS.filter((id) => navigation.routes[id]).map((id) =>
+    <ExamWorkspace key={`${account.user?.uid ?? "guest"}:${id}`} account={account}
+      route={navigation.routes[id]!} active={navigation.active === id} />)}</>;
+}
+
+function ExamWorkspace({ account, route, active }: {
+  account: ReturnType<typeof useAccount>; route: ReturnType<typeof parseLearningRoute>;
+  active: boolean;
+}) {
+  const offline = useOfflineDownload(route.examId ?? "az104");
+  const [availability, setAvailability] = useState<ExamAvailability>({ status: "loading", notice: "Checking SC-900 publication..." });
+  const [retryAvailability, setRetryAvailability] = useState(0);
+  const opened = useRef(route.examId !== "sc900");
+  if (availability.status === "available") opened.current = true;
+  useEffect(() => {
+    let current = true;
+    const base = new URL(import.meta.env.BASE_URL, window.location.origin).href;
+    const demo = import.meta.env.VITE_STUDY_DEMO === "true";
+    const fetcher: typeof fetch = (input, init) => {
+      const headers = new Headers(init?.headers);
+      if (offline.useDownload) headers.set("X-AZ104-Offline", "1");
+      return fetch(input, { ...init, headers });
+    };
+    const repository = demo ? createDemoRepository(base, fetcher, "sc900") : createStudyRepository(base, fetcher, "sc900");
+    setAvailability({ status: "loading", notice: "Checking SC-900 publication..." });
+    checkSc900Availability(base, () => loadCourse(base, offline.useDownload, fetcher, "sc900"),
+      () => repository.loadCatalog(), demo, fetcher).then((result) => {
+      if (current) setAvailability(result);
+    }).catch((reason: unknown) => {
+      if (current) setAvailability({ status: "unavailable", notice: reason instanceof Error ? reason.message : "SC-900 availability could not be checked." });
+    });
+    return () => { current = false; };
+  }, [offline.useDownload, retryAvailability]);
+  const pendingOffline = !offline.online && !offline.initialized;
+  const unavailable = route.examId === "sc900" && availability.status !== "available";
+  return <>
+    {active && pendingOffline && <main className="app-main"><p role="status">Opening the offline download...</p></main>}
+    {active && !pendingOffline && unavailable && <main className="app-main"><h1>SC-900</h1>
+      <p role={availability.status === "loading" ? "status" : "alert"}>{availability.notice}</p>
+      <p>The course follows an announced outline effective October 21, 2026, reviewed September 22, 2026. Publication is not automatic.</p>
+      <button className="button button-secondary" onClick={() => navigateHash("#exams")}>Choose an exam</button>
+      <button className="text-button" onClick={() => setRetryAvailability((value) => value + 1)}>Check availability again</button>
+    </main>}
+    {opened.current && <AccountWorkspace account={account} offline={offline} route={route}
+      sc900Availability={availability} active={active && !pendingOffline && !unavailable} />}
+  </>;
+}
+
+function AccountWorkspace({ account, offline, route, sc900Availability, active }: {
+  account: ReturnType<typeof useAccount>; offline: OfflineDownload;
+  route: ReturnType<typeof parseLearningRoute>; sc900Availability: ExamAvailability;
+  active: boolean;
+}) {
+  const user = account.user;
+  const examId: ExamId = route.examId ?? "az104";
+  const exam = examConfig(examId);
+  const demoMode = import.meta.env.VITE_STUDY_DEMO === "true";
+  const [resumePracticeOnLoad] = useState(() => parseLearningRoute(window.location.hash).section === "practice");
+  const study = useStudy(user?.uid ?? null, offline.useDownload, resumePracticeOnLoad, examId);
+  const [course, setCourse] = useState<Course | null>(null);
+  const [courseError, setCourseError] = useState<string | null>(null);
+  const [courseRetry, setCourseRetry] = useState(0);
+  const [practiceTopics, setPracticeTopics] = useState<TopicId[] | undefined>();
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsToggle = useRef<HTMLButtonElement>(null);
+  const learning = useCourseProgress(user?.uid ?? null, course, examId);
+  const navigate = (section: typeof route.section, lessonId: string | null = null) => {
+    const sectionPath = section === "welcome" ? "home" : section === "practice" ? "practice" : lessonId ? `learn/${lessonId}` : "learn";
+    navigateHash(section === "exams" ? "#exams" : examId === "sc900" ? `#/sc900/${sectionPath}` : `#${sectionPath}`);
+  };
+  const openPractice = (view: StudyView = "home", topics?: TopicId[]) => {
+    setPracticeTopics(topics);
+    study.openView(view);
+    navigate("practice");
+  };
   useEffect(() => {
     let current = true;
     setCourse(null);
     setCourseError(null);
     const base = new URL(import.meta.env.BASE_URL, window.location.origin).href;
-    loadCourse(base, offline.useDownload).then((value) => {
+    loadCourse(base, offline.useDownload, fetch, examId).then((value) => {
       if (current) setCourse(value);
     }).catch((reason: unknown) => {
       if (current) setCourseError(reason instanceof Error ? reason.message : "The course could not be loaded.");
     });
     return () => { current = false; };
-  }, [offline.useDownload, courseRetry]);
+  }, [offline.useDownload, courseRetry, examId]);
   useEffect(() => {
     if (route.section === "learn" && route.lessonId &&
         course?.modules.some((module) => module.lessons.some((lesson) => lesson.id === route.lessonId))) {
@@ -103,6 +170,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
         : study.profile.pendingCount ? `${study.profile.pendingCount} session(s) waiting to sync`
           : study.profile.warning ? "Practice sync needs attention" : "Practice progress saved"
     : "Progress stays on this device";
+  if (!active) return null;
   return <div className={`app-shell app-section-${route.section}`}>
     <a className="skip-link" href="#main-content" onClick={(event) => {
       event.preventDefault();
@@ -140,7 +208,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
     <div className="workspace-statusline">
       <div className="workspace-context">{route.section === "exams" ? <span>Exam selection</span> : <>
         <button className="workspace-exam-switch" onClick={() => navigate("exams")}><Icon name="chevron-left" size={12} />Change exam</button>
-        <strong className="workspace-exam-code">AZ-104</strong><Icon name="chevron-right" size={12} />
+        <strong className="workspace-exam-code">{exam.code}</strong><Icon name="chevron-right" size={12} />
         <span>{route.section === "learn" ? courseLabel(course) : route.section === "practice" ? "Practice workspace" : "Your study workspace"}</span>
       </>}
         {(offline.useDownload || route.section === "practice") && <span className="workspace-source-badge">{offline.useDownload ? "Downloaded copy" : displayedSource === "firebase" ? "Firestore" : "Bundled snapshot"}</span>}
@@ -148,7 +216,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
       <div className="workspace-identity"><span>{user?.email ?? user?.displayName ?? "Guest"}</span><span className="workspace-save-status">{accountStatus}</span></div>
     </div>
     {saved.activeAttempt && route.section !== "practice" && <div className="workspace-resume">
-      <Icon name="clock" size={16} /><span>You have an unfinished AZ-104 {saved.activeAttempt.mode === "exam" ? "exam" : "practice session"}.</span>
+      <Icon name="clock" size={16} /><span>You have an unfinished {exam.code} {saved.activeAttempt.mode === "exam" ? "exam" : "practice session"}.</span>
       <button className="text-button" onClick={() => { navigate("practice"); void study.restore(saved.activeAttempt!); }}>Resume practice</button>
     </div>}
     {route.section === "practice" && <div className="practice-subheader">
@@ -192,7 +260,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
       </div>
       <OfflineControls offline={offline} getReferences={() => {
         try {
-          const guest = readPractice(window.localStorage);
+          const guest = readPractice(window.localStorage, undefined, examId);
           return { references: offlineSessionReferences(saved, guest.state),
             warning: guest.warning ? "Some older guest sessions could not be included. The current bank will still be downloaded." : null };
         } catch {
@@ -203,6 +271,7 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
     </section>
     <main className={`app-main app-main-${route.section}`} id="main-content" tabIndex={-1}>
       <div className="workspace-alerts">
+      {demoMode && examId === "sc900" && <p className="notice" role="status">{SC900_DEMO_NOTICE}</p>}
       {route.error && <div className="notice notice-error" role="alert">{route.error}</div>}
       {account.error && <div className="notice notice-error" role="alert"><p>{account.error}</p>
         <button className="text-button" onClick={account.clearError}>Dismiss sign-in message</button></div>}
@@ -215,8 +284,10 @@ function AccountWorkspace({ account, offline }: { account: ReturnType<typeof use
       {study.notice && <div className="notice" role="alert"><p>{study.notice}</p>
         <button className="text-button" onClick={study.clearNotice} aria-label="Dismiss notice">Dismiss</button></div>}
       </div>
-      {route.section === "exams" ? <ExamSelection course={course} onSelect={() => navigate("welcome")} />
+      {route.section === "exams" ? <ExamSelection course={course} sc900Availability={sc900Availability}
+        onSelect={(selected) => navigateHash(selected === "sc900" ? "#/sc900/home" : "#home")} />
         : route.section === "welcome" ? <Welcome course={course} progress={learning.progress}
+        examId={examId}
         questionCount={catalog?.counts.questions} onLearn={(id) => navigate("learn", id ?? null)} onPractice={() => openPractice()} />
         : route.section === "learn" ? courseError
         ? <div className="notice notice-error" role="alert"><h1>Learning materials unavailable</h1><p>{courseError}</p>

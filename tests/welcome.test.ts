@@ -8,12 +8,14 @@ import { emptyCourseProgress, reduceCourseProgress } from "../src/web/course/pro
 import { courseFixture } from "./course-fixture.js";
 
 const noAction = () => {};
-test("exam selection offers only the available AZ-104 workspace with honest learning scope", () => {
+test("exam selection keeps AZ-104 available and SC-900 disabled until approved", () => {
   const html = renderToStaticMarkup(createElement(ExamSelection, { onSelect: noAction, course: courseFixture() }));
   assert.match(html, /AZURE CLOUD JOURNEY/);
   assert.match(html, /Azure Administrator/);
   assert.match(html, /Available to study/);
-  assert.equal((html.match(/<button\b/g) ?? []).length, 1);
+  assert.equal((html.match(/<button\b/g) ?? []).length, 2);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>Select SC-900/);
+  assert.match(html, /October 21, 2026/);
   assert.match(html, /<button[^>]*>Select AZ-104<svg[^>]*aria-hidden="true"/);
   assert.match(html, /Guided lessons currently cover networking, not every AZ-104 domain/);
   assert.match(html, /Offline &amp; data/);

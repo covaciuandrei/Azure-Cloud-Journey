@@ -16,6 +16,7 @@ import {
   buildCleanStoragePlan, checkHostingDeployment, hostingBuildIdentity, validateHostingTree,
 } from "../publish/storage-clean.js";
 import { acquireUploadLock } from "../publish/quota.js";
+import { loadSc900HostingPublication } from "../web/sc900-publication.js";
 
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const HostingSchema = z.object({
@@ -112,6 +113,7 @@ export async function deployHostingWithAdc(apply: boolean, feature: "accounts" |
     const assertUnchanged = async () => {
       const current = await hostingBuildIdentity();
       const currentCourse = await validateHostingCourse();
+      await loadSc900HostingPublication();
       if (current.distDigest !== identity.distDigest || current.sourceDigest !== identity.sourceDigest ||
           currentCourse.digest !== course.digest ||
           hash(await readFile("firebase.json")) !== configDigest) {

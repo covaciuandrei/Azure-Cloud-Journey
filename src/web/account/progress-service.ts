@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 import { z } from "zod";
+import { ExamIdSchema, examIdOf, type ExamId } from "../../domain/exams.js";
 import { PracticeAttemptSchema, type PracticeAttempt } from "../engine.js";
 
 const uuid = z.string().regex(
@@ -14,12 +15,14 @@ const timestamp = z.custom<Timestamp>((value) =>
 );
 const ActiveDocumentSchema = z.object({
   schemaVersion: z.literal(1),
+  examId: ExamIdSchema.optional(),
   revision: uuid,
   attempt: PracticeAttemptSchema.nullable(),
   updatedAt: timestamp,
 }).strict();
 const HistoryDocumentSchema = z.object({
   schemaVersion: z.literal(1),
+  examId: ExamIdSchema.optional(),
   attempt: PracticeAttemptSchema,
   finishedAt: z.number().int().nonnegative().finite(),
   updatedAt: timestamp,
@@ -89,32 +92,47 @@ export function validateAccountUid(uid: string): void {
   }
 }
 
-function parseAttempt(input: unknown): PracticeAttempt {
+export function validateProgressExamId(examId: ExamId): void {
+  if (!ExamIdSchema.safeParse(examId).success) {
+    throw new ProgressValidationError("The exam identity is not a valid progress path.");
+  }
+}
+
+function progressPaths(uid: string, examId: ExamId) {
+  validateProgressExamId(examId);
+  const root = examId === "az104" ? `users/${uid}` : `users/${uid}/exams/${examId}`;
+  return { active: `${root}/state/active`, history: `${root}/${examId === "az104" ? "history" : "sessions"}` };
+}
+
+function parseAttempt(input: unknown, examId: ExamId): PracticeAttempt {
   const parsed = PracticeAttemptSchema.safeParse(input);
-  if (!parsed.success || !uuid.safeParse(parsed.data.id).success) {
+  if (!parsed.success || !uuid.safeParse(parsed.data.id).success || examIdOf(parsed.data) !== examId) {
     throw new ProgressValidationError();
   }
   const attempt = parsed.data;
   if (attempt.dataSource === undefined) delete attempt.dataSource;
+  if (attempt.examId === undefined) delete attempt.examId;
   return attempt;
 }
 
-function parseActive(document: ProgressDocument | null): {
+function parseActive(document: ProgressDocument | null, examId: ExamId): {
   revision: string | null;
   attempt: PracticeAttempt | null;
 } {
   if (document === null) return { revision: null, attempt: null };
   const parsed = ActiveDocumentSchema.safeParse(document.data);
-  if (document.id !== "active" || !parsed.success) throw new ProgressValidationError();
-  const attempt = parsed.data.attempt === null ? null : parseAttempt(parsed.data.attempt);
+  if (document.id !== "active" || !parsed.success || examIdOf(parsed.data) !== examId) {
+    throw new ProgressValidationError();
+  }
+  const attempt = parsed.data.attempt === null ? null : parseAttempt(parsed.data.attempt, examId);
   if (attempt && attempt.status !== "active") throw new ProgressValidationError();
   return { revision: parsed.data.revision, attempt };
 }
 
-function parseHistory(document: ProgressDocument): PracticeAttempt {
+function parseHistory(document: ProgressDocument, examId: ExamId): PracticeAttempt {
   const parsed = HistoryDocumentSchema.safeParse(document.data);
-  if (!parsed.success) throw new ProgressValidationError();
-  const attempt = parseAttempt(parsed.data.attempt);
+  if (!parsed.success || examIdOf(parsed.data) !== examId) throw new ProgressValidationError();
+  const attempt = parseAttempt(parsed.data.attempt, examId);
   if (attempt.id !== document.id || attempt.status !== "completed" ||
       attempt.finishedAt !== parsed.data.finishedAt) {
     throw new ProgressValidationError();
@@ -148,9 +166,9 @@ function assertDocumentSize(path: string, document: Record<string, unknown>): vo
 }
 
 export function createAccountProgressService(adapter: ProgressAdapter): {
-  loadAccountProgress: (uid: string) => Promise<AccountProgress>;
+  loadAccountProgress: (uid: string, examId?: ExamId) => Promise<AccountProgress>;
   saveAccountAttempt: (
-    uid: string, attempt: PracticeAttempt, expectedRevision: string | null,
+    uid: string, attempt: PracticeAttempt, expectedRevision: string | null, examId?: ExamId,
   ) => Promise<{ revision: string }>;
 } {
   function bindIdentity(uid: string): () => void {
@@ -163,15 +181,16 @@ export function createAccountProgressService(adapter: ProgressAdapter): {
   }
 
   return {
-    async loadAccountProgress(uid) {
+    async loadAccountProgress(uid, examId = "az104") {
       const assertIdentity = bindIdentity(uid);
+      const paths = progressPaths(uid, examId);
       const [activeDocument, historyDocuments] = await Promise.all([
-        adapter.readDocument(`users/${uid}/state/active`),
-        adapter.readHistory(`users/${uid}/history`, RECENT_HISTORY_LIMIT),
+        adapter.readDocument(paths.active),
+        adapter.readHistory(paths.history, RECENT_HISTORY_LIMIT),
       ]);
       assertIdentity();
-      const active = parseActive(activeDocument);
-      const history = historyDocuments.map(parseHistory);
+      const active = parseActive(activeDocument, examId);
+      const history = historyDocuments.map((document) => parseHistory(document, examId));
       const seenIds = new Set<string>();
       if (history.length > RECENT_HISTORY_LIMIT) throw new ProgressValidationError();
       for (const attempt of history) {
@@ -183,24 +202,26 @@ export function createAccountProgressService(adapter: ProgressAdapter): {
       return { revision: active.revision, activeAttempt: active.attempt, history };
     },
 
-    async saveAccountAttempt(uid, input, expectedRevision) {
+    async saveAccountAttempt(uid, input, expectedRevision, examId = "az104") {
       const assertIdentity = bindIdentity(uid);
-      const attempt = parseAttempt(input);
+      const paths = progressPaths(uid, examId);
+      const attempt = parseAttempt(input, examId);
       if (expectedRevision !== null && !uuid.safeParse(expectedRevision).success) {
         throw new ProgressValidationError("The cloud progress revision is invalid.");
       }
       const revision = adapter.newRevision();
       if (!uuid.safeParse(revision).success) throw new ProgressValidationError();
-      const activePath = `users/${uid}/state/active`;
-      const historyPath = `users/${uid}/history/${attempt.id}`;
+      const activePath = paths.active;
+      const historyPath = `${paths.history}/${attempt.id}`;
+      const envelope = { schemaVersion: 1, ...(examId === "az104" ? {} : { examId }) };
       const payload = attempt.status === "completed"
-        ? { schemaVersion: 1, attempt, finishedAt: attempt.finishedAt, updatedAt: null }
-        : { schemaVersion: 1, attempt, revision, updatedAt: null };
+        ? { ...envelope, attempt, finishedAt: attempt.finishedAt, updatedAt: null }
+        : { ...envelope, attempt, revision, updatedAt: null };
       assertDocumentSize(attempt.status === "completed" ? historyPath : activePath, payload);
 
       const result = await adapter.transaction(async (transaction) => {
         assertIdentity();
-        const current = parseActive(await transaction.get(activePath));
+        const current = parseActive(await transaction.get(activePath), examId);
         assertIdentity();
         if (current.revision !== expectedRevision) {
           throw new ProgressConflictError(expectedRevision, current.revision);
@@ -209,7 +230,7 @@ export function createAccountProgressService(adapter: ProgressAdapter): {
           ? attempt
           : current.attempt?.id === attempt.id ? null : current.attempt;
         const state = {
-          schemaVersion: 1,
+          ...envelope,
           revision,
           attempt: activeAttempt,
           updatedAt: adapter.serverTimestamp(),
@@ -218,7 +239,7 @@ export function createAccountProgressService(adapter: ProgressAdapter): {
         assertIdentity();
         if (attempt.status === "completed") {
           transaction.set(historyPath, {
-            schemaVersion: 1,
+            ...envelope,
             attempt,
             finishedAt: attempt.finishedAt,
             updatedAt: adapter.serverTimestamp(),

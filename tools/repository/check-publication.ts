@@ -6,7 +6,7 @@ export function publicPathIssue(path: string): string | null {
   if (path.split("/").some((part) => part === "..") || path.startsWith("/")) return "Unexpected path";
   if (/^(?:\.data|\.firebase|\.playwright-mcp|\.test-output|node_modules|dist|dist-demo)\//.test(path)) return "Local data or build output";
   if (path.startsWith(".") && !path.startsWith(".github/") && ![".gitignore", ".firebaserc", ".env.example"].includes(path)) return "Unreviewed hidden file";
-  if (/^public\/(?:content|data|teaching|courses)\//.test(path)) return "Generated study content";
+  if (/^public\/(?:content|data|teaching|courses|exams)\//.test(path)) return "Generated study content";
   if (/(^|\/)\.env(?:\.|$)/.test(path) && path !== ".env.example") return "Private environment file";
   if (/^tools\/firebase\/.+\.json$/.test(path) && path !== "tools/firebase/budget.json") return "Private Firebase report";
   if (/\.(?:log|pem|key|p12|db|sqlite|sqlite3)$/i.test(path) ||

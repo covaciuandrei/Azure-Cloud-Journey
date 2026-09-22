@@ -3,6 +3,7 @@ import { CommentIdSchema, SafeUrlSchema, Sha256Schema, TimestampSchema } from ".
 
 export const SC900_EXAM_ID = "sc900" as const;
 export const SC900_SOURCE_EXAM_ID = "128" as const;
+export const SC900_SOURCE_URL = "https://www.examprepper.co/exam/128/1" as const;
 export const Sc900OccurrenceIdSchema = z.string().regex(/^examprepper-128-q\d{6}$/);
 export const Sc900SourceNumberSchema = z.number().int().min(1).max(999999);
 const unique = <T>(items: T[]) => new Set(items).size === items.length;
@@ -22,7 +23,7 @@ export const Sc900CaptureLedgerSchema = z.object({
   sourceExamId: z.literal(SC900_SOURCE_EXAM_ID),
   captureMethod: z.literal("rendered-browser-ui"),
   verified: z.literal(true),
-  sourceUrl: SafeUrlSchema,
+  sourceUrl: z.literal(SC900_SOURCE_URL),
   capturedAt: TimestampSchema,
   reported: z.object({
     questions: Sc900SourceNumberSchema,
@@ -51,6 +52,9 @@ export const Sc900CaptureLedgerSchema = z.object({
   const numbers = ledger.occurrences.map((item) => item.questionNumber);
   const pages = ledger.pages.map((page) => page.pageNumber);
   const pageNumbers = ledger.pages.flatMap((page) => page.questionNumbers);
+  if (ledger.pages.some((page) => page.url !== `https://www.examprepper.co/exam/128/${page.pageNumber}`)) {
+    issue("SC900 capture page URLs must exactly match the approved source origin, exam and page number");
+  }
   if (!unique(numbers) || numbers.length !== ledger.reported.questions ||
       numbers.some((number) => number > ledger.reported.questions) ||
       !unique(pages) || pages.length !== ledger.reported.pages ||
@@ -84,6 +88,11 @@ export type Sc900CaptureAsset = z.infer<typeof Sc900CaptureAssetSchema>;
 export function sc900OccurrenceId(questionNumber: number): string {
   Sc900SourceNumberSchema.parse(questionNumber);
   return `examprepper-128-q${String(questionNumber).padStart(6, "0")}`;
+}
+
+export function sc900SourcePageUrl(pageNumber: number): string {
+  z.number().int().positive().max(999999).parse(pageNumber);
+  return `https://www.examprepper.co/exam/128/${pageNumber}`;
 }
 
 export function assertSc900SourceNumber(number: number, ledger: Sc900CaptureLedger): void {

@@ -13,9 +13,11 @@ import { getFirebaseClients } from "./firebase-client.js";
 import {
   createAccountProgressService,
   validateAccountUid,
+  validateProgressExamId,
   type AccountProgress,
 } from "./account/progress-service.js";
 import type { PracticeAttempt } from "./engine.js";
+import type { ExamId } from "../domain/exams.js";
 
 export {
   ProgressConflictError,
@@ -50,16 +52,19 @@ function progressService() {
   });
 }
 
-export async function loadAccountProgress(uid: string): Promise<AccountProgress> {
+export async function loadAccountProgress(uid: string, examId: ExamId = "az104"): Promise<AccountProgress> {
   validateAccountUid(uid);
-  return progressService().loadAccountProgress(uid);
+  validateProgressExamId(examId);
+  return progressService().loadAccountProgress(uid, examId);
 }
 
 export async function saveAccountAttempt(
   uid: string,
   attempt: PracticeAttempt,
   expectedRevision: string | null,
+  examId: ExamId = "az104",
 ): Promise<{ revision: string }> {
   validateAccountUid(uid);
-  return progressService().saveAccountAttempt(uid, attempt, expectedRevision);
+  validateProgressExamId(examId);
+  return progressService().saveAccountAttempt(uid, attempt, expectedRevision, examId);
 }

@@ -6,6 +6,11 @@ service firebase.storage {
       allow get: if true;
     }
 
+    match /published/sc900/{releaseId}/assets/{assetName} {
+      allow get: if releaseId.matches('^r_[a-f0-9]{64}$')
+        && assetName.matches('^[a-f0-9]{64}\\.(png|jpg|gif|webp)$');
+    }
+
     match /{path=**} {
       allow read, write: if false;
     }

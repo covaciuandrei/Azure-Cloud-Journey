@@ -1,13 +1,7 @@
 import { z } from "zod";
-import {
-  assertDiscussionThreads,
-  CleanCatalogSchema as CatalogSchema,
-  CleanDiscussionSchema as DiscussionSchema,
-  CleanDocumentSchema as DocumentSchema,
-  CleanManifestSchema as ManifestSchema,
-  CleanQuestionSchema,
-  mediaExtension,
-} from "../domain/cleanBank.js";
+import { mediaExtension } from "../domain/cleanBank.js";
+import { assertExam, examBaseUrl, examConfig, type ExamId } from "../domain/exams.js";
+import { bankContract, validateDiscussionThreads } from "./bank-contract.js";
 import type {
   StudyCatalog,
   StudyDiscussion,
@@ -41,8 +35,10 @@ function normalizedBase(value: string): URL {
 export function createStudyRepository(
   baseUrl: string,
   fetcher: typeof fetch = fetch,
+  examId: ExamId = "az104",
 ): StudyRepository {
-  const base = normalizedBase(baseUrl);
+  const base = normalizedBase(examBaseUrl(baseUrl, examId));
+  const contract = bankContract(examId);
   const basePath = base.pathname;
   let manifestValue: StudyManifest | undefined;
   let manifestPromise: Promise<StudyManifest> | undefined;
@@ -84,9 +80,10 @@ export function createStudyRepository(
     if (manifestValue) return Promise.resolve(manifestValue);
     if (manifestPromise) return manifestPromise;
     const pending = (async () => {
-      const value = ManifestSchema.parse(
-        await readJson(safeUrl("data/manifest.json"), "Study manifest"),
-      ) as StudyManifest;
+      const value: StudyManifest = contract.manifest.parse(
+        await readJson(safeUrl(examConfig(examId).manifestPath), "Study manifest"),
+      );
+      assertExam(value, examId);
       const expectedRoot = `content/${value.releaseId}/`;
       if (value.catalogUrl !== `${expectedRoot}catalog.json` ||
           value.questionBaseUrl !== `${expectedRoot}questions/` ||
@@ -121,9 +118,10 @@ export function createStudyRepository(
     const inFlight = catalogPromises.get(version);
     if (inFlight) return inFlight;
     const pending = (async () => {
-      const value = CatalogSchema.parse(
+      const value: StudyCatalog = contract.catalog.parse(
         await readJson(safeUrl(`content/${version}/catalog.json`), "Study catalog"),
-      ) as StudyCatalog;
+      );
+      assertExam(value, examId);
       if (value.releaseId !== version ||
           (version === manifest.releaseId && value.sourceRevision !== manifest.sourceRevision)) {
         throw new Error("Study catalog release/source revision does not match the manifest");
@@ -170,10 +168,11 @@ export function createStudyRepository(
     const cached = questionPromises.get(key);
     if (cached) return cached;
     const pending = (async () => {
-      const value = DocumentSchema.parse(await readJson(
+      const value: StudyDocument = contract.document.parse(await readJson(
         safeUrl(`content/${version}/questions/${id}.json`),
         `Question ${id}`,
-      )) as StudyDocument;
+      ));
+      assertExam(value, examId);
       if (value.releaseId !== version || value.question.id !== id ||
           value.answers.id !== id || value.answers.questionId !== id ||
           value.question.sourceRevision !== value.answers.sourceRevision ||
@@ -198,23 +197,24 @@ export function createStudyRepository(
   const loadDiscussion = async (id: string, requestedRelease?: string): Promise<StudyDiscussion> => {
     const { summary, version } = await knownQuestion(id, requestedRelease);
     if (!summary.discussionEnabled || summary.commentCount === 0) {
-      return { schemaVersion: 1, releaseId: version, questionId: id, comments: [] };
+      return { schemaVersion: 1, ...(examId === "sc900" ? { examId } : {}), releaseId: version, questionId: id, comments: [] };
     }
     const key = `${version}/${id}`;
     const cached = discussionPromises.get(key);
     if (cached) return cached;
     const pending = (async () => {
-      const value = DiscussionSchema.parse(await readJson(
+      const value: StudyDiscussion = contract.discussion.parse(await readJson(
         safeUrl(`content/${version}/discussions/${id}.json`),
         `Discussion ${id}`,
-      )) as StudyDiscussion;
+      ));
+      assertExam(value, examId);
       if (value.releaseId !== version || value.questionId !== id ||
           value.comments.length !== summary.commentCount ||
           value.comments.some((comment) => !(summary.sourceNumbers ?? [summary.number])
             .includes(Number(comment.sourceOccurrenceId.slice(-6))))) {
         throw new Error(`Discussion ${id} does not match its catalog/release/thread metadata`);
       }
-      assertDiscussionThreads(value);
+      validateDiscussionThreads(value);
       return value;
     })();
     discussionPromises.set(key, pending);
@@ -225,6 +225,7 @@ export function createStudyRepository(
   };
 
   return {
+    examId,
     loadCatalog,
     loadQuestion,
     async loadQuestions(ids, requestedRelease) {
@@ -261,12 +262,12 @@ export function createStudyRepository(
       if (loadedVersion && loadedVersion !== version) {
         throw new Error(`Question ${question.id} belongs to another loaded snapshot`);
       }
-      const parsedQuestion = CleanQuestionSchema.parse(question);
+      const parsedQuestion = contract.question.parse(question);
       const asset = parsedQuestion.media.find((candidate) => candidate.id === assetId);
       if (!asset) throw new Error(`Question ${question.id} has no media asset ${assetId}`);
       const extension = mediaExtension(asset.contentType);
       if (asset.objectPath !==
-          `published/az104/${version}/assets/${asset.id}.${extension}`) {
+          `published/${examId}/${version}/assets/${asset.id}.${extension}`) {
         throw new Error(`Question ${question.id} media asset ${assetId} does not match the active release`);
       }
       return safeUrl(`content/${version}/media/${asset.id}.${extension}`).href;

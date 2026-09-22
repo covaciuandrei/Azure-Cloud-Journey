@@ -3,7 +3,8 @@ import { optionOrder, type PracticeResponse } from "../engine.js";
 import type { StudyCatalog, StudyDocument, StudyRepository } from "../types.js";
 import { QuestionCard } from "./QuestionCard.js";
 import { messageOf } from "./useStudy.js";
-import { TOPIC_IDS, matchesTopics, type TopicId } from "../../domain/topics.js";
+import { topicIdsForExam, matchesStudyTopics as matchesTopics, type StudyTopicId as TopicId } from "../../domain/examTopics.js";
+import { examIdOf } from "../../domain/exams.js";
 import { TopicFilter } from "./TopicFilter.js";
 
 type Filter = "all" | "automatic" | "manual" | "review";
@@ -27,6 +28,8 @@ function Question({ document, repository, seed }: {
 }
 
 export function Library({ catalog, repository }: { catalog: StudyCatalog; repository: StudyRepository }) {
+  const examId = examIdOf(catalog);
+  const TOPIC_IDS = topicIdsForExam(examId);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [page, setPage] = useState(1);
@@ -97,7 +100,7 @@ export function Library({ catalog, repository }: { catalog: StudyCatalog; reposi
           <option value="review">Provisional answers</option>
         </select></label>
     </div>
-    <TopicFilter questions={catalog.questions} selected={topics} onChange={(selection) => { setTopics(selection); setPage(1); }} />
+    <TopicFilter questions={catalog.questions} selected={topics} onChange={(selection) => { setTopics(selection); setPage(1); }} examId={examId} />
     </div>
     {pagination}
     {error ? <div className="notice notice-error" role="alert"><p>{error}</p>

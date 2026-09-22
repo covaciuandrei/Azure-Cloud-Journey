@@ -20,7 +20,7 @@
     "repo:check": "node --import tsx tools/repository/check-publication.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:public": "node --import tsx --test tests/demo.test.ts tests/account-services.test.ts tests/comment-quality.test.ts tests/course.test.ts tests/full-course.test.ts tests/filter-comments.test.ts tests/firestore-staging.test.ts tests/materialize.test.ts tests/offline-activation.test.ts tests/offline-data.test.ts tests/offline-worker.test.ts tests/plain-ui.test.ts tests/practice-engine.test.ts tests/prepared-integrity.test.ts tests/publication-boundary.test.ts tests/source-policy.test.ts tests/source-review.test.ts tests/upload.test.ts tests/welcome.test.ts",
+    "test:public": "node --import tsx --test tests/demo.test.ts tests/account-services.test.ts tests/comment-quality.test.ts tests/course.test.ts tests/full-course.test.ts tests/sc900-*.test.ts tests/multi-exam.test.ts tests/filter-comments.test.ts tests/firestore-staging.test.ts tests/materialize.test.ts tests/offline-activation.test.ts tests/offline-data.test.ts tests/offline-worker.test.ts tests/offline-publication.test.ts tests/plain-ui.test.ts tests/practice-engine.test.ts tests/prepared-integrity.test.ts tests/publication-boundary.test.ts tests/source-policy.test.ts tests/source-review.test.ts tests/upload.test.ts tests/welcome.test.ts",
     "test:rules": "bash tools/firebase/test-rules.sh",
     "data:sync": "node --import tsx tools/publish/clean-sync.ts",
     "data:purge-archives": "node --import tsx tools/cleanup/purge-archives.ts"

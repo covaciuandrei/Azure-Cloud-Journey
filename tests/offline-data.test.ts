@@ -5,12 +5,19 @@ import { cp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
-  OFFLINE_COURSE_MAX_BYTES, OfflineFileSchema, OfflineManifestSchema, selectOfflineFiles, type OfflineManifest,
+  OFFLINE_AVAILABILITY_MAX_BYTES, OFFLINE_COURSE_MAX_BYTES, OfflineFileSchema, OfflineManifestSchema, Sc900OfflineFileSchema,
+  offlineManifestUrl, parseOfflineManifest, readOfflineManifest, selectOfflineFiles, type OfflineManifest,
 } from "../src/domain/offline.js";
 import { CleanDocumentSchema } from "../src/domain/cleanBank.js";
 import { createOfflineAwareRepository } from "../src/web/offline-repository.js";
+import { offlineSessionReferences, offlineSessionReferencesForExam } from "../src/web/offline-references.js";
+import { emptyPractice } from "../src/web/storage.js";
 import type { StudyDocument, StudyRepository } from "../src/web/types.js";
+import { OfflineControls } from "../src/web/ui/OfflineControls.js";
+import type { OfflineDownload } from "../src/web/ui/useOfflineDownload.js";
 import { loadCoursePublication } from "../tools/course/publication.js";
 import { createDemoBank } from "../tools/demo/fixtures.js";
 import { validateHostingCourse } from "../tools/firebase/deploy-hosting-adc.js";
@@ -54,6 +61,112 @@ function manifestFixture(courseId: "networking" | "az104" = "networking"): Offli
     ],
   });
 }
+
+function sc900ManifestFixture(): OfflineManifest {
+  return parseOfflineManifest({
+    schemaVersion: 1, examId: "sc900", buildId: hex(4), releaseId: release,
+    counts: { questions: 1, comments: 0, images: 0 },
+    files: [
+      ...["/index.html", "/assets/index-abcdef.js"].map((url) => ({ kind: "shell", url, sha256: hex(1), bytes: 1 })),
+      { kind: "data", url: "/exams/sc900/manifest.json", sha256: hex(1), bytes: 1 },
+      { kind: "data", url: "/exams/sc900/availability.json", sha256: hex(1), bytes: 1 },
+      { kind: "data", url: "/exams/sc900/course/current.json", sha256: hex(2), bytes: 1 },
+      { kind: "data", url: `/exams/sc900/course/releases/c_${hex(6)}/sc900.json`, sha256: hex(3), bytes: 1 },
+      { kind: "data", url: `/exams/sc900/content/${release}/catalog.json`, sha256: hex(1), bytes: 1,
+        releaseId: release, part: "catalog" },
+      { kind: "data", url: `/exams/sc900/content/${release}/questions/q_${hex(5)}.json`, sha256: hex(1), bytes: 1,
+        releaseId: release, questionId: `q_${hex(5)}`, part: "question" },
+    ],
+  }, "sc900");
+}
+
+test("exam-specific offline manifests preserve legacy defaults and reject foreign file namespaces", () => {
+  assert.equal(offlineManifestUrl(), "/data/offline-manifest.json");
+  assert.equal(offlineManifestUrl("sc900"), "/exams/sc900/offline-manifest.json");
+  const fixture = sc900ManifestFixture();
+  assert.equal(OfflineManifestSchema.safeParse(fixture).success, true);
+  assert.throws(() => parseOfflineManifest(fixture, "az104"));
+  assert.throws(() => parseOfflineManifest({ ...fixture, examId: undefined }, "sc900"));
+  assert.equal(selectOfflineFiles(fixture).length, fixture.files.length);
+  assert.throws(() => parseOfflineManifest({
+    ...fixture, files: fixture.files.filter((file) => file.url !== "/exams/sc900/availability.json"),
+  }, "sc900"), /require availability/);
+  const availability = { kind: "data", url: "/exams/sc900/availability.json", sha256: hex(1), bytes: OFFLINE_AVAILABILITY_MAX_BYTES };
+  assert.equal(Sc900OfflineFileSchema.safeParse(availability).success, true);
+  assert.equal(OfflineFileSchema.safeParse(availability).success, false);
+  assert.equal(Sc900OfflineFileSchema.safeParse({ ...availability, bytes: OFFLINE_AVAILABILITY_MAX_BYTES + 1 }).success, false);
+  for (const url of [
+    "/data/manifest.json", "/data/course.json", `/courses/c_${hex(6)}/az104.json`,
+    `/exams/az104/content/${release}/catalog.json`, `/exams/sc900/course/releases/c_${hex(6)}/other.json`,
+    `/exams/sc900/course/releases/c_${hex(6)}/../sc900.json`, `/exams/sc900/course/releases/c_${hex(6)}/%73c900.json`,
+    "/exams/sc900/course/current.json?query=1", "https://evil.test/exams/sc900/course/current.json",
+    "//evil.test/exams/sc900/course/current.json", "/exams/sc900/course/current.json#fragment",
+  ]) {
+    assert.equal(Sc900OfflineFileSchema.safeParse({ kind: "data", url, sha256: hex(1), bytes: 1 }).success, false, url);
+  }
+  for (const url of ["/exams/sc900/manifest.json", "/exams/sc900/course/current.json", `/exams/sc900/course/releases/c_${hex(6)}/sc900.json`]) {
+    const file = { kind: "data", url, sha256: hex(1), bytes: OFFLINE_COURSE_MAX_BYTES };
+    assert.equal(Sc900OfflineFileSchema.safeParse(file).success, true);
+    assert.equal(Sc900OfflineFileSchema.safeParse({ ...file, bytes: OFFLINE_COURSE_MAX_BYTES + 1 }).success, false);
+    assert.equal(OfflineFileSchema.safeParse(file).success, false);
+  }
+  for (const part of ["topics", "eligibility", "learning-manifest", "explanation"] as const) {
+    const leaf = part === "learning-manifest" ? "learning/manifest" :
+      part === "explanation" ? `learning/questions/q_${hex(5)}` : part;
+    const file = {
+      kind: "data", url: `/exams/sc900/content/${release}/${leaf}.json`, sha256: hex(1), bytes: 10,
+      releaseId: release, part, ...(part === "explanation" ? { questionId: `q_${hex(5)}` } : {}),
+    };
+    assert.equal(Sc900OfflineFileSchema.safeParse(file).success, true);
+    assert.equal(OfflineFileSchema.safeParse(file).success, false);
+    assert.equal(Sc900OfflineFileSchema.safeParse({ ...file, releaseId: legacy }).success, false);
+    if (part === "learning-manifest") {
+      assert.equal(Sc900OfflineFileSchema.safeParse({ ...file, bytes: OFFLINE_COURSE_MAX_BYTES + 1 }).success, false);
+    }
+  }
+  for (const url of [
+    "/exams/sc900/data/topics.json", "/exams/sc900/data/learning.json", "/exams/sc900/data/eligibility.json",
+  ]) {
+    const file = { kind: "data", url, sha256: hex(1), bytes: 10 };
+    assert.equal(Sc900OfflineFileSchema.safeParse(file).success, false);
+    assert.equal(OfflineFileSchema.safeParse(file).success, false);
+  }
+  assert.equal(Sc900OfflineFileSchema.safeParse({
+    kind: "data", url: `/exams/sc900/teaching/${release}/questions/q_${hex(5)}.json`,
+    sha256: hex(1), bytes: 10, releaseId: release, questionId: `q_${hex(5)}`, part: "explanation",
+  }).success, false);
+});
+
+test("SC-900 saved release selection includes immutable archived topics with its catalog and question", () => {
+  const fixture = sc900ManifestFixture();
+  const manifest = parseOfflineManifest({
+    ...fixture,
+    files: [...fixture.files,
+      { kind: "data", url: `/exams/sc900/content/${legacy}/catalog.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "catalog" },
+      { kind: "data", url: `/exams/sc900/content/${legacy}/topics.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "topics" },
+      { kind: "data", url: `/exams/sc900/content/${legacy}/questions/q_${hex(5)}.json`, sha256: hex(1), bytes: 1,
+        releaseId: legacy, questionId: `q_${hex(5)}`, part: "question" },
+    ],
+  }, "sc900");
+  assert.equal(selectOfflineFiles(manifest).filter((file) => file.releaseId === legacy).length, 0);
+  const selected = selectOfflineFiles(manifest, [{ releaseId: legacy, questionIds: [`q_${hex(5)}`] }]);
+  assert.equal(selected.filter((file) => file.releaseId === legacy).length, 3);
+});
+
+test("page-side offline descriptor reading fails closed and bounds streaming input before parsing", async () => {
+  const fixture = sc900ManifestFixture();
+  assert.deepEqual(await readOfflineManifest(new Response(JSON.stringify(fixture)), "sc900"), fixture);
+  await assert.rejects(readOfflineManifest(new Response(JSON.stringify(fixture))), /Invalid|examId|allowlist/);
+  await assert.rejects(readOfflineManifest(new Response(null, { status: 404 }), "sc900"), /approved offline/);
+  let cancelled = 0;
+  let pulled = 0;
+  await assert.rejects(readOfflineManifest(new Response(new ReadableStream<Uint8Array>({
+    pull(controller) { pulled++; controller.enqueue(new Uint8Array(1024 * 1024)); },
+    cancel() { cancelled++; },
+  })), "sc900"), /4 MiB/);
+  assert.equal(cancelled, 1);
+  assert.ok(pulled <= 6);
+});
 
 test("offline file allowlist excludes private, auth, API and traversal paths", () => {
   for (const url of ["/data/approved-comments.json", "/__/firebase/init.json", "/api/session", "/users/alice",
@@ -174,6 +287,52 @@ test("online database errors never silently fall back to the downloaded copy", a
   const repository = createOfflineAwareRepository(primary, downloaded, () => false, "https://example.test");
   await assert.rejects(repository.loadQuestion(document.question.id), /permission-denied/);
   assert.equal(downloadedReads, 0);
+});
+
+test("saved references cannot combine different exams, even when their release IDs could overlap", () => {
+  assert.deepEqual(offlineSessionReferences(emptyPractice()), []);
+  assert.deepEqual(offlineSessionReferencesForExam("sc900", emptyPractice("sc900")), []);
+  assert.throws(() => offlineSessionReferences(emptyPractice(), emptyPractice("sc900")), /different exam/);
+  assert.throws(() => offlineSessionReferencesForExam("sc900", emptyPractice()), /different exam/);
+});
+
+test("offline controls identify the selected exam and expose an explicit separate all-clear", () => {
+  const offline: OfflineDownload = {
+    examId: "sc900", supported: true, initialized: true, online: true, useDownload: false,
+    state: { status: "ready", ready: true, buildId: hex(3), releaseId: release,
+      totalFiles: 1, completedFiles: 1, totalBytes: 10, completedBytes: 10, downloadBytes: 0, error: null, updatedAt: null },
+    preparing: false, hasWorker: true, issue: null, storageNote: null,
+    download: async () => {}, cancel: async () => {}, remove: async () => {}, removeAll: async () => {},
+    useCopy() {}, useOnline() {},
+  };
+  const html = renderToStaticMarkup(createElement(OfflineControls, { offline, getReferences: () => ({ references: [], warning: null }) }));
+  assert.match(html, /SC-900 offline download/);
+  assert.match(html, /Remove all exam downloads/);
+  assert.match(html, /Remove download/);
+  assert.doesNotMatch(html, /AZ-104/);
+});
+
+test("offline repository media rewrites reject foreign exam roots and arbitrary URLs", async () => {
+  const document = documentFixture();
+  const base = stubRepository(document, "https://study.example", () => {});
+  for (const path of [
+    "/api/private", `/exams/sc900/content/${document.releaseId}/media/${hex(123)}.png`,
+    `/content/${document.releaseId}/media/${hex(123)}.png?token=secret`,
+    `/content/${document.releaseId}/media/${hex(123)}.png#fragment`,
+    `/content/${document.releaseId}/media/${hex(123)}.svg`,
+  ]) {
+    const remote = { ...base, mediaUrl: () => `https://study.example${path}` };
+    const repository = createOfflineAwareRepository(remote, remote, () => true, "https://local.example");
+    const loaded = await repository.loadQuestion(document.question.id);
+    assert.throws(() => repository.mediaUrl(loaded.question, hex(123), loaded.releaseId), /outside this exam/);
+  }
+  assert.throws(() => createOfflineAwareRepository(base, base, () => true, "file:///private/"), /Invalid offline/);
+  assert.throws(() => createOfflineAwareRepository(base, base, () => true, "https://local.example", "sc900"), /different exam/);
+  const sc900 = { ...base, examId: "sc900" as const, mediaUrl: () => `https://study.example/exams/sc900/content/${document.releaseId}/media/${hex(123)}.png` };
+  const repository = createOfflineAwareRepository(sc900, sc900, () => true, "https://local.example", "sc900");
+  const loaded = await repository.loadQuestion(document.question.id);
+  assert.equal(repository.mediaUrl(loaded.question, hex(123), loaded.releaseId),
+    `https://local.example/exams/sc900/content/${document.releaseId}/media/${hex(123)}.png`);
 });
 
 test("Hosting course validation uses the active publication and rejects changed, oversized and symlink files without deployment", async () => {

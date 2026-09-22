@@ -3,6 +3,12 @@ import { test } from "node:test";
 import { getApps } from "firebase/app";
 import { Timestamp } from "firebase/firestore";
 import { PracticeAttemptSchema, type PracticeAttempt } from "../src/web/engine.js";
+import {
+  STORAGE_KEY, emptyPractice, practiceStorageKey, readPractice, storeAttempt, writePractice,
+} from "../src/web/storage.js";
+import {
+  accountCacheSchema, accountCloudState, accountStorageKey, acknowledgeAttempt, emptyAccountCache, queueAttempt,
+} from "../src/web/profile-storage.js";
 import { accountErrorMessage } from "../src/web/account/auth-errors.js";
 import {
   FirebaseConfigurationError,
@@ -64,6 +70,12 @@ function activeDocument(value: PracticeAttempt | null = attempt(), revision = RE
 
 function historyDocument(value: PracticeAttempt = attempt(1, true)) {
   return { schemaVersion: 1, attempt: value, finishedAt: value.finishedAt, updatedAt };
+}
+
+function sc900Attempt(index = 1, completed = false, exam = false): PracticeAttempt {
+  const value = { ...attempt(index, completed, exam), examId: "sc900" as const };
+  if (exam) value.deadline = value.startedAt + 45 * 60_000;
+  return value;
 }
 
 function harness() {
@@ -485,6 +497,176 @@ test("oversized Unicode payloads and reserved or oversized map keys are rejected
   }
   assert.equal(mock.state.transactions, 0);
   assert.equal(mock.writes.length, 0);
+});
+
+test("guest practice preserves legacy keys and isolates identical session/question IDs by exam", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+  };
+  const az104 = storeAttempt(emptyPractice(), attempt());
+  const sc900 = storeAttempt(emptyPractice("sc900"), sc900Attempt(), "sc900");
+  assert.equal(writePractice(storage, az104), null);
+  assert.equal(writePractice(storage, sc900, undefined, "sc900"), null);
+  assert.equal(practiceStorageKey(), STORAGE_KEY);
+  assert.deepEqual([...values.keys()], [STORAGE_KEY, `${STORAGE_KEY}:exam:sc900`]);
+  assert.deepEqual(readPractice(storage).state, az104);
+  assert.deepEqual(readPractice(storage, undefined, "sc900").state, sc900);
+  assert.equal(writePractice(storage, az104, "custom-key"), null);
+  assert.ok(values.has("custom-key"));
+  assert.equal(writePractice(storage, sc900, "custom-key", "sc900"), null);
+  assert.ok(values.has("custom-key:exam:sc900"));
+  assert.match(writePractice(storage, az104, undefined, "sc900")!, /invalid/);
+  assert.match(writePractice(storage, sc900)!, /invalid/);
+  assert.throws(() => storeAttempt(az104, sc900Attempt()), /another exam|different exam/);
+  assert.throws(() => storeAttempt(sc900, attempt(), "sc900"), /another exam|different exam/);
+  values.set(practiceStorageKey("sc900"), JSON.stringify(az104));
+  const rejected = readPractice(storage, undefined, "sc900");
+  assert.match(rejected.warning!, /invalid/);
+  assert.deepEqual(rejected.state, emptyPractice("sc900"));
+  assert.equal(values.get(practiceStorageKey("sc900")), JSON.stringify(az104));
+  values.set(practiceStorageKey("sc900"), JSON.stringify({ ...sc900, admin: true }));
+  assert.match(readPractice(storage, undefined, "sc900").warning!, /invalid/);
+});
+
+test("account caches reject foreign envelopes, attempts and acknowledgements before coalescing IDs", () => {
+  const az104 = queueAttempt(emptyAccountCache(), attempt());
+  const sc900 = queueAttempt(emptyAccountCache("sc900"), sc900Attempt(), "sc900");
+  assert.equal(accountStorageKey(UID), `${STORAGE_KEY}:account:${UID}`);
+  assert.notEqual(accountStorageKey(UID), accountStorageKey(UID, "sc900"));
+  assert.notEqual(accountStorageKey(UID, "sc900"), accountStorageKey("bob", "sc900"));
+  assert.notEqual(accountStorageKey(UID, "sc900"), practiceStorageKey("sc900"));
+  assert.throws(() => queueAttempt(sc900, attempt(), "sc900"));
+  assert.throws(() => queueAttempt(az104, sc900Attempt()));
+  assert.throws(() => acknowledgeAttempt(sc900, attempt(), REVISION, "sc900"));
+  assert.throws(() => acknowledgeAttempt(az104, sc900Attempt(), REVISION));
+  assert.throws(() => accountCloudState(attempt(), [], "sc900"));
+  assert.throws(() => accountCloudState(sc900Attempt(), []));
+  for (const invalid of [
+    { ...sc900, examId: undefined },
+    { ...sc900, examId: "az104" },
+    { ...sc900, saved: az104.saved },
+    { ...sc900, pending: az104.pending },
+    { ...sc900, extra: true },
+    { ...sc900, saved: { ...sc900.saved, extra: true } },
+  ]) {
+    assert.equal(accountCacheSchema("sc900").safeParse(invalid).success, false);
+  }
+  const edited = { ...sc900Attempt(), currentIndex: 1 };
+  const queued = queueAttempt(sc900, edited, "sc900");
+  assert.equal(queued.pending.length, 1);
+  const older = acknowledgeAttempt(queued, sc900Attempt(), REVISION, "sc900");
+  assert.equal(older.pending.length, 1);
+  const latest = acknowledgeAttempt(older, edited, OTHER_REVISION, "sc900");
+  assert.equal(latest.pending.length, 0);
+  assert.equal(az104.pending.length, 1);
+  assert.equal(az104.revision, null);
+});
+
+test("per-exam history and pending queues retain their existing bounds", () => {
+  let cache = emptyAccountCache("sc900");
+  for (let index = 1; index <= 100; index++) cache = queueAttempt(cache, sc900Attempt(index), "sc900");
+  assert.equal(cache.pending.length, 100);
+  assert.throws(() => queueAttempt(cache, sc900Attempt(101), "sc900"));
+  assert.equal(cache.pending.length, 100);
+  let saved = emptyPractice("sc900");
+  for (let index = 1; index <= 25; index++) saved = storeAttempt(saved, sc900Attempt(index, true), "sc900");
+  assert.equal(saved.history.length, 20);
+  assert.equal(saved.history[0]!.id, attemptId(25));
+  assert.equal(saved.history[19]!.id, attemptId(6));
+});
+
+test("SC900 reads and revisioned saves never touch legacy AZ104 account paths", async () => {
+  const mock = harness();
+  const legacy = await mock.service.saveAccountAttempt(UID, attempt(), null);
+  const az104Before = mock.documents.get(ACTIVE_PATH);
+  const sc900 = await mock.service.saveAccountAttempt(UID, sc900Attempt(), null, "sc900");
+  const scActive = `users/${UID}/exams/sc900/state/active`;
+  assert.notEqual(legacy.revision, sc900.revision);
+  assert.deepEqual(mock.documents.get(scActive), {
+    ...activeDocument(sc900Attempt(), sc900.revision), examId: "sc900",
+  });
+  const scCompleted = await mock.service.saveAccountAttempt(UID, sc900Attempt(1, true), sc900.revision, "sc900");
+  assert.deepEqual(await mock.service.loadAccountProgress(UID, "sc900"), {
+    revision: scCompleted.revision, activeAttempt: null, history: [sc900Attempt(1, true)],
+  });
+  assert.deepEqual(mock.documents.get(ACTIVE_PATH), az104Before);
+  assert.deepEqual(await mock.service.loadAccountProgress(UID), {
+    revision: legacy.revision, activeAttempt: attempt(), history: [],
+  });
+  assert.deepEqual(mock.documents.get(`users/${UID}/exams/sc900/sessions/${attemptId(1)}`), {
+    ...historyDocument(sc900Attempt(1, true)), examId: "sc900",
+  });
+  assert.ok(mock.reads.includes(`users/${UID}/exams/sc900/sessions?orderBy=finishedAt:desc&limit=20`));
+  assert.equal(mock.documents.has(`users/${UID}/history/${attemptId(1)}`), false);
+  await assert.rejects(mock.service.saveAccountAttempt(UID, attempt(), scCompleted.revision), ProgressConflictError);
+});
+
+test("SC900 requires explicit exam identities in active and history envelopes and attempts", async () => {
+  const scActive = `users/${UID}/exams/sc900/state/active`;
+  for (const document of [
+    activeDocument(sc900Attempt()),
+    { ...activeDocument(sc900Attempt()), examId: "az104" },
+    { ...activeDocument(attempt()), examId: "sc900" },
+    { ...activeDocument(null), examId: undefined },
+    { ...activeDocument(sc900Attempt()), examId: "sc900", extra: true },
+  ]) {
+    const mock = harness();
+    mock.documents.set(scActive, document);
+    await assert.rejects(mock.service.loadAccountProgress(UID, "sc900"), ProgressValidationError);
+    await assert.rejects(mock.service.saveAccountAttempt(UID, sc900Attempt(), REVISION, "sc900"), ProgressValidationError);
+    assert.equal(mock.writes.length, 0);
+  }
+  for (const document of [
+    historyDocument(sc900Attempt(1, true)),
+    { ...historyDocument(sc900Attempt(1, true)), examId: "az104" },
+    { ...historyDocument(attempt(1, true)), examId: "sc900" },
+    { ...historyDocument(sc900Attempt(1, true)), examId: "sc900", extra: true },
+  ]) {
+    const mock = harness();
+    mock.documents.set(`users/${UID}/exams/sc900/sessions/${attemptId(1)}`, document);
+    await assert.rejects(mock.service.loadAccountProgress(UID, "sc900"), ProgressValidationError);
+    assert.equal(mock.writes.length, 0);
+  }
+  const mock = harness();
+  mock.documents.set(ACTIVE_PATH, { ...activeDocument(sc900Attempt()), examId: "sc900" });
+  await assert.rejects(mock.service.loadAccountProgress(UID), ProgressValidationError);
+  await assert.rejects(mock.service.saveAccountAttempt(UID, attempt(), REVISION), ProgressValidationError);
+});
+
+test("cross-exam saves, invalid exam paths, and foreign SC900 accounts fail before I/O", async () => {
+  const mock = harness();
+  await assert.rejects(mock.service.saveAccountAttempt(UID, attempt(), null, "sc900"), ProgressValidationError);
+  await assert.rejects(mock.service.saveAccountAttempt(UID, sc900Attempt(), null), ProgressValidationError);
+  const progress = await import("../src/web/account-progress.js");
+  for (const invalid of ["", "../az104", "az500"]) {
+    for (const api of [mock.service, progress]) {
+      await assert.rejects(
+        Reflect.apply(api.loadAccountProgress, api, [UID, invalid]), ProgressValidationError,
+      );
+      await assert.rejects(
+        Reflect.apply(api.saveAccountAttempt, api, [UID, attempt(), null, invalid]), ProgressValidationError,
+      );
+    }
+  }
+  mock.state.user = { uid: "bob" };
+  await assert.rejects(mock.service.loadAccountProgress(UID, "sc900"), ProgressIdentityError);
+  await assert.rejects(mock.service.saveAccountAttempt(UID, sc900Attempt(), null, "sc900"), ProgressIdentityError);
+  assert.equal(mock.reads.length, 0);
+  assert.equal(mock.state.transactions, 0);
+  assert.equal(getApps().length, 0);
+});
+
+test("SC900 timed sessions enforce their 45-minute deadline independently of AZ104", async () => {
+  const mock = harness();
+  const value = sc900Attempt(1, false, true);
+  const saved = await mock.service.saveAccountAttempt(UID, value, null, "sc900");
+  assert.deepEqual((await mock.service.loadAccountProgress(UID, "sc900")).activeAttempt, value);
+  await assert.rejects(
+    mock.service.saveAccountAttempt(UID, { ...value, deadline: value.startedAt + 60 * 60_000 }, saved.revision, "sc900"),
+    ProgressValidationError,
+  );
 });
 
 test("emulators require an explicit development flag and an exact permitted loopback hostname", () => {

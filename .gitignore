@@ -20,6 +20,7 @@ public/content/
 public/data/
 public/teaching/
 public/courses/
+public/exams/
 tools/firebase/inventory-before.json
 tools/firebase/status.json
 tools/firebase/setup-report.json

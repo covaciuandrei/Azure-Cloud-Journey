@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TOPIC_GROUPS, TOPIC_IDS, matchesTopics, type TopicId } from "../../domain/topics.js";
+import { topicGroupsForExam, topicIdsForExam, matchesStudyTopics as matchesTopics, type StudyTopicId as TopicId } from "../../domain/examTopics.js";
+import type { ExamId } from "../../domain/exams.js";
 import type { QuestionSummary } from "../types.js";
 
 function GroupCheckbox({ label, checked, partial, onChange }: {
@@ -11,13 +12,16 @@ function GroupCheckbox({ label, checked, partial, onChange }: {
     aria-checked={partial ? "mixed" : checked} onChange={onChange} />;
 }
 
-export function TopicFilter({ questions, selected, onChange }: {
+export function TopicFilter({ questions, selected, onChange, examId = "az104" }: {
   questions: readonly QuestionSummary[]; selected: readonly TopicId[]; onChange: (topics: TopicId[]) => void;
+  examId?: ExamId;
 }) {
+  const TOPIC_IDS = topicIdsForExam(examId);
+  const TOPIC_GROUPS = topicGroupsForExam(examId);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const counts = useMemo(() => Object.fromEntries(TOPIC_IDS.map((id) => [
     id, questions.filter((question) => matchesTopics(question.topicIds, [id])).length,
-  ])), [questions]);
+  ])), [questions, TOPIC_IDS]);
   const toggle = (ids: readonly TopicId[], include: boolean) => {
     const next = new Set(selected);
     ids.forEach((id) => include ? next.add(id) : next.delete(id));
