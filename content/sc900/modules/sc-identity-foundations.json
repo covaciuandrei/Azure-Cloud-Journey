@@ -1,0 +1,360 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-identity-foundations",
+  "title": "Identity foundations: prove who, decide what, and understand trust",
+  "summary": "Follow fictional students and teachers from identity proof to document permission, then distinguish directories, identity providers, federation, synchronization, and single sign-on.",
+  "priority": "core",
+  "priorityReason": "Identity is the basis of modern access decisions. These distinctions prevent later product features from being mistaken for automatic permissions.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Define identity as the primary security perimeter.",
+    "Define authentication.",
+    "Define authorization.",
+    "Describe identity providers.",
+    "Describe directory services and Active Directory.",
+    "Describe federation."
+  ],
+  "lessons": [
+    {
+      "id": "sc-identity-authentication-authorization",
+      "title": "Separate being recognized from being allowed",
+      "summary": "Use identity as a security boundary without confusing authentication, authorization, connectivity, or a product entitlement.",
+      "objectives": [
+        "Explain why identity-based decisions matter when people and applications work outside a school network.",
+        "Distinguish an identity claim, proof of identity, and an allowed operation.",
+        "Trace successful authentication followed by a denied document request.",
+        "Connect identity administration, authentication, authorization, and auditing."
+      ],
+      "sections": [
+        {
+          "id": "sc-identity-perimeter",
+          "title": "A person can be outside the building and still be the right person",
+          "blocks": [
+            { "type": "paragraph", "text": "At fictional Cedar School, Ana prepares science lessons from home and Bogdan opens practice worksheets from a classroom computer. A hosted application may be outside the school network altogether. Protecting only the school's internet connection cannot decide who should read each cloud document. Ana does not become a stranger simply by going home, and a device does not become safe simply by joining school Wi-Fi. Identity becomes a primary security perimeter because access decisions can follow the person or software requesting the resource instead of relying only on network location." },
+            { "type": "paragraph", "text": "A digital identity represents a person, device or software workload in a system. It can include an identifier and relevant attributes such as organizational relationship or group membership. The account is a representation used for decisions, not the whole human being. Several people can share a display name, and one person can have different accounts in different organizations. A system needs the appropriate stable identifier in its trusted context, not merely a familiar name typed into a form. An application's automated document exporter also needs an identity and limited permissions even when no person is actively clicking a button." },
+            { "type": "paragraph", "text": "Primary does not mean only. Network restrictions, device protection, application rules and data controls still matter. A verified teacher might be restricted on an unsuitable device, and a valid account cannot reach a service during a network outage. The important change is that being inside a network is no longer treated as sufficient evidence for every request. Combine who or what is requesting access with the resource, action and policy conditions. This supports appropriate work from different places without giving every recognized identity all the school's information." },
+            { "type": "callout", "tone": "caution", "title": "Scope checked September 22, 2026", "text": "The SC-900 English guide currently publishes an announced outline effective October 21, 2026. These lessons map its identity-concept objectives while teaching currently documented behavior. They do not claim that future outline is already effective, verify a previous English snapshot, or guarantee exam readiness." }
+          ]
+        },
+        {
+          "id": "sc-four-identity-jobs",
+          "title": "An account needs a lifecycle, not just a password",
+          "blocks": [
+            { "type": "paragraph", "text": "Administration creates and maintains the identities and their relationships. The school needs a reliable process when a teacher joins, changes classes or leaves. Creating an account in September is only the beginning: a forgotten group membership can leave a former teacher with unnecessary access much later. Decide who can approve and make these changes, and keep the information accurate. An account that no longer represents an authorized relationship is still a problem even if its password is very strong." },
+            { "type": "paragraph", "text": "Authentication checks proof associated with an identity. Authorization decides the operations that identity may perform. Auditing records relevant events so authorized staff can review what happened. These are four complementary jobs when administration is included. A log of successful sign-ins helps a reviewer, but it does not by itself grant or remove document access. A group membership can help an application make an authorization decision, but adding a display label such as Teacher does not automatically implement a permission policy. Each job needs a responsible system and an explicit connection to the others." },
+            { "type": "paragraph", "text": "When Ana stops teaching a class, the school should review her access rather than merely edit her profile text. When an account must be disabled, existing sessions and application-specific permissions also need attention. Different applications react to account changes at different times. Central identity administration improves consistency, but it is not proof that every disconnected application or already-issued session has been updated immediately. A complete lifecycle includes checking the result at the services that actually hold the data." }
+          ]
+        },
+        {
+          "id": "sc-authentication-proof",
+          "title": "Authentication asks for evidence, not a convincing name",
+          "blocks": [
+            { "type": "paragraph", "text": "Authentication answers which identity the requester has demonstrated control of under the system's rules. Typing Ana's username identifies the claimed account; it does not prove ownership. The authentication service checks an approved credential or method. A password is an example of something known. A security key can supply proof of possession. Biometrics are examples of a personal characteristic used within supported authentication methods. The verifier evaluates the method's actual proof, not simply whether a screen displays a reassuring word such as secure." },
+            { "type": "paragraph", "text": "Multifactor authentication uses more than one factor category. A password and another memorized answer are both things known, so they are not automatically two different factors. A supported combination involving a password and possession of a registered authenticator can provide stronger evidence. The details of which methods satisfy a policy belong to the configured identity system; counting the number of prompts is not a reliable substitute. A single user gesture can also participate in a method that combines factors. At fundamentals level, understand why independent proof is useful rather than inventing universal rules about screen counts." },
+            { "type": "paragraph", "text": "Successful authentication increases confidence that the requester controls the identity's required proof. It is not a guarantee that the real person is acting safely, nor permission for every resource. Credentials and sessions can be misused, and even a legitimate user can make a mistake. Software workloads also authenticate, using appropriate machine credentials or managed mechanisms rather than borrowing a teacher's password. Keeping the workload separate lets the school give it only the actions its automated job needs and investigate its activity separately from Ana's." }
+          ]
+        },
+        {
+          "id": "sc-authorization-operations",
+          "title": "Authorization asks about this resource and this action",
+          "blocks": [
+            { "type": "paragraph", "text": "After recognizing an identity in our protected school application, the application evaluates what that identity may do. Authorization is not simply a second login screen. It can decide whether Ana may read a worksheet, update one class's feedback or delete a document. The same person can be allowed to read and denied permission to edit. A group or role can collect related permissions, but its name has no magical effect unless the resource's policy actually uses it. A role scoped to the science class need not apply to the school office's documents." },
+            { "type": "paragraph", "text": "The server that protects the resource must enforce the decision. Hiding an edit button in a browser can make the interface clearer, but is not the permission boundary. The underlying operation still needs the appropriate server-side rule. Claims supplied by a trusted identity system can contribute to this decision, such as an application role. The application must validate the evidence and interpret the claim for its own resource. A display name, email suffix or unverified statement from the browser is not an acceptable replacement for that policy." },
+            { "type": "paragraph", "text": "Separate authorization from two other everyday problems. Connectivity determines whether the request can reach the service; a permission grant does not repair an offline connection. Licensing determines whether the organization or user has the needed product entitlement; it does not automatically grant rights to every document inside the product. Conversely, having a document permission does not guarantee all other service prerequisites are met. Our examples assume the connection and any required product entitlement already exist so the access decision can be examined without those unrelated causes." }
+          ]
+        },
+        {
+          "id": "sc-signin-access-flow",
+          "title": "Follow the decision through the components",
+          "blocks": [
+            { "type": "paragraph", "text": "A modern application often delegates sign-in to an identity provider rather than keeping its own password database. The provider verifies the identity and issues the appropriate token through a standard flow. The application validates the evidence intended for it and applies its access rules. Details differ between a web sign-in and a call to an API, which is an interface used by software. In both cases, accepting identity evidence is not the same as allowing every document operation. The next lesson follows token types and trust more closely." },
+            { "type": "diagram", "title": "Recognition is followed by a resource decision", "description": "A simplified logical flow for a protected application. Protocols handle the actual messages; the diagram separates responsibilities and does not instruct the browser to collect the provider's password.", "nodes": [
+              { "id": "sc-requester", "label": "Ana's browser", "detail": "Requests a protected document", "column": 0, "row": 0 },
+              { "id": "sc-idp", "label": "Identity provider", "detail": "Checks proof and policy", "column": 1, "row": 0 },
+              { "id": "sc-validator", "label": "Application", "detail": "Validates its identity evidence", "column": 2, "row": 0 },
+              { "id": "sc-permission", "label": "Resource policy", "detail": "Checks document and action", "column": 2, "row": 1 },
+              { "id": "sc-access-result", "label": "Allow or deny", "detail": "Record relevant outcome", "column": 1, "row": 2 }
+            ], "edges": [
+              { "from": "sc-requester", "to": "sc-idp", "label": "Uses approved sign-in flow" },
+              { "from": "sc-idp", "to": "sc-validator", "label": "Issues trusted evidence" },
+              { "from": "sc-validator", "to": "sc-permission", "label": "Identifies the requester" },
+              { "from": "sc-permission", "to": "sc-access-result", "label": "Decides requested operation" }
+            ] }
+          ]
+        },
+        {
+          "id": "sc-worked-authentication-authorization",
+          "title": "Let a student sign in without becoming a teacher",
+          "blocks": [
+            { "type": "example", "title": "Bogdan opens the correct document from home", "scenario": "Assume Cedar School's application is reachable, all needed entitlements exist, and its policy permits Bogdan to read only his own practice feedback. Ana may edit feedback for the science class she teaches. Both use the school's approved sign-in provider.", "steps": [
+              { "action": "Have Bogdan identify his account and supply its required proof to the approved sign-in provider, which verifies that proof before reporting successful authentication.", "why": "His username says which identity he claims. The checked proof establishes the authentication result; knowing the username alone would not be enough." },
+              { "action": "Accept Bogdan's validated sign-in identity rather than rejecting him merely because he is at home.", "why": "Identity is the primary decision boundary in this scenario. Location alone is neither proof of safety nor a reason to ignore an otherwise permitted request." },
+              { "action": "For a request to read Bogdan's own feedback, evaluate the read rule for his identity and that particular document.", "why": "Authentication establishes the requester; authorization relates that requester to the resource and operation. The stated rule permits this read." },
+              { "action": "Deny Bogdan's request to edit Ana's class feedback, even though the same sign-in remains valid.", "why": "No edit permission for that resource was granted. Repeating authentication would not create a missing permission." },
+              { "action": "After Ana's own successful authentication, permit her approved edit to her science class feedback and record the relevant operation.", "why": "Her permission matches the action and scope. Auditing records what was done but is not the source of the permission." }
+            ], "result": "One successful student sign-in leads to an allowed read and a denied edit. Ana's scoped teacher permission allows a different operation without implying access to every other class." }
+          ]
+        },
+        {
+          "id": "sc-auth-prediction-distinction",
+          "title": "Predict which part actually needs to change",
+          "blocks": [
+            { "type": "prediction", "id": "sc-predict-repeat-login", "prompt": "Bogdan signs out, signs in again with stronger authentication, and repeats the edit request. His permissions have not changed, and the stated policy has no stronger-authentication exception. Will the edit now be allowed?", "answer": "No. He still lacks the required edit permission.", "explanation": "Better proof can increase confidence in the identity and satisfy authentication conditions. It does not turn a student permission into a teacher permission. The authorization rule remains the same." },
+            { "type": "callout", "tone": "exam", "title": "Four different questions", "text": "Authentication: which identity has been verified? Authorization: may it perform this operation? Connectivity: can the request reach the service? Licensing: is the relevant product entitlement present? A question about one should not be answered by silently assuming another, and an internal network address is not universal authorization." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-check-identity-perimeter", "kind": "single", "prompt": "Ana works from home while Bogdan uses a classroom device. Why should the cloud app evaluate identity and policy rather than trust only school network location?", "choices": [
+          { "id": "identity-context", "text": "Legitimate work and cloud resources cross network boundaries, and internal location alone does not prove an appropriate request.", "explanation": "Identity and contextual policy can distinguish legitimate callers wherever they work while retaining other security layers." },
+          { "id": "network-useless", "text": "Identity makes every firewall, device update, and application permission unnecessary.", "explanation": "Primary security perimeter does not mean identity is the only useful defense." },
+          { "id": "wifi-all-access", "text": "A school Wi-Fi connection automatically grants teacher permissions.", "explanation": "Connectivity does not establish a teacher identity or a document permission." }
+        ], "correctIds": ["identity-context"], "explanation": "Identity-based access follows the requester and resource rather than assuming everything inside a building is equally trusted." },
+        { "id": "sc-check-authentication-proof", "kind": "single", "prompt": "A sign-in service checks approved proof associated with Bogdan's account. Which process is this?", "choices": [
+          { "id": "authorization", "text": "Authorization, because every successful sign-in assigns editing rights.", "explanation": "Authorization decides allowed operations; sign-in does not automatically create editing permissions." },
+          { "id": "authentication", "text": "Authentication, because the service is verifying the claimed identity's proof.", "explanation": "This is the identity-verification step, separate from the later decision about a document." },
+          { "id": "provisioning", "text": "Provisioning, because the username is creating a new school account on every sign-in.", "explanation": "Provisioning creates or maintains identity objects; the scenario checks an existing identity." }
+        ], "correctIds": ["authentication"], "explanation": "Look at what the system is checking: proof for an identity, not permission for an operation." },
+        { "id": "sc-check-authorization-denial", "kind": "single", "prompt": "Bogdan is authenticated and can reach the app, but its rule allows only reading his own feedback. He requests an edit to Ana's class document. What is the expected result?", "choices": [
+          { "id": "allow-authenticated", "text": "Allow, because successful authentication grants every operation.", "explanation": "A recognized identity still has only the operations the resource's policy permits." },
+          { "id": "buy-license-fix", "text": "Automatically allow after any product license is purchased.", "explanation": "Licensing is a service entitlement, not an automatic replacement for the missing document permission." },
+          { "id": "deny-operation", "text": "Deny the edit because the requested operation and resource exceed his permission.", "explanation": "The authorization decision is specific to his identity, the target document, and editing." }
+        ], "correctIds": ["deny-operation"], "explanation": "Neither reachability nor successful authentication supplies the absent edit permission." },
+        { "id": "sc-check-identity-jobs", "kind": "multiple", "prompt": "Select the two accurate descriptions of the school's identity processes.", "choices": [
+          { "id": "lifecycle-administration", "text": "Reviewing accounts and memberships when a teacher changes classes is identity administration.", "explanation": "Administration maintains the identity lifecycle and the relationships used by access policies." },
+          { "id": "two-known-mfa", "text": "A password and another memorized answer must be MFA because there are two prompts.", "explanation": "Both are knowledge proofs. MFA depends on factor categories and supported methods, not the number of screens." },
+          { "id": "audit-record", "text": "Recording an approved document edit supports auditing without itself granting the edit permission.", "explanation": "Auditing provides evidence of activity; the resource policy supplies authorization." },
+          { "id": "display-label-grant", "text": "Typing Teacher into a profile always grants every teacher role in connected applications.", "explanation": "An attribute only affects access where a configured, trusted policy actually uses it." }
+        ], "correctIds": ["lifecycle-administration", "audit-record"], "explanation": "Account maintenance, proof, permission and evidence contribute different parts of identity management." }
+      ],
+      "takeaways": [
+        "Identity is a primary security boundary because users, workloads, and resources cross physical networks.",
+        "A username claims an identity; approved proof supports authentication.",
+        "Authorization evaluates the identity's permitted action on the particular resource.",
+        "A successful sign-in can correctly be followed by a denied document request.",
+        "Administration and auditing support the identity lifecycle without replacing authentication or permission checks.",
+        "Connectivity and licensing are separate prerequisites, not automatic document access."
+      ],
+      "sourceIds": ["sc-identity-guide", "sc-authentication-authorization", "sc-primary-perimeter", "sc-identity-tokens", "sc-claims-validation", "sc-revoke-access"]
+    },
+    {
+      "id": "sc-directories-providers-federation",
+      "title": "Know who stores the identity, who issues proof, and who trusts it",
+      "summary": "Compare AD DS with Microsoft Entra ID and trace provider tokens and federated sign-in without confusing them with directory copying or blanket access.",
+      "objectives": [
+        "Describe directory objects, AD DS domains, domain controllers, and Kerberos at a conceptual level.",
+        "Explain how Microsoft Entra ID differs from an AD DS server hosted elsewhere.",
+        "Distinguish identity providers, token issuers, claims, token validation, and resource permissions.",
+        "Trace a scoped federation trust across two fictional schools.",
+        "Distinguish federation, single sign-on, and synchronization."
+      ],
+      "sections": [
+        {
+          "id": "sc-directory-objects",
+          "title": "The register and the service around it",
+          "blocks": [
+            { "type": "paragraph", "text": "A directory is an organized store of objects and their attributes. In the school, objects might represent Ana, a classroom computer, the ScienceTeachers group and an application. A directory service makes that information available through controlled operations such as finding an object, reading membership or maintaining attributes. It is more than a spreadsheet because other systems can rely on its identities, security rules and management interfaces. It is not the same thing as a folder that happens to contain documents." },
+            { "type": "paragraph", "text": "Active Directory Domain Services, usually shortened to AD DS, is a Microsoft directory service associated with Windows Server. It organizes identities and computers in domains. A server running the AD DS role is a domain controller. It stores directory information and provides domain authentication services. Organizational units, or OUs, help organize objects and administrative control, while Group Policy can apply settings to supported domain members. A domain here is a directory and authentication structure, not merely the text after the at sign in an email address." },
+            { "type": "paragraph", "text": "Kerberos is a common authentication protocol in this environment. At a conceptual level, a user obtains tickets from the domain's trusted service and presents an appropriate service ticket to a resource such as a file server. The server can recognize the authenticated identity without receiving the user's password for every file operation. It must still check its resource permissions. Directory membership and tickets help establish who is requesting access, but they do not mean every domain user may open every folder. This distinction connects directory services back to authentication and authorization." }
+          ]
+        },
+        {
+          "id": "sc-adds-entra-comparison",
+          "title": "A cloud identity service is not just a relocated domain controller",
+          "blocks": [
+            { "type": "paragraph", "text": "Microsoft Entra ID is a cloud identity and access management service operated by Microsoft. An organization uses a tenant containing its directory and identity configuration. Entra ID supports modern application sign-in and token-based access using protocols such as OpenID Connect and SAML, with OAuth 2.0 used for authorization flows. Organizations can create cloud identities or connect existing identity systems through supported hybrid arrangements. They do not need to operate their own AD DS domain controllers merely to use a cloud-only Entra tenant." },
+            { "type": "table", "caption": "Compare the service, not merely where a machine is located", "headers": ["Question", "AD DS", "Microsoft Entra ID"], "rows": [
+              ["How is it operated?", "An organization manages domain controllers, whether on its premises or in hosted VMs.", "Microsoft operates the cloud identity platform; the customer manages its identities and access configuration."],
+              ["Which common patterns fit?", "Domain membership, directory lookup such as LDAP, Kerberos authentication, OUs and Group Policy.", "Cloud app integration, token-based sign-in, tenant identities and identity access policies."],
+              ["Does moving to Azure make them identical?", "An AD DS server in an Azure VM remains AD DS.", "An Entra tenant is not a drop-in domain controller for every legacy protocol."]
+            ] },
+            { "type": "paragraph", "text": "The products can cooperate without being interchangeable. An old application that expects an LDAP directory and domain Kerberos authentication needs a compatible design; pointing it at an Entra tenant is not a complete migration. Microsoft Entra Domain Services is a separate managed-domain offering, not another name for ordinary Entra ID. Detailed integration choices belong to the relevant product documentation. For this lesson, recognize the requested capability first: a cloud sign-in service and a Windows domain service address related identity needs through different architectures." }
+          ]
+        },
+        {
+          "id": "sc-worked-directory-choice",
+          "title": "Match two school applications to their identity requirements",
+          "blocks": [
+            { "type": "example", "title": "A legacy file room and a new web worksheet app", "scenario": "Cedar School has an existing domain-based file service that uses AD DS and Kerberos. It also plans a new web application designed for Microsoft Entra ID sign-in. This exercise chooses concepts, not an infrastructure deployment.", "steps": [
+              { "action": "Identify the existing file service's domain objects, domain controllers and Kerberos dependency.", "why": "The requirement is a domain authentication and directory environment, not simply any service with identity in its name." },
+              { "action": "Identify the new web application's supported Entra sign-in integration and its tenant configuration.", "why": "A modern token-based application can use the cloud identity service without pretending that its tenant is an LDAP domain controller." },
+              { "action": "Keep both resource permission checks explicit, and assess a supported hybrid design if the same teachers need both applications.", "why": "Connecting identities can simplify use, but does not automatically migrate protocols or give every teacher every file." }
+            ], "result": "The school can explain why AD DS and Entra ID may coexist. Hosting a server in Azure does not rename it Entra ID, and cloud sign-in does not erase the legacy application's dependency." }
+          ]
+        },
+        {
+          "id": "sc-provider-tokens-claims",
+          "title": "A provider issues evidence that the right recipient must validate",
+          "blocks": [
+            { "type": "paragraph", "text": "An identity provider, or IdP, supplies identity services to applications, especially authentication and trusted evidence about identities. Microsoft Entra ID can fill this role. Centralizing sign-in avoids having every school application maintain a separate password system, and can make authentication policy and sign-in review more consistent. The provider can also perform authorization-server functions when issuing access tokens. That does not remove the resource application's responsibility to enforce the permissions that apply to its own data." },
+            { "type": "paragraph", "text": "A token contains claims: statements such as the subject identifier, issuer, intended audience and validity period. Depending on the token and configuration, it may contain roles or scopes. An ID token helps the client application establish a user's sign-in. An access token is presented to the intended protected resource, such as a document API. That API validates and interprets the access token for its own operations. An ID token is not a substitute API access token, and a token intended for the library API is not automatically valid at the marks API." },
+            { "type": "paragraph", "text": "Token validation checks more than whether the text looks plausible. Supported libraries and correct configuration verify the signature, accepted issuer, audience and validity conditions; the resource also checks relevant subject, tenant and permission claims. A trusted signature establishes that the issuer supplied the protected claims, not that every issuer or every token is acceptable everywhere. An email address is useful for display but can change and is not a safe universal authorization key. Use the identifiers and authorization rules documented for the system rather than an email suffix as proof of permission." }
+          ]
+        },
+        {
+          "id": "sc-worked-token-boundaries",
+          "title": "Validate the issuer, then evaluate the document operation",
+          "blocks": [
+            { "type": "example", "title": "A reader token is not a school-wide master key", "scenario": "Assume the school's worksheet API trusts its configured Entra issuer. Ana's client obtains a valid access token intended for that API with a read permission. The application policy separately allows her to read her science worksheet, but grants no edit permission in this scenario.", "steps": [
+              { "action": "Let the client present the access token to the worksheet API, which validates its signature, accepted issuer, audience and validity.", "why": "The API is the intended resource. Merely decoding claims or recognizing a familiar name would not establish that the evidence is valid for it." },
+              { "action": "Evaluate the token's allowed operation and the application's worksheet permission for Ana.", "why": "The provider's read claim and the resource's own rule support this read. Identity proof alone is not blanket document access." },
+              { "action": "Deny an edit and reject using a token intended only for a different API.", "why": "Changing the requested action or audience crosses a boundary the original evidence did not authorize." }
+            ], "result": "The provider issues evidence, the resource validates it, and the resource decides the operation. Valid sign-in, valid token audience, and sufficient permission remain distinct requirements." }
+          ]
+        },
+        {
+          "id": "sc-federation-trust",
+          "title": "Federation accepts another authority's proof within an agreement",
+          "blocks": [
+            { "type": "paragraph", "text": "Federation establishes trust so one system can accept identity evidence from another authority instead of verifying that user's original credentials itself. A relying application or identity service is configured to accept a particular issuer and the relevant protocol messages and claims. Trust must have boundaries: which issuer is accepted, how its signing keys are verified, which identities and claims are meaningful, and which resources can use the result. Seeing the word federation does not imply that every account in either organization becomes an administrator in the other." },
+            { "type": "paragraph", "text": "A school can also use federation within its own hybrid identity arrangement. For example, an Entra sign-in can delegate authentication to an on-premises federation service such as AD FS, then issue an appropriate cloud token after the result is accepted. AD FS and AD DS are not the same service: AD DS supplies the domain identity environment, while AD FS can provide federation and token services around that identity. An upstream authority that authenticates a user need not be the final issuer of the token accepted by a cloud application." },
+            { "type": "paragraph", "text": "Federation can avoid giving a visitor a second separately managed password, but that is not a promise that no local object exists. In Microsoft Entra B2B collaboration, the resource tenant normally has a user object representing the invited person, while authentication uses the external identity. That local representation can carry assignments and lifecycle information. Different collaboration designs have different object arrangements. Also, a trust from Cedar to a partner does not automatically create trust in the reverse direction. Accepting identity evidence and granting access remain deliberate decisions." }
+          ]
+        },
+        {
+          "id": "sc-worked-federation",
+          "title": "Trace a visiting teacher across the trust boundary",
+          "blocks": [
+            { "type": "example", "title": "Elena reviews Cedar's science worksheet", "scenario": "Elena belongs to fictional River School. For this simplified B2B collaboration example, Cedar has invited her, has a local guest representation, and has approved the identity relationship and applicable policies. Her home identity remains managed by River. Cedar assigns only the worksheet-review access.", "steps": [
+              { "action": "Elena opens Cedar's worksheet application and follows its normal identity sign-in flow to the appropriate home authentication authority.", "why": "Cedar does not ask a teacher to copy her River password into a new Cedar password database. The configured identity relationship determines whose proof is accepted." },
+              { "action": "The home authority authenticates Elena; Cedar's identity service evaluates the accepted result and its own applicable policies.", "why": "Federation transfers trusted evidence, not unconditional authority over Cedar's resources. The upstream authenticator and the resource-side issuer have different roles." },
+              { "action": "The relevant resource-side flow produces the evidence intended for Cedar's application, which validates it and finds Elena's approved worksheet permission.", "why": "The application must not blindly reuse an arbitrary home token or grant access solely because her display name is familiar." },
+              { "action": "Allow the worksheet review, deny unrelated staff documents, and remove Cedar's assignment when the review ends.", "why": "Resource authorization and guest lifecycle remain Cedar's duties even though River manages Elena's original credentials." }
+            ], "result": "Elena uses her home identity without gaining every Cedar document. Cedar retains a local representation and explicit permissions; no reverse trust or universal access has been invented." },
+            { "type": "diagram", "title": "Home authentication and resource-side authorization", "description": "A conceptual collaboration flow, not a wire-level protocol trace. Cedar accepts an approved external identity result, then its application evaluates its own resource permission.", "nodes": [
+              { "id": "sc-visitor", "label": "Elena", "detail": "River's teacher identity", "column": 0, "row": 0 },
+              { "id": "sc-home-provider", "label": "Home authority", "detail": "Authenticates Elena", "column": 1, "row": 0 },
+              { "id": "sc-resource-provider", "label": "Cedar identity service", "detail": "Accepted trust and local policy", "column": 2, "row": 0 },
+              { "id": "sc-guest-object", "label": "Cedar guest representation", "detail": "Local assignments and lifecycle", "column": 1, "row": 1 },
+              { "id": "sc-worksheet-app", "label": "Cedar application", "detail": "Validates evidence and permits review", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "sc-visitor", "to": "sc-home-provider", "label": "Supplies approved proof" },
+              { "from": "sc-home-provider", "to": "sc-resource-provider", "label": "Supplies accepted identity result" },
+              { "from": "sc-resource-provider", "to": "sc-guest-object", "label": "Uses local representation" },
+              { "from": "sc-resource-provider", "to": "sc-worksheet-app", "label": "Provides intended evidence" },
+              { "from": "sc-guest-object", "to": "sc-worksheet-app", "label": "Has scoped assignment" }
+            ] }
+          ]
+        },
+        {
+          "id": "sc-sso-sync-distinctions",
+          "title": "Copying an identity is not the same as trusting a sign-in",
+          "blocks": [
+            { "type": "paragraph", "text": "Synchronization copies selected identity information between systems and keeps it aligned according to configured scope and authority. For example, the school can synchronize approved AD DS users and groups into Entra ID. This does not turn one directory into the other or prove that every sign-in is federated. The sign-in method is a separate design choice. Microsoft documents cloud authentication options, including password hash synchronization and pass-through authentication, as well as federation. The choice of synchronization tool does not by itself determine where password verification occurs." },
+            { "type": "paragraph", "text": "Single sign-on, or SSO, describes the experience of accessing multiple applications without entering credentials independently for each one when the session and policy permit it. Several apps can use the same identity provider and benefit from SSO without crossing an organizational federation boundary. Federation can also support SSO across trusted systems. Neither concept means one token can be replayed at every application: each application or API needs evidence appropriate to its own audience and protocol. Additional authentication may still be required by policy or changing conditions." },
+            { "type": "paragraph", "text": "Returning to Elena, Cedar accepting her home identity describes the trust relationship; seeing her guest object in Cedar describes a directory representation; opening another permitted app without a fresh credential prompt describes an SSO experience. These observations answer different questions. Ending her access also requires a layered lifecycle process. Disabling an identity can prevent new sign-ins, but previously issued access tokens and application sessions may remain usable according to service behavior, expiry and revocation support. Applications control their own sessions, and supported continuous evaluation can shorten exposure. Do not promise an instantaneous logout from every application." }
+          ]
+        },
+        {
+          "id": "sc-federation-prediction",
+          "title": "Predict what a directory update does not prove",
+          "blocks": [
+            { "type": "prediction", "id": "sc-predict-sync-not-federation", "prompt": "An operator sees Ana's AD DS department value copied into Entra ID. Is that observation enough to conclude that the next cloud sign-in must be authenticated by AD FS?", "answer": "No. It shows synchronization of an attribute, not the configured authentication method.", "explanation": "Synchronization and sign-in are separate mechanisms. The deployment could use a supported cloud authentication method or federation. Inspect the actual configuration instead of inferring a trust flow from the presence of a copied object." },
+            { "type": "callout", "tone": "exam", "title": "Name the relationship precisely", "text": "A directory stores identity objects. An IdP provides identity services and evidence. A token issuer signs claims for an intended recipient. Federation establishes accepted external identity trust. Synchronization maintains selected data across systems. SSO reduces repeated credential entry. None of these alone grants every resource permission or guarantees immediate session revocation." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-check-token-resource", "kind": "single", "prompt": "The worksheet API receives Ana's token. What is the appropriate division of responsibility?", "choices": [
+          { "id": "trust-display-name", "text": "The API accepts any token containing Ana's display name.", "explanation": "A familiar claim value is not proof of an accepted issuer, correct audience, valid signature or adequate permission." },
+          { "id": "validate-and-authorize", "text": "The issuer provides the token; the API validates evidence intended for it and checks the requested operation.", "explanation": "Issuance, validation and resource authorization are separate responsibilities in the access decision." },
+          { "id": "id-token-universal", "text": "The client can replace any API access token with its ID token to gain every operation.", "explanation": "An ID token establishes client sign-in; it is not universal resource authorization or a substitute access token." }
+        ], "correctIds": ["validate-and-authorize"], "explanation": "The resource accepts only appropriate trusted evidence and must still enforce permissions for its data." },
+        { "id": "sc-check-directory-services", "kind": "single", "prompt": "The old school file application specifically depends on an AD DS domain, LDAP lookup, and Kerberos. Which statement is accurate?", "choices": [
+          { "id": "entra-identical", "text": "An ordinary Entra tenant is automatically a drop-in domain controller for that application.", "explanation": "Entra ID is a different cloud identity service. A legacy protocol dependency requires a compatible integration design." },
+          { "id": "azure-renames", "text": "Moving an AD DS domain controller into an Azure VM changes it into Entra ID.", "explanation": "Hosting location does not change the directory product or its protocols." },
+          { "id": "different-services", "text": "AD DS supplies domain services; Entra ID can support modern cloud sign-in and coexist through supported designs.", "explanation": "This preserves the architectural distinction without denying that the services can work together." }
+        ], "correctIds": ["different-services"], "explanation": "Choose by the application's required identity capabilities, not by the shared words cloud or directory." },
+        { "id": "sc-check-federation-scope", "kind": "multiple", "prompt": "For the stated Elena B2B example, select the two justified conclusions.", "choices": [
+          { "id": "home-proof-local-access", "text": "Elena can authenticate with her home identity while Cedar enforces its own worksheet permission.", "explanation": "The trust relationship accepts identity evidence; resource access remains scoped and explicitly assigned." },
+          { "id": "no-object-ever", "text": "Federation guarantees that Cedar has no local object representing Elena.", "explanation": "The example explicitly uses an Entra B2B guest representation; avoiding a new password is not the same as avoiding a local object." },
+          { "id": "reverse-automatic", "text": "Cedar trusting River automatically lets Cedar users administer River.", "explanation": "Trust is not automatically reciprocal and does not imply administrative permission in either direction." },
+          { "id": "no-extra-document", "text": "Accepting her external identity does not itself grant unrelated staff documents.", "explanation": "Those resources still require their own permissions; an accepted issuer is not blanket authorization." }
+        ], "correctIds": ["home-proof-local-access", "no-extra-document"], "explanation": "Keep authentication authority, local representation, trust direction and resource permission separate." },
+        { "id": "sc-check-sync-authentication", "kind": "single", "prompt": "Ana's department attribute is synchronized from AD DS into Entra ID. What can you conclude from that fact alone?", "choices": [
+          { "id": "attribute-copied", "text": "The selected identity information is copied; the actual sign-in method still needs to be identified.", "explanation": "Attribute synchronization does not determine whether authentication uses a cloud method or federation." },
+          { "id": "adfs-required", "text": "Every cloud sign-in must use AD FS.", "explanation": "Microsoft supports hybrid identity with other authentication methods; a copied attribute does not prove AD FS is present." },
+          { "id": "all-groups-licensed", "text": "Every synchronized group automatically grants all cloud app licenses and file permissions.", "explanation": "Synchronization is not universal licensing or access assignment." }
+        ], "correctIds": ["attribute-copied"], "explanation": "Observe the operation that occurred without inventing unrelated authentication or entitlement effects." },
+        { "id": "sc-check-sso-sessions", "kind": "single", "prompt": "Several school apps use one IdP. Ana opens a second permitted app without another credential prompt. Which explanation is accurate?", "choices": [
+          { "id": "same-token-anywhere", "text": "Every app now accepts the same token regardless of audience or permissions.", "explanation": "SSO does not remove intended-recipient validation or application-specific access rules." },
+          { "id": "session-supported-sso", "text": "SSO can reuse an established identity session while obtaining appropriate evidence and applying each app's policy.", "explanation": "Reduced prompts describe the user experience, not the removal of trust, token or permission boundaries." },
+          { "id": "instant-all-revoke", "text": "This proves disabling Ana will instantly erase every already-issued application session.", "explanation": "Revocation behavior depends on the token, application session and supported enforcement mechanisms; SSO alone gives no such guarantee." }
+        ], "correctIds": ["session-supported-sso"], "explanation": "One sign-in experience can serve multiple apps without making their evidence, authorization or session lifecycles identical." }
+      ],
+      "takeaways": [
+        "Directory services maintain identity objects and relationships used by other systems.",
+        "AD DS domains and Kerberos are not interchangeable with an ordinary Entra cloud tenant.",
+        "The token issuer and the resource each have duties; claims must be validated and interpreted within the correct trust and audience.",
+        "Federation accepts an external authority's proof without granting all resources or automatically establishing reverse trust.",
+        "Avoiding a second password does not mean avoiding a local B2B user representation.",
+        "Synchronization maintains identity data, SSO reduces repeated prompts, and neither proves federation is the chosen sign-in method.",
+        "Account changes and session revocation need end-to-end verification rather than an assumption of immediate effect everywhere."
+      ],
+      "sourceIds": ["sc-identity-guide", "sc-provider-concepts", "sc-directory-concepts", "sc-federation-concepts", "sc-directory-comparison", "sc-identity-tokens", "sc-claims-validation", "sc-hybrid-identity", "sc-hybrid-authentication", "sc-entra-federation", "sc-b2b-properties", "sc-revoke-access"]
+    }
+  ],
+  "glossary": [
+    { "term": "Identity", "definition": "A digital representation of a person, device or workload, with identifiers and attributes meaningful in a system." },
+    { "term": "Authentication", "definition": "Verification of approved proof associated with a claimed identity." },
+    { "term": "Authorization", "definition": "A decision about whether an identity may perform a particular operation on a particular resource." },
+    { "term": "Identity provider", "definition": "A service that supplies identity information, authentication and trusted evidence to applications." },
+    { "term": "Claim", "definition": "A statement carried in a token, such as its subject, issuer or audience, that must be validated and interpreted in context." },
+    { "term": "Issuer", "definition": "The authority that produces a token; a resource must accept that issuer and validate the token before relying on its claims." },
+    { "term": "Audience", "definition": "The intended recipient of a token, which prevents evidence meant for one resource being treated as universal evidence for another." },
+    { "term": "Directory service", "definition": "A service that stores and manages organized identity objects and makes their information available through controlled operations." },
+    { "term": "AD DS", "definition": "Active Directory Domain Services, a Windows Server directory and domain identity service." },
+    { "term": "Domain controller", "definition": "A server running AD DS that stores domain directory information and provides domain services including authentication." },
+    { "term": "Kerberos", "definition": "A ticket-based authentication protocol commonly used in AD DS environments; resource authorization still applies after authentication." },
+    { "term": "Microsoft Entra ID", "definition": "Microsoft's cloud identity and access management service, not merely an AD DS server moved to the cloud." },
+    { "term": "Federation", "definition": "An explicitly established identity trust that permits acceptance of evidence from another authority within defined boundaries." },
+    { "term": "Synchronization", "definition": "Keeping selected identity information aligned across systems according to configured scope and authority." },
+    { "term": "Single sign-on", "definition": "Access to multiple applications without independently entering credentials for each, when established sessions and policy allow it." },
+    { "term": "B2B guest representation", "definition": "A resource-tenant user object used to manage an external collaborator's relationship and assignments without necessarily managing their original credentials." }
+  ],
+  "sources": [
+    { "id": "sc-identity-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide: announced October 21, 2026 outline", "supports": "Fetched September 22, 2026. Supports attribution of the six identity-concept objectives to the announced future outline, not an already-effective or historically verified English version." },
+    { "id": "sc-authentication-authorization", "url": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/2-define-authentication-authorization", "title": "Define authentication and authorization", "supports": "Supports proof and factor concepts, authentication versus allowed operations, and least privilege. The authored examples explicitly concern protected resources rather than asserting that all public or anonymous resource access requires a sign-in." },
+    { "id": "sc-primary-perimeter", "url": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/3-define-identity-primary-security-perimeter", "title": "Define identity as the primary security perimeter", "supports": "Supports remote and cloud identity boundaries, human/device/workload identities, and the administration, authentication, authorization and auditing pillars in the first lesson." },
+    { "id": "sc-provider-concepts", "url": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/4-describe-role-identity-provider", "title": "Describe the role of the identity provider", "supports": "Supports centralized identity services, modern authentication, claims and SSO. Token purpose, per-resource validation and session revocation are qualified using the more specific product references rather than treating tokens as universally reusable." },
+    { "id": "sc-directory-concepts", "url": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/5-describe-concept-of-directory-services-active-directory", "title": "Describe directory services and Active Directory", "supports": "Supports directory objects, AD DS domains, domain controllers, organizational units, Group Policy and Kerberos as the concepts taught in sc-directory-objects." },
+    { "id": "sc-directory-comparison", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/compare", "title": "Compare Active Directory to Microsoft Entra ID", "supports": "Supports the AD DS and Entra comparison, legacy protocol versus modern application integration, hybrid coexistence and the distinction from managed domain services. No automatic protocol migration is claimed." },
+    { "id": "sc-identity-tokens", "url": "https://learn.microsoft.com/en-us/entra/identity-platform/security-tokens", "title": "Tokens and claims overview", "supports": "Supports issuer and audience concepts, ID-token versus access-token roles, resource-side access-token validation, signature verification and claims-based decisions in sc-provider-tokens-claims and its worked example." },
+    { "id": "sc-claims-validation", "url": "https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation", "title": "Secure applications and APIs by validating claims", "supports": "Supports intended audience, tenant, subject, actor and permission validation, and the warning against display-oriented email or username claims as durable authorization keys. The worksheet API example retains resource-specific checks." },
+    { "id": "sc-federation-concepts", "url": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/6-describe-concept-federation", "title": "Describe the concept of federation", "supports": "Supports explicit identity trust, cross-boundary acceptance and nonautomatic reverse trust. Its simplified no-new-account language is narrowed to no separately managed credential; sc-b2b-properties supplies the actual local guest-object boundary." },
+    { "id": "sc-entra-federation", "url": "https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/whatis-fed", "title": "What is federation with Microsoft Entra ID?", "supports": "Supports the hybrid federation example in which on-premises authentication through a federation service participates in cloud sign-in. It is an optional authentication architecture, not a requirement for all synchronized users." },
+    { "id": "sc-b2b-properties", "url": "https://learn.microsoft.com/en-us/entra/external-id/user-properties", "title": "Understand and manage the properties of B2B guest users", "supports": "Supports Elena's resource-tenant representation, externally managed credentials and local app/group assignments. This product-specific source prevents the federation lesson from claiming that accepted external identity means no guest object exists." },
+    { "id": "sc-hybrid-identity", "url": "https://learn.microsoft.com/en-us/entra/identity/hybrid/whatis-hybrid-identity", "title": "What is hybrid identity with Microsoft Entra ID?", "supports": "Supports provisioning and synchronization as identity lifecycle and alignment mechanisms for on-premises and cloud environments, distinct from a resource permission or sign-in protocol." },
+    { "id": "sc-hybrid-authentication", "url": "https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/choose-ad-authn", "title": "Choose the right authentication method for a hybrid identity solution", "supports": "Supports the explicit separation between synchronization technology and authentication behavior, and the existence of password hash synchronization, pass-through authentication and federation options. The lesson does not select or configure a production method." },
+    { "id": "sc-revoke-access", "url": "https://learn.microsoft.com/en-us/entra/identity/users/users-revoke-access", "title": "Revoke user access in Microsoft Entra ID", "supports": "Supports the token and application-session revocation qualification: blocking an identity does not universally and instantly terminate all existing sessions. No fixed lifetime or immediate global logout guarantee is stated." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: act out a sign-in and a federation decision",
+    "purpose": "Separate directory state, identity proof, token audience and document permission using fictional cards rather than live accounts.",
+    "prerequisites": [
+      "Paper cards labelled Ana, Bogdan, Elena, home identity provider, Cedar identity service, worksheet API and marks API.",
+      "A written fictional policy: Bogdan reads his own feedback, Ana edits her science class feedback, and Elena reviews one worksheet."
+    ],
+    "costWarning": "No Azure resources, tenant changes, tokens, passwords, security tests or real personal information are needed. Every card is a conceptual label, not a real credential.",
+    "steps": [
+      "Create separate identity cards and resource-permission cards. Do not put real names, email addresses, passwords or tokens on them.",
+      "Move Bogdan's card through an authentication decision, then separately decide his own-feedback read and Ana's-document edit. Explain why the results differ.",
+      "Label one evidence card intended for the worksheet API. Explain why a marks API cannot accept it merely because it came from a familiar provider.",
+      "Sketch an AD DS domain controller serving a legacy file application and an Entra tenant serving a modern web application. Label the different expected protocols and keep both resource permission checks.",
+      "Follow Elena's home authentication, Cedar's accepted identity relationship, local guest representation and worksheet permission. State explicitly that other documents remain denied.",
+      "Copy a fictional department value between directory cards. Explain why this synchronization does not prove AD FS authentication or establish reverse trust.",
+      "Describe an SSO experience with two permitted apps, then list why ending access must consider each application's existing sessions as well as the central account."
+    ],
+    "expectedResults": [
+      "A valid identity can have an allowed read and a denied edit; the decision is resource- and action-specific.",
+      "The directory, identity provider, issuer, audience and enforcing application have different responsibilities.",
+      "Federation accepts external proof within a boundary; synchronization copies selected state; SSO reduces credential prompts without removing per-app checks.",
+      "AD DS and Entra ID remain distinguishable, and no universal instant-revocation claim is made."
+    ],
+    "cleanup": [
+      "Keep or discard the fictional cards; no real users, groups, sessions or cloud services were created.",
+      "Do not convert the exercise into testing classmates' accounts or school systems. Remove any accidentally included real information from the notes."
+    ]
+  }
+}

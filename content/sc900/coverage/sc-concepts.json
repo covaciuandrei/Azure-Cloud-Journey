@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "domainId": "sc-concepts",
+  "reviewedAt": "2026-09-22",
+  "objectives": [
+    {
+      "objectiveId": "sc-f-01",
+      "lessons": [
+        {
+          "moduleId": "sc-security-foundations",
+          "lessonId": "sc-shared-responsibility-and-defense",
+          "sectionIds": ["sc-responsibility-stack", "sc-retained-accountability", "sc-worked-responsibility-layers"],
+          "checkpointIds": ["sc-check-iaas-os", "sc-check-saas-sharing"],
+          "evidence": "Explains the actual provider and school responsibilities across on-premises, IaaS, PaaS and SaaS, including guest OS, packaged code, data decisions, identity administration and endpoints. The worked hosting comparison reallocates maintenance without removing school accountability. Graded questions separately test IaaS guest patching and SaaS sharing configuration."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-02",
+      "lessons": [
+        {
+          "moduleId": "sc-security-foundations",
+          "lessonId": "sc-shared-responsibility-and-defense",
+          "sectionIds": ["sc-security-goals", "sc-defense-layers", "sc-detect-recover", "sc-worked-responsibility-layers"],
+          "checkpointIds": ["sc-check-defense-purpose", "sc-check-layer-effect"],
+          "evidence": "Connects confidentiality, integrity and availability to physical, identity, perimeter, network, compute, application and data controls. Distinguishes prevention, evidence and restoration. The school application example combines sign-in, scoped permissions, endpoint protection, activity review and recovery; graded checks require explaining complementary failures and rejecting guaranteed protection."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-03",
+      "lessons": [
+        {
+          "moduleId": "sc-security-foundations",
+          "lessonId": "sc-zero-trust-crypto-and-grc",
+          "sectionIds": ["sc-zero-trust-principles", "sc-worked-zero-trust"],
+          "checkpointIds": ["sc-check-zero-trust"],
+          "evidence": "Teaches explicit verification, least privilege and assume breach as combined access-design principles rather than a purchased product or universal denial. Elena's afternoon worksheet review applies evidence, limited action and duration, separate document permissions and a response plan. The checkpoint contrasts this with trusting school Wi-Fi or denying all useful work."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-04",
+      "lessons": [
+        {
+          "moduleId": "sc-security-foundations",
+          "lessonId": "sc-zero-trust-crypto-and-grc",
+          "sectionIds": ["sc-crypto-key-boundaries", "sc-hashes-and-salts", "sc-worked-crypto-selection"],
+          "checkpointIds": ["sc-check-public-key", "sc-check-hash-salt", "sc-check-encryption-boundary"],
+          "evidence": "Distinguishes symmetric and asymmetric key roles, signatures, encryption boundaries, reversible encoding, cryptographic digests and salted password verification. The worksheet example selects confidentiality, trusted change checking and established password verification for different needs. Graded checks trace the recipient's private key, trustworthy digests, salt limitations and permitted plaintext downloads despite at-rest encryption."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-05",
+      "lessons": [
+        {
+          "moduleId": "sc-security-foundations",
+          "lessonId": "sc-zero-trust-crypto-and-grc",
+          "sectionIds": ["sc-grc-decision-cycle", "sc-worked-grc"],
+          "checkpointIds": ["sc-check-grc-evidence"],
+          "evidence": "Separates governance ownership, risk identification and response, residual risk, and compliance evidence against applicable requirements. It also distinguishes residency, sovereignty and privacy. The explicitly fictional school sharing policy requires an owner, restricted recipients and a review record; the checkpoint rejects treating disk encryption as proof of every obligation."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-06",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-foundations",
+          "lessonId": "sc-identity-authentication-authorization",
+          "sectionIds": ["sc-identity-perimeter", "sc-four-identity-jobs", "sc-worked-authentication-authorization"],
+          "checkpointIds": ["sc-check-identity-perimeter"],
+          "evidence": "Explains why remote people, software identities and hosted resources make network location insufficient as the primary access decision. Retains device, network and resource controls rather than declaring them obsolete. Bogdan's home access is evaluated by validated identity and document policy, and the checkpoint rejects Wi-Fi-based trust or eliminating other defenses."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-07",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-foundations",
+          "lessonId": "sc-identity-authentication-authorization",
+          "sectionIds": ["sc-authentication-proof", "sc-signin-access-flow", "sc-worked-authentication-authorization"],
+          "checkpointIds": ["sc-check-authentication-proof", "sc-check-identity-jobs"],
+          "evidence": "Distinguishes a username claim from approved credential proof, explains factor categories without counting prompts, and includes human and workload authentication. The worked student request begins with successful identity verification but evaluates document actions separately. Checkpoints identify authentication and reject treating two knowledge prompts as automatically multifactor."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-08",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-foundations",
+          "lessonId": "sc-identity-authentication-authorization",
+          "sectionIds": ["sc-authorization-operations", "sc-worked-authentication-authorization"],
+          "checkpointIds": ["sc-check-authorization-denial"],
+          "evidence": "Defines authorization as a server-enforced decision about identity, resource and operation, with explicit scope and separation from connectivity and licensing. Bogdan may read his own feedback but cannot edit Ana's document under the stated policy. The graded scenario denies the edit despite successful authentication and a reachable application."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-09",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-foundations",
+          "lessonId": "sc-directories-providers-federation",
+          "sectionIds": ["sc-provider-tokens-claims", "sc-worked-token-boundaries"],
+          "checkpointIds": ["sc-check-token-resource"],
+          "evidence": "Explains the identity provider and authorization-server roles, trusted token issuers, claims, ID versus access tokens, audience and validation boundaries. Ana's reader-token example requires worksheet API validation and its own document policy while denying edits and another API's token. The checkpoint distinguishes issuance from resource validation and authorization."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-10",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-foundations",
+          "lessonId": "sc-directories-providers-federation",
+          "sectionIds": ["sc-directory-objects", "sc-adds-entra-comparison", "sc-worked-directory-choice"],
+          "checkpointIds": ["sc-check-directory-services"],
+          "evidence": "Teaches structured directory objects, AD DS domains, domain controllers, OUs, Group Policy and ticket-based Kerberos with separate file authorization. Compares Microsoft Entra ID's cloud service and modern app model without calling it a relocated domain controller. A worked legacy-file versus modern-web choice and checkpoint require preserving protocol and architecture distinctions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-f-11",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-foundations",
+          "lessonId": "sc-directories-providers-federation",
+          "sectionIds": ["sc-federation-trust", "sc-worked-federation", "sc-sso-sync-distinctions"],
+          "checkpointIds": ["sc-check-federation-scope", "sc-check-sync-authentication", "sc-check-sso-sessions"],
+          "evidence": "Defines bounded external identity trust, nonautomatic reverse trust, upstream authentication versus resource-side issuance, and the distinction between federation, synchronization and SSO. Elena's concrete collaboration flow retains a local B2B representation and scoped worksheet permission. Graded checks reject no-object guarantees, universal tokens, compulsory AD FS and instantaneous session revocation."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,335 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-security-foundations",
+  "title": "Security foundations: responsibility, layers, and justified trust",
+  "summary": "Reason about who protects a school service, how different defenses help, and why encryption, identity checks, and compliance evidence solve different problems.",
+  "priority": "core",
+  "priorityReason": "These concepts explain the purpose and limits of the identity, security, and compliance products studied later.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe the shared responsibility model.",
+    "Describe defense-in-depth.",
+    "Describe the Zero Trust model.",
+    "Describe encryption and hashing.",
+    "Describe Governance, Risk, and Compliance concepts."
+  ],
+  "lessons": [
+    {
+      "id": "sc-shared-responsibility-and-defense",
+      "title": "Share the work without leaving a security gap",
+      "summary": "Allocate customer and provider duties, then combine defenses around fictional school documents.",
+      "objectives": [
+        "Assign realistic responsibilities across on-premises, IaaS, PaaS, and SaaS services.",
+        "Explain why cloud customers still manage data, identities, devices, and configuration.",
+        "Relate defense-in-depth layers to confidentiality, integrity, and availability.",
+        "Explain what remains protected when one control fails."
+      ],
+      "sections": [
+        {
+          "id": "sc-security-goals",
+          "title": "Start with what could go wrong",
+          "blocks": [
+            { "type": "paragraph", "text": "Imagine a fictional school called Cedar School. Ana teaches science, Bogdan is a student, and a web application holds practice timetables and made-up marks. Nobody in this course handles actual pupil records. Before choosing a security product, ask what the school needs to preserve. Students should see their own work, teachers should make approved changes, and both should reach the application when lessons start. Security is not simply keeping every person out. It is preserving useful access while preventing harmful access and keeping the service dependable." },
+            { "type": "paragraph", "text": "Confidentiality means information is readable only by appropriate people or systems. Bogdan reading another student's private feedback would violate it. Integrity means information stays accurate and complete, with changes made through authorized processes. An unexplained change to a mark is an integrity problem even if nobody copied the file. Availability means authorized users can get the information or service when needed. A broken server can affect availability without an attacker being involved. These three goals form the CIA triad, not a list of three products to buy." },
+            { "type": "paragraph", "text": "One event can damage several goals. Losing a teacher's laptop might expose a document and interrupt teaching. Encryption can protect the stolen file, but losing the only decryption key could also make an important file unavailable. Therefore a sensible plan describes the information, the people who need it, the consequences of loss, and the recovery route. Starting with those questions helps explain why several controls are necessary rather than treating a green dashboard as the definition of safety." },
+            { "type": "callout", "tone": "caution", "title": "Dated outline, current concepts", "text": "Checked September 22, 2026: Microsoft's English SC-900 guide publishes an announced outline effective October 21, 2026. That date has not arrived. This module maps that announced outline and teaches currently documented concepts; it does not verify the preceding English outline or guarantee exam coverage or a passing score." }
+          ]
+        },
+        {
+          "id": "sc-responsibility-stack",
+          "title": "Ask who operates each part of the service",
+          "blocks": [
+            { "type": "paragraph", "text": "A school application depends on more than its visible web page. It needs a building, physical equipment, network connections, an operating system, a runtime that executes software, application logic, and data. In a fully school-operated environment, the school must arrange protection throughout that stack. Cloud services move some operational duties to a provider. Shared responsibility describes that split so neither party assumes the other is doing a job that nobody actually does. It is not a rule that both parties do half of every task." },
+            { "type": "table", "caption": "Typical allocation for the school's service; verify the actual product boundary", "headers": ["Model", "Provider operates and secures", "School still handles"], "rows": [
+              ["On-premises", "No cloud provider is assumed in this example.", "Facilities, equipment, networking, operating systems, applications, data, identities, and devices."],
+              ["IaaS: a cloud virtual machine", "Datacenter, physical network and hosts, including the underlying virtualization platform.", "Guest operating system patching, installed software, configured network rules, application behavior, data and access."],
+              ["PaaS: a managed application platform", "Underlying infrastructure and the managed operating system and platform runtime.", "Its deployed code and packaged dependencies, supported app configuration, access decisions and data."],
+              ["SaaS: a hosted document application", "The supplied application and its underlying operating system and infrastructure.", "User lifecycle, permitted sharing, tenant settings, collected data and connecting school devices."]
+            ] },
+            { "type": "paragraph", "text": "In IaaS, Microsoft maintaining the physical host does not mean the school's guest operating system is automatically maintained. In PaaS, the provider manages the platform, but a library the school bundles with its application can still need a school-owned update. A custom container can leave more software maintenance with the customer than a fully managed runtime does. In SaaS, the school normally cannot patch the provider's application servers. Its useful action is to manage its users and settings and raise a provider incident when the provider-operated service fails." }
+          ]
+        },
+        {
+          "id": "sc-retained-accountability",
+          "title": "Delegating machinery does not delegate every decision",
+          "blocks": [
+            { "type": "paragraph", "text": "The school decides whether a document is sensitive, who should receive it, and when keeping it is no longer justified. Those decisions do not disappear because storage is managed by someone else. The provider may implement encryption, identity infrastructure, and access-control features. The school must select and use appropriate settings and maintain accurate permissions. A teacher accidentally choosing public sharing is not fixed by a locked provider datacenter. Equally, a provider is not excused from securing its own infrastructure just because the school also has duties." },
+            { "type": "paragraph", "text": "Distinguish operating an identity service from administering the school's identities. Microsoft can run a cloud identity platform while the school remains responsible for which teachers have accounts, which students belong to a class, and who can administer the tenant. The laptops and phones that connect also need protection. A compromised device can expose information after an authorized application has opened it. Responsibility for those school-controlled endpoints remains even when every application is SaaS." },
+            { "type": "paragraph", "text": "Write responsibilities as specific actions with an owner and an expected result: the school reviews sharing permissions; the provider maintains the managed platform; the school confirms a recovery plan for its required data. Check service documentation and contracts rather than assuming every backup or retention feature is enabled. Accountability includes checking that a delegated service meets the requirement, not pretending the school performs the provider's internal tasks. A move to the cloud changes the work distribution, not the importance of the outcome." }
+          ]
+        },
+        {
+          "id": "sc-defense-layers",
+          "title": "Use different layers because failures are different",
+          "blocks": [
+            { "type": "paragraph", "text": "Defense-in-depth combines controls so one failure does not automatically expose the entire service. The layers overlap rather than forming a compulsory sequence that every request follows. A copied account credential might bypass a password check without passing through a server-room door at all. Useful layers address different routes and consequences. Buying three copies of one badly configured control is less useful than combining controls that cover different weaknesses. Layering reduces risk and gives opportunities for detection and recovery; it cannot promise that every incident will be stopped." },
+            { "type": "list", "ordered": false, "items": [
+              "Physical security limits access to equipment through locks, controlled entry and secure disposal. In the cloud datacenter this is principally provider work; the school's unattended laptop is a different physical responsibility.",
+              "Identity and access controls verify users and restrict their permissions. Multifactor authentication can make a stolen password insufficient, while a read-only role limits what an accepted account can change.",
+              "Perimeter controls manage traffic crossing a network boundary. Firewalls and protection against traffic floods help with network threats, but do not decide whether a teacher may read a particular student's document.",
+              "Network controls separate systems and restrict communication within the environment. A teaching application need not have unrestricted access to every administrative system just because both belong to the school.",
+              "Compute controls protect the machines that execute software. Supported software, timely updates, reduced administrative access and monitoring help keep those machines dependable.",
+              "Application controls enforce the application's own rules. A marks application must check the requested document and action on the server, rather than trusting a hidden button in the browser.",
+              "Data controls protect the information itself through appropriate access, encryption and classification. They complement application controls; an encrypted disk still needs correct permissions when the application serves a file."
+            ] }
+          ]
+        },
+        {
+          "id": "sc-detect-recover",
+          "title": "Prevention, detection, and recovery have different jobs",
+          "blocks": [
+            { "type": "paragraph", "text": "Some controls prevent an unwanted action, such as denying a student's attempt to edit another student's work. Others detect a concern, such as recording unexpected document downloads and bringing them to an authorized reviewer. A log is evidence, not an automatic block. Recovery restores useful service after disruption, for example through an approved backup and a rehearsed restore process. A backup does not stop information being copied, and a firewall does not reconstruct a deleted file. Match the control to the consequence instead of assigning magical powers to its name." },
+            { "type": "diagram", "title": "Several controls around the same school document", "description": "The diagram connects responsibilities and protections, not a guaranteed attack path. Application permission and data protection remain relevant even when an identity check succeeds.", "nodes": [
+              { "id": "sc-device", "label": "School device", "detail": "Updates and local protection", "column": 0, "row": 0 },
+              { "id": "sc-account", "label": "Identity checks", "detail": "Proof and access conditions", "column": 1, "row": 0 },
+              { "id": "sc-app", "label": "School application", "detail": "Per-document authorization", "column": 2, "row": 0 },
+              { "id": "sc-record", "label": "Document", "detail": "Access rules and encryption", "column": 2, "row": 1 },
+              { "id": "sc-monitor", "label": "Review and recovery", "detail": "Evidence, response, restores", "column": 1, "row": 2 }
+            ], "edges": [
+              { "from": "sc-device", "to": "sc-account", "label": "Requests access" },
+              { "from": "sc-account", "to": "sc-app", "label": "Provides identity evidence" },
+              { "from": "sc-app", "to": "sc-record", "label": "Checks allowed operation" },
+              { "from": "sc-app", "to": "sc-monitor", "label": "Records relevant activity" },
+              { "from": "sc-record", "to": "sc-monitor", "label": "Needs a recovery plan" }
+            ] }
+          ]
+        },
+        {
+          "id": "sc-worked-responsibility-layers",
+          "title": "Move a document service without moving the wrong duties",
+          "blocks": [
+            { "type": "example", "title": "Cedar School compares three hosting arrangements", "scenario": "Ana's fictional class-document application currently runs on a school-managed cloud VM. The school considers moving its code to a managed application runtime, or replacing the application with a hosted SaaS document service. All arrangements must keep class feedback private and let teachers recover accidental changes.", "steps": [
+              { "action": "For the VM arrangement, assign guest operating system and application updates to the school team, while recording provider ownership of the physical host.", "why": "IaaS transfers underlying infrastructure operation, not responsibility for software installed inside the guest." },
+              { "action": "For the managed-runtime option, remove guest OS maintenance from the school task list but retain application code, bundled dependencies, access configuration and data decisions.", "why": "PaaS changes the platform boundary. It does not inspect the school's lesson logic and decide which class may open each document." },
+              { "action": "For the SaaS option, replace custom application maintenance with a review of tenant settings, user lifecycle and sharing rules, and confirm the service's recovery capabilities.", "why": "The provider supplies the application, but the school still decides who should use its content and must verify that recovery meets its needs." },
+              { "action": "In each arrangement, combine strong sign-in, restricted document permissions, protected endpoints, activity review and a recovery plan.", "why": "These address different failures. A sign-in control, a file permission and a restore process do not substitute for one another." }
+            ], "result": "The school can explain which operational tasks change and which accountability remains. It also has multiple defenses rather than assuming that cloud hosting alone protects a document." }
+          ]
+        },
+        {
+          "id": "sc-responsibility-prediction",
+          "title": "Predict what another layer can still do",
+          "blocks": [
+            { "type": "prediction", "id": "sc-predict-accepted-student", "prompt": "Assume Bogdan's student sign-in has been accepted, but the app correctly checks every requested document. Students may read only their own feedback. Does a successful sign-in let this account open Ana's staff-only planning file?", "answer": "No. The application still denies that file because the authenticated student lacks its permission.", "explanation": "The identity check and document authorization answer different questions. Defense-in-depth is useful precisely because a later, correctly enforced control can limit what happens after an earlier control accepts a request." },
+            { "type": "callout", "tone": "exam", "title": "Service model versus security strategy", "text": "Shared responsibility asks who operates or configures a control. Defense-in-depth asks how several controls complement one another. SaaS does not mean no customer responsibility, and adding layers does not transfer ownership of a task or guarantee prevention." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-check-iaas-os", "kind": "single", "prompt": "The school's application runs in an IaaS VM with a school-managed guest OS. Who must arrange updates inside that guest?", "choices": [
+          { "id": "provider-only", "text": "Only the provider, because the VM is in its datacenter.", "explanation": "Physical hosting and host maintenance do not transfer ordinary guest OS maintenance to the provider." },
+          { "id": "school-guest-owner", "text": "The school, as the party responsible for the guest OS.", "explanation": "IaaS leaves the guest operating system and installed software within the customer's operational responsibility." },
+          { "id": "nobody-virtual", "text": "Nobody, because virtual machines do not need software maintenance.", "explanation": "Virtualization changes how hardware is supplied; software in the guest still needs maintenance." }
+        ], "correctIds": ["school-guest-owner"], "explanation": "Locate the boundary between the provider-operated host and the customer-operated guest before allocating the task." },
+        { "id": "sc-check-saas-sharing", "kind": "single", "prompt": "A teacher makes a private class document publicly shared in a SaaS service. Which retained responsibility most directly addresses the mistake?", "choices": [
+          { "id": "school-sharing", "text": "The school reviews and corrects its document access and sharing configuration.", "explanation": "The provider can supply secure sharing features, but the school must choose permissions appropriate for its data." },
+          { "id": "provider-building", "text": "The provider changes the locks on its server building.", "explanation": "Physical access controls do not change a document permission configured through the application." },
+          { "id": "student-patch-host", "text": "Students patch the provider's SaaS operating system.", "explanation": "That is outside ordinary customer control and does not address the incorrect sharing decision." }
+        ], "correctIds": ["school-sharing"], "explanation": "SaaS transfers application operation, not accountability for the customer's data and permitted recipients." },
+        { "id": "sc-check-defense-purpose", "kind": "single", "prompt": "Why combine multifactor sign-in, per-document authorization, and tested recovery for the class application?", "choices": [
+          { "id": "three-guarantee", "text": "Any three controls guarantee that no incident can occur.", "explanation": "Control counts are not a guarantee. Configuration, coverage and remaining risk still matter." },
+          { "id": "replace-permissions", "text": "A backup makes document permissions unnecessary.", "explanation": "Recovery can restore data but cannot undo disclosure to someone who was wrongly allowed to read it." },
+          { "id": "different-failures", "text": "They address different failures and consequences rather than depending on one successful barrier.", "explanation": "Proof of identity, allowed document actions and restoration each contribute a different kind of protection." }
+        ], "correctIds": ["different-failures"], "explanation": "Defense-in-depth depends on complementary controls with understood limits, not repetition of a product name." },
+        { "id": "sc-check-layer-effect", "kind": "multiple", "prompt": "Select the two accurate statements about the school's security layers.", "choices": [
+          { "id": "segmentation-limits", "text": "Separating teaching and administrative systems can limit the reach of a compromised teaching system.", "explanation": "Network segmentation restricts communication paths rather than treating all internal systems as equally reachable." },
+          { "id": "logging-blocks", "text": "Recording a document download automatically prevents that download.", "explanation": "A record provides evidence. Prevention requires a separate enforcement decision or configured response." },
+          { "id": "recovery-availability", "text": "A rehearsed restore process supports availability after an accidental loss.", "explanation": "The school can recover useful access instead of merely knowing a backup exists." },
+          { "id": "firewall-teacher-role", "text": "A network firewall alone knows which teacher may edit each class mark.", "explanation": "Document-level business permissions are normally enforced by the application or data service, not inferred from a network connection." }
+        ], "correctIds": ["segmentation-limits", "recovery-availability"], "explanation": "Identify the control's actual action: restricting network reach, recording activity, authorizing content, or recovering service." }
+      ],
+      "takeaways": [
+        "Shared responsibility allocates real duties, not equal halves of every task.",
+        "IaaS, PaaS, and SaaS move different operational layers to the provider.",
+        "The customer still makes data, identity, endpoint, and configuration decisions.",
+        "Defense-in-depth combines complementary layers without promising perfect protection.",
+        "Confidentiality, integrity, and availability help explain both controls and their tradeoffs."
+      ],
+      "sourceIds": ["sc-security-guide", "sc-shared-model", "sc-defense-depth"]
+    },
+    {
+      "id": "sc-zero-trust-crypto-and-grc",
+      "title": "Justify access, protect information, and explain the remaining risk",
+      "summary": "Apply Zero Trust reasoning, distinguish encryption from hashing and encoding, and connect technical controls to governance and evidence.",
+      "objectives": [
+        "Apply verify explicitly, least privilege, and assume breach without treating Zero Trust as deny everyone.",
+        "Explain symmetric and asymmetric keys, encryption boundaries, hashing, and salts.",
+        "Distinguish a reversible representation from confidentiality and an integrity check from proof of origin.",
+        "Use governance, risk, and compliance as related but different decision processes."
+      ],
+      "sections": [
+        {
+          "id": "sc-zero-trust-principles",
+          "title": "Trust a justified request, not a convenient location",
+          "blocks": [
+            { "type": "paragraph", "text": "Ana sometimes prepares lessons at home. Bogdan sometimes uses a school computer. A rule saying everything inside the school network is safe would treat location as proof, even though an internal device or account can have a problem. Zero Trust removes that automatic assumption. It asks for evidence about the identity, device, requested resource and relevant risk before allowing access. The aim is appropriate access under explicit conditions, not rejecting every request or forcing a person to type a password before every mouse click." },
+            { "type": "list", "ordered": false, "items": [
+              "Verify explicitly: evaluate relevant evidence instead of accepting a familiar network or account name as sufficient. Authentication, the requested operation, device condition and applicable access policy can all matter.",
+              "Use least privilege: grant only the actions, resources and duration needed for the task. A teacher who reads one class document does not need to administer the entire school environment.",
+              "Assume breach: plan for a control failing. Restrict movement between systems, reduce exposed data, monitor important activity and prepare containment and recovery instead of relying on perfect prevention."
+            ] },
+            { "type": "paragraph", "text": "These principles work together. Strong sign-in without restricted permissions leaves a stolen session powerful. Small permissions without monitoring can let a problem continue unnoticed. Segmentation without a recovery plan may limit damage but leave a class unable to work. Zero Trust guides identity, devices, applications, data, infrastructure and networks, with visibility and response connecting them. It is an architectural strategy, not a single license, appliance, or setting whose purchase makes every request trustworthy." }
+          ]
+        },
+        {
+          "id": "sc-worked-zero-trust",
+          "title": "Give a visiting teacher exactly the useful access",
+          "blocks": [
+            { "type": "example", "title": "A short review of a science document", "scenario": "Elena, a fictional visiting teacher, needs to read one draft science worksheet for an afternoon. The school has an approved process that verifies her identity and checks the access conditions. She does not need to edit marks, browse other classes, or administer users.", "steps": [
+              { "action": "Verify the intended Elena through the approved identity process and evaluate the conditions for accessing the worksheet.", "why": "Knowing her name or seeing a request from the school network is not proof that the request satisfies policy. This applies verify explicitly." },
+              { "action": "Give read access to the particular draft for the approved review period, without broader administrator permissions.", "why": "The scope, action and duration match the task. This applies least privilege without preventing the useful review." },
+              { "action": "Keep other class documents separately permissioned, record relevant activity and plan how the school will remove the access and handle a suspected session compromise.", "why": "The design considers what happens if a verified session is later misused. This applies assume breach rather than claiming verification eliminates every risk." }
+            ], "result": "Elena can do the approved work while the school limits unnecessary exposure. The plan names evidence, a small permission and a response route instead of simply saying trust nobody." }
+          ]
+        },
+        {
+          "id": "sc-crypto-key-boundaries",
+          "title": "Encryption protects a boundary, not every use of a file",
+          "blocks": [
+            { "type": "paragraph", "text": "Encryption transforms readable information into ciphertext that requires the appropriate key to recover. Symmetric encryption uses the same secret key for encryption and decryption. It suits large amounts of data, but both legitimate parties need a safe way to obtain that secret. Asymmetric cryptography uses a related public and private key pair. In an encryption scheme, someone can encrypt to the recipient's public key and the recipient uses the corresponding private key to decrypt. Do not distribute the private key just because distributing the public key is allowed." },
+            { "type": "paragraph", "text": "A digital signature has a different purpose: a private signing key creates a signature that the matching public key can verify. With a trusted association between that key and its owner, verification supports integrity and origin checking. Signing is not making a document confidential, and it is not best understood as encrypting the whole document backwards. Modern secure protocols can combine public-key techniques for authentication or key agreement with symmetric encryption for the actual data. A public key must be authenticated as the intended party's key; a familiar name beside an arbitrary key is not enough." },
+            { "type": "paragraph", "text": "At-rest encryption protects stored data, while transport encryption protects data crossing a connection. For example, a protected disk helps when storage media is obtained without its key; HTTPS protects the connection between the browser and its TLS endpoint. Neither means that the browser or the application can never see plaintext. A storage service may decrypt a file for an authorized read, so incorrectly granting that read can still expose it. Data being processed is another boundary, and specialized confidential-computing features have their own scope. Do not infer protection in use merely from an at-rest setting." },
+            { "type": "paragraph", "text": "Key management therefore belongs in the design: limit who can use keys, protect their storage, and plan rotation and recovery. Putting the decryption key in the same publicly shared location as the encrypted file defeats the intended separation. Losing the only usable key may prevent legitimate recovery. Encoding is different from encryption: Base64 represents bytes as printable text according to a public rule. Anyone can reverse that representation without a secret. Strange-looking text is not evidence that information has been made confidential." }
+          ]
+        },
+        {
+          "id": "sc-hashes-and-salts",
+          "title": "Compare a fingerprint without promising impossible uniqueness",
+          "blocks": [
+            { "type": "paragraph", "text": "A cryptographic hash takes data and produces a fixed-size digest for the chosen algorithm. The same bytes processed by the same algorithm produce the same digest. A secure algorithm is designed to make finding an input from its digest, or deliberately finding useful collisions, computationally impractical. It is not a reversible encryption system with a missing decryption key. Different inputs can theoretically share a digest, so a hash is not a mathematical promise that every possible document has a unique identifier." },
+            { "type": "paragraph", "text": "A digest helps compare a downloaded worksheet with an expected version, provided the expected digest comes from a trusted route. A mismatch tells you the bytes differ; it does not explain whether the cause was an innocent edit, damage, or malicious replacement. If someone can replace both a document and the unprotected digest beside it, they can publish a new matching pair. A bare hash does not prove who produced the file. A properly verified signature or another authenticated source is needed when origin matters." },
+            { "type": "paragraph", "text": "Password verification is a separate use. A well-designed password system keeps a derived password verifier rather than a recoverable plaintext password. On sign-in it derives a verifier from the submitted candidate and compares the result. A randomly generated per-password salt is included so identical passwords need not produce identical stored verifiers and precomputed lookup work cannot simply be reused across all accounts. The salt is not a decryption key and need not be secret. Weak passwords can still be guessed and checked. Use established password-hashing components with appropriate work factors, not a homemade fast hash or a copied demonstration recipe." }
+          ]
+        },
+        {
+          "id": "sc-worked-crypto-selection",
+          "title": "Choose protection from the question being asked",
+          "blocks": [
+            { "type": "example", "title": "A fictional worksheet and its password service", "scenario": "Ana wants only an approved reviewer to read a draft worksheet. She also wants the reviewer to detect an unexpected file change. Separately, the application needs to verify sign-in passwords without being able to display them later.", "steps": [
+              { "action": "Select appropriate file encryption and recipient access, keeping the needed private or secret key restricted.", "why": "Confidentiality requires a key-controlled protection boundary. Merely converting the document to Base64 preserves its recoverability for everyone." },
+              { "action": "For change detection, provide the expected digest through a trusted route, or use a properly verified signature when proof of origin is required.", "why": "An untrusted digest stored beside a replaceable file can be replaced too. A hash comparison and a signature answer related but different questions." },
+              { "action": "Use the approved identity service or established password-verification component with individual salts and a suitable password-hashing design.", "why": "The sign-in service needs to verify a candidate, not decrypt and reveal the user's original password. Salting does not remove the need for strong authentication and protected transport." }
+            ], "result": "Readability, change detection, origin, and password verification each have an explicit mechanism. None is confused with a format conversion or claimed to remove every remaining risk." }
+          ]
+        },
+        {
+          "id": "sc-grc-decision-cycle",
+          "title": "Connect technical choices to rules, consequences, and evidence",
+          "blocks": [
+            { "type": "paragraph", "text": "Governance sets direction and accountability. The school decides who owns a document collection, who can approve access, when permissions are reviewed, and how exceptions are recorded. A written rule without an owner or a way to enforce it is weak governance. Risk management then asks what could prevent the school achieving its goals, how likely it seems, and how serious the consequences would be. The team prioritizes work from those judgments rather than treating every possible concern as equally urgent." },
+            { "type": "paragraph", "text": "Risk responses include reducing risk with controls, avoiding an activity that creates unacceptable risk, transferring some financial consequences through a contract or insurance, or explicitly accepting the remaining risk with an accountable owner. Transfer does not erase every operational duty, and acceptance is not forgetting the problem. Residual risk is what remains after the chosen measures. A qualitative high or low rating is a prioritization judgment, not a measured probability. These lessons do not invent a numerical guarantee from a simple label." },
+            { "type": "paragraph", "text": "Compliance means meeting applicable laws, regulations, standards, contracts and internal policies. It requires knowing the requirement, applying the relevant controls, and keeping suitable evidence. A provider's certification or a product's score can inform the school's assessment but does not certify every school process or promise legal compliance. Security and compliance overlap without being identical: meeting a documented requirement does not mean every security threat has disappeared, while a technically strong control might still fail a recordkeeping obligation." },
+            { "type": "paragraph", "text": "Data residency concerns where data is stored and handled under the applicable requirement. Data sovereignty concerns which jurisdictions' laws apply; storage location alone is not a complete legal analysis. Privacy concerns appropriate use of information about people, including why it is collected, who can use it and how long it is kept. Encrypting unnecessary personal information does not automatically justify collecting it. For a real Romanian school, qualified staff must assess applicable obligations rather than copying a classroom example as legal advice." }
+          ]
+        },
+        {
+          "id": "sc-worked-grc",
+          "title": "Explain why a safer school process is not a compliance certificate",
+          "blocks": [
+            { "type": "example", "title": "Review a request to share a class document", "scenario": "Cedar School considers sharing fictional student feedback with an external reviewer. For the paper exercise, its internal policy requires an approved purpose, a named owner, restricted recipients and a documented review date. This is an invented school policy, not a statement of law.", "steps": [
+              { "action": "Ask the document owner to approve the purpose and decide whether the reviewer needs identifiable feedback at all.", "why": "Governance assigns a decision-maker. Avoiding unnecessary personal information can reduce the underlying exposure rather than merely protecting more copies." },
+              { "action": "Assess mistaken sharing as a risk and select restricted read access, an agreed review period and a removal process.", "why": "The controls reduce likely exposure and limit its duration, but a permitted recipient could still mishandle what they read." },
+              { "action": "Record the approval, the intended permissions, the review outcome and the owner of the residual risk.", "why": "Evidence lets someone check the invented policy was followed. A statement that encryption is enabled would not prove all those requirements were met." }
+            ], "result": "The school has a reasoned, reviewable decision with remaining risk acknowledged. It has not obtained a universal compliance guarantee from a cloud setting or from this example." }
+          ]
+        },
+        {
+          "id": "sc-crypto-grc-prediction",
+          "title": "Keep the claims proportional to the control",
+          "blocks": [
+            { "type": "prediction", "id": "sc-predict-encrypted-public", "prompt": "Assume a document service encrypts its disks but decrypts files for permitted downloads. Ana accidentally grants everyone download permission. Does disk encryption keep the file confidential from those downloaders?", "answer": "No. The service can return readable content to the recipients its access rules permit.", "explanation": "The encryption protects the storage boundary, not a mistaken authorization decision made by the functioning service. Correcting the sharing rule and investigating exposure are different responsibilities from maintaining disk encryption." },
+            { "type": "callout", "tone": "exam", "title": "Recognize the problem before selecting a term", "text": "Zero Trust justifies access and limits consequences. Encryption supports confidentiality within its key boundary. Hashing supports comparison, not recovery of the original. Governance assigns rules and owners, risk management chooses responses, and compliance checks applicable obligations. Neither successful authentication nor a compliance score guarantees that every document is safely shared." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-check-zero-trust", "kind": "single", "prompt": "Elena needs to read one worksheet for an afternoon. Which approach best combines the three Zero Trust principles?", "choices": [
+          { "id": "inside-trusted", "text": "Allow every school file whenever her connection comes from school Wi-Fi.", "explanation": "This treats location as sufficient trust and grants much more access than the task needs." },
+          { "id": "deny-everyone", "text": "Reject her request forever because Zero Trust means nobody can receive access.", "explanation": "Zero Trust supports justified access. Denying all useful work is not the meaning of the strategy." },
+          { "id": "verify-scope-prepare", "text": "Verify identity and conditions, grant limited worksheet access, and plan monitoring and containment.", "explanation": "The plan verifies explicitly, uses least privilege and assumes a verified session could later be misused." }
+        ], "correctIds": ["verify-scope-prepare"], "explanation": "Select the design that supports the task while requiring evidence and limiting avoidable consequences." },
+        { "id": "sc-check-public-key", "kind": "single", "prompt": "For an asymmetric encryption scheme, Ana encrypts a draft using Elena's authenticated public key. Which key should Elena use to decrypt it?", "choices": [
+          { "id": "elena-private", "text": "Elena's corresponding private key.", "explanation": "The public and private key pair has different roles in this encryption scheme; the recipient retains the private key." },
+          { "id": "ana-public", "text": "Ana's unrelated public key.", "explanation": "A key belonging to a different pair cannot perform the recipient's decryption operation." },
+          { "id": "any-public", "text": "Any publicly available key, because the file was encrypted with a public key.", "explanation": "Public availability of the encryption key does not make decryption available to everyone." }
+        ], "correctIds": ["elena-private"], "explanation": "Follow whose key pair protects the content, and do not confuse recipient decryption with sender signature verification." },
+        { "id": "sc-check-hash-salt", "kind": "multiple", "prompt": "Select the two accurate statements about hashes and password salts.", "choices": [
+          { "id": "trusted-reference", "text": "A document hash comparison needs a trustworthy expected digest to provide meaningful change checking.", "explanation": "Someone able to replace both the file and its reference digest can otherwise supply a matching altered pair." },
+          { "id": "salt-decrypts", "text": "The stored salt is the key that decrypts the original password.", "explanation": "A password verifier is not reversible ciphertext, and a salt is not a decryption secret." },
+          { "id": "salt-limits-reuse", "text": "Individual random salts reduce reuse of precomputed password guesses across accounts.", "explanation": "The salt changes the verification computation for each password record, although individual weak guesses can still be tested." },
+          { "id": "base64-secret", "text": "Base64 makes a password confidential because the representation looks different.", "explanation": "Encoding uses a public reversible representation and provides no secret-key protection." }
+        ], "correctIds": ["trusted-reference", "salt-limits-reuse"], "explanation": "Separate the trustworthiness of a reference, the role of a salt, and the reversibility of encoding." },
+        { "id": "sc-check-grc-evidence", "kind": "single", "prompt": "The school's invented sharing policy requires owner approval, restricted recipients and a review record. Which conclusion is justified after only enabling disk encryption?", "choices": [
+          { "id": "fully-compliant", "text": "The school is now compliant with every policy and law.", "explanation": "One control does not prove the policy's approval, recipient or review requirements, much less all applicable law." },
+          { "id": "control-not-proof", "text": "A useful control is present, but the school still needs the other required decisions and evidence.", "explanation": "Governance assigns the owner, risk reasoning selects controls, and compliance needs evidence against the actual requirements." },
+          { "id": "no-residual-risk", "text": "There is no remaining sharing risk, so an owner and review are unnecessary.", "explanation": "An authorized recipient or a mistaken permission can still expose readable information despite storage encryption." }
+        ], "correctIds": ["control-not-proof"], "explanation": "Assess what the requirement asks for instead of turning the existence of a feature into a compliance certificate." },
+        { "id": "sc-check-encryption-boundary", "kind": "single", "prompt": "A document service decrypts files for requests allowed by its sharing policy. A student is mistakenly given read permission. What does at-rest encryption imply?", "choices": [
+          { "id": "automatic-denial", "text": "The service must deny the student because every stored file is encrypted.", "explanation": "The functioning service is designed to decrypt for permitted reads, including mistakenly permitted ones." },
+          { "id": "hash-access", "text": "The student's identity changes the document hash into a decryption key.", "explanation": "Identity, hashing and encryption keys have separate roles; the claim invents a mechanism that is not present." },
+          { "id": "read-still-possible", "text": "The student may receive readable content, so the sharing permission must be corrected.", "explanation": "Encryption protects one boundary but does not decide which application recipients ought to be permitted." }
+        ], "correctIds": ["read-still-possible"], "explanation": "Ask where decryption happens and which rule lets a caller reach that operation." }
+      ],
+      "takeaways": [
+        "Zero Trust permits justified access through explicit verification, least privilege, and breach-aware design.",
+        "Encryption needs protected keys and does not replace correct application permissions.",
+        "Encoding changes representation; hashing produces a comparison value; neither is reversible secret-key encryption.",
+        "Salts reduce precomputed password-guess reuse but do not make weak passwords unguessable.",
+        "Governance, risk management, and compliance connect owners, decisions, controls, and evidence.",
+        "Residual risk and legal obligations need honest assessment, not a promise from a feature or score."
+      ],
+      "sourceIds": ["sc-security-guide", "sc-zero-trust", "sc-encryption-hashing", "sc-crypto-model", "sc-password-hashing", "sc-grc"]
+    }
+  ],
+  "glossary": [
+    { "term": "Shared responsibility", "definition": "An allocation of customer and provider duties that changes with the service boundary while retaining customer decisions about data, identities and configuration." },
+    { "term": "Defense-in-depth", "definition": "Complementary security layers that reduce dependence on any single control and support prevention, detection and recovery." },
+    { "term": "Confidentiality", "definition": "Keeping information readable only by the people or systems that should be allowed to see it." },
+    { "term": "Integrity", "definition": "Keeping information accurate and complete, with changes made through authorized processes." },
+    { "term": "Availability", "definition": "Keeping information and services usable by authorized users when needed." },
+    { "term": "Least privilege", "definition": "Restricting permissions to the actions, resources and duration needed for the approved task." },
+    { "term": "Ciphertext", "definition": "Encrypted information that needs the appropriate key and algorithm to be recovered as readable data." },
+    { "term": "Hash digest", "definition": "A fixed-size output for a chosen hash algorithm, useful for comparison when its reference and algorithm are trustworthy." },
+    { "term": "Salt", "definition": "An individual random value included in password-verifier generation to reduce reusable precomputed guessing; it is not a decryption key." },
+    { "term": "Governance", "definition": "The rules, ownership and decision processes that direct how an organization operates and protects its assets." },
+    { "term": "Residual risk", "definition": "Risk that remains after the selected controls and other responses have been applied." },
+    { "term": "Compliance", "definition": "Meeting applicable obligations and maintaining evidence against those requirements, not a guarantee of freedom from threats." }
+  ],
+  "sources": [
+    { "id": "sc-security-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide: announced October 21, 2026 outline", "supports": "Fetched September 22, 2026. Lists the five mapped security-concept objectives under a future effective date. Supports scope attribution only, not an assertion that the announced outline is already effective or that a historical English version was verified." },
+    { "id": "sc-shared-model", "url": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/2-describe-shared-responsibility-model", "title": "Describe the shared responsibility model", "supports": "Supports sc-responsibility-stack, sc-retained-accountability and the worked hosting comparison: IaaS guest duties, PaaS platform duties, SaaS application operation, and retained data, identity, endpoint and configuration responsibilities." },
+    { "id": "sc-defense-depth", "url": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/3-describe-defense-depth", "title": "Describe defense in depth", "supports": "Supports the seven defense layers and CIA goals in sc-security-goals, sc-defense-layers and sc-detect-recover. Recovery and detection are distinguished from prevention rather than represented as guaranteed barriers." },
+    { "id": "sc-zero-trust", "url": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/4-describe-zero-trust-model", "title": "Describe the Zero Trust model", "supports": "Supports verify explicitly, least privilege and assume breach, plus resource and signal areas connected by visibility and response. The visitor example applies the principles rather than claiming a particular licensed product is configured." },
+    { "id": "sc-encryption-hashing", "url": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/5-describe-encryption-hashing", "title": "Describe encryption and hashing", "supports": "Supports symmetric and asymmetric key roles, signatures, rest/transit/use boundaries, key management, hashing and salting. Lessons qualify introductory simplifications: digests are not collision-free, salts do not prevent all guessing, and storage encryption does not defeat permitted service reads." },
+    { "id": "sc-crypto-model", "url": "https://learn.microsoft.com/en-us/dotnet/standard/security/cryptography-model", "title": ".NET cryptography model", "supports": "Separates confidentiality, integrity, digital signatures, key exchange and password-based derivation as distinct cryptographic purposes. Used as conceptual corroboration, not as an instruction to copy code or implement cryptography." },
+    { "id": "sc-password-hashing", "url": "https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/consumer-apis/password-hashing?view=aspnetcore-10.0", "title": "Hash passwords in ASP.NET Core", "supports": "Supports using established password-hashing components instead of low-level demonstration recipes. Its distinct random salt, derivation and Base64 representation illustrate that representation is not the protective cryptographic operation; no sample code or parameters are reproduced." },
+    { "id": "sc-grc", "url": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/6-describe-compliance-concepts", "title": "Describe governance, risk, and compliance concepts", "supports": "Supports governance ownership, identify-assess-respond-monitor risk reasoning, risk responses, compliance versus security, and distinctions among residency, sovereignty and privacy. The school's policy is explicitly fictional and supplies no legal assurance." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: allocate duties and explain the remaining risk",
+    "purpose": "Practice the reasoning without an Azure account, real identities, sensitive documents, or security testing.",
+    "prerequisites": [
+      "Paper or a local blank note containing only invented names and documents.",
+      "The two lessons and the explicit assumption that the school controls its VM guest, its PaaS code, and its SaaS sharing settings."
+    ],
+    "costWarning": "This is a paper exercise with no Azure resources, account changes, billable services, or live tests. Do not upload real school documents or enter real passwords.",
+    "steps": [
+      "Draw three columns labelled IaaS VM, managed application runtime, and hosted SaaS documents.",
+      "Place physical host maintenance, guest OS updates, custom code updates, sharing approval and school laptop updates under the responsible party for each arrangement; mark duties that do not exist in the SaaS replacement.",
+      "For a fictional private worksheet, add an identity check, a document permission, activity review and a recovery route. Write the distinct failure each addresses.",
+      "Give a visiting teacher read access on paper to one worksheet for one afternoon. Label where verify explicitly, least privilege and assume breach appear.",
+      "Describe what happens if a service decrypts a file for an accidentally permitted download. Explain why disk encryption alone does not correct the permission.",
+      "Write an invented sharing rule with an owner and review date, then list the evidence needed to show it was followed and one remaining risk."
+    ],
+    "expectedResults": [
+      "IaaS guest maintenance stays with the school; managed-platform duties shift to the provider; data, access decisions and school device protection remain customer responsibilities.",
+      "Each defense has a distinct purpose, and the visiting teacher can perform a useful task without broad privileges.",
+      "The final record distinguishes a control from evidence of meeting a requirement and explicitly acknowledges residual risk."
+    ],
+    "cleanup": [
+      "Discard or retain only the fictional paper notes; no cloud resources or identities need removal.",
+      "If any real personal information was accidentally written, remove it from the exercise and follow the school's normal information-handling process."
+    ]
+  }
+}
