@@ -20,6 +20,9 @@ teaching explanations have independent, exact-hash publication approvals.
 - A React and TypeScript interface with a blue Coursebook layout.
 - An original AZ-104 course covering **5 domains, 21 modules, 59 lessons,
   241 checkpoints and all 82 listed official objectives**.
+- An independently reviewed original SC-900 course in source: **4 domains,
+  12 modules, 26 lessons, 112 checkpoints and 58 announced objectives**.
+  SC-900 is not activated in the hosted application.
 - First-principles explanations, worked examples, diagrams, glossary entries
   and references to official documentation.
 - Interactive subnet, route and NSG teaching tools.
@@ -29,7 +32,7 @@ teaching explanations have independent, exact-hash publication approvals.
 - Firebase rules and guarded administration/publication tooling.
 
 This is an independent study application, not an official Microsoft course.
-The course maps the published objectives effective **April 17, 2026**, with
+The AZ-104 course maps the published objectives effective **April 17, 2026**, with
 source and editorial reviews dated **September 20, 2026**. The official bullets
 are illustrative, related topics can appear, and this course does not guarantee
 exam coverage, readiness or perfect accuracy.
@@ -80,7 +83,7 @@ is separate from the public repository and is not redistributed here. Its
 historical copies remain available in the owner's existing environment for
 saved-session compatibility.
 
-`content/networking/` and `content/az104/` contain original teaching material,
+`content/networking/`, `content/az104/` and `content/sc900/` contain original teaching material,
 not copied Microsoft lesson text. Official references are linked for verification.
 
 Do not copy a Firebase credential file, the private working directory or a full
@@ -165,10 +168,21 @@ attempts.
 ## SC-900 publication status
 
 SC-900 uses a separate exam context, not the AZ-104 bank with different labels.
-Its planned original course has **4 domains, 12 modules, 26 lessons and 58
-announced objectives**. The English study guide reviewed on **September 22,
+Its original course has been independently reviewed, digest-approved and
+assembled locally: **4 domains, 12 modules, 26 lessons, 112 explained checkpoints
+and 58 announced objectives**. This is course-content approval, not production
+activation or approval of the imported question bank.
+
+The English study guide reviewed on **September 22,
 2026** announces an effective date of **October 21, 2026**. This is a future
 outline at review time; no verified earlier English outline is claimed.
+
+The authorized source has **219 occurrences across 44 pages**, not yet a verified
+unique or active question count. Collection is paused because browser-generated
+discussion requests returned a verification challenge. The partial pilot is
+private and cannot satisfy publication gates. Complete collection, answer and
+comment review, original per-question explanations, and the real cloud-upload
+executor remain unfinished. The existing hosted AZ-104 publication is unchanged.
 
 Once independently approved and activated, SC-900 offers free practice in sets
 of 10, 20, 30 or 40 and a **40-question, 45-minute mock**. Forty questions is the
