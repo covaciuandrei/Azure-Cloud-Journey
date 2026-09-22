@@ -42,7 +42,7 @@ test("Private originals use one release-independent SHA-256 path", () => {
 test("Storage headroom includes observed project usage and unreleased reservations", () => {
   const zero = { requests: 0, transferBytes: 0, storedBytes: 0 };
   assert.doesNotThrow(() => assertStorageHeadroom(zero, zero, { ...zero, requests: 1600 }));
-  assert.throws(() => assertStorageHeadroom({ ...zero, requests: 3000 }, { ...zero, requests: 800 }, { ...zero, requests: 784 }), /quota pause/);
+  assert.throws(() => assertStorageHeadroom({ ...zero, requests: 3500 }, { ...zero, requests: 800 }, { ...zero, requests: 784 }), /quota pause/);
   for (const key of Object.keys(zero) as Array<keyof typeof zero>) {
     assert.throws(() => assertStorageHeadroom(zero, zero, { ...zero, [key]: storageLimits[key] + 1 }), /quota pause/);
     assert.throws(() => assertStorageHeadroom(zero, zero, { ...zero, [key]: -1 }), /quota pause/);
@@ -61,7 +61,7 @@ test("known Storage reads do not consume the write allowance and unknown metrics
   const observed = { ...zero, requests: 1787, ...classes };
   const legacy = { ...zero, requests: 2712 };
   assert.doesNotThrow(() => assertStorageHeadroom(observed, legacy, { ...zero, classARequests: 80, classBRequests: 1000 }));
-  assert.throws(() => assertStorageHeadroom(observed, legacy, { ...zero, classARequests: 786 }), /quota pause/);
+  assert.throws(() => assertStorageHeadroom(observed, legacy, { ...zero, classARequests: 1186 }), /quota pause/);
   assert.throws(() => assertStorageHeadroom(observed, legacy, { ...zero, classBRequests: 45000 }), /quota pause/);
   assert.throws(() => assertStorageHeadroom({ ...observed, classARequests: 0, classBRequests: 0 }, zero, zero), /do not cover/);
   assert.throws(() => assertStorageHeadroom(observed, zero, { ...zero, classARequests: -1 }), /quota pause/);
@@ -93,7 +93,7 @@ test("classified reservations append to the existing journal without refunding o
       ...previous, transferBytes: previous.transferBytes + 100, storedBytes: previous.storedBytes + 50,
       classARequests: 1, classBRequests: 5,
     });
-    await assert.rejects(next.reserve({ requests: 786 }), /quota pause/);
+    await assert.rejects(next.reserve({ requests: 1186 }), /quota pause/);
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }

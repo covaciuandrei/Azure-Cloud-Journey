@@ -29,9 +29,9 @@ const expectedComments = 7994;
 const GiB = 1024 ** 3;
 
 // Legacy and unknown requests stay charged to both classes. Known operations
-// use their billing class, with headroom below the 5K/50K monthly allowances.
+// use their billing class, retaining 100/5000 operations below the 5K/50K allowances.
 export const storageLimits = {
-  requests: 4500, classARequests: 4500, classBRequests: 45000,
+  requests: 4900, classARequests: 4900, classBRequests: 45000,
   transferBytes: 90 * GiB, storedBytes: 4 * GiB,
 };
 export interface Amounts {
@@ -391,8 +391,8 @@ async function inventory(api: Api): Promise<Inventory> {
   for (const bucket of buckets) {
     if (bucket.projectNumber !== "237261733668") throw new Error("Out-of-project bucket inventory.");
     const endpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket.name)}/o`;
-    const objects = await list<CloudObject>(api, endpoint, "items", { versions: "true", projection: "full", maxResults: "100", fields });
-    const softDeleted = await list<CloudObject>(api, endpoint, "items", { softDeleted: "true", projection: "full", maxResults: "100", fields });
+    const objects = await list<CloudObject>(api, endpoint, "items", { versions: "true", projection: "full", maxResults: "500", fields });
+    const softDeleted = await list<CloudObject>(api, endpoint, "items", { softDeleted: "true", projection: "full", maxResults: "500", fields });
     details.push({ ...bucket, objects, softDeleted });
   }
   const sites = await list<{ name: string }>(api, `https://firebasehosting.googleapis.com/v1beta1/projects/${project}/sites`, "sites", { pageSize: "100" });

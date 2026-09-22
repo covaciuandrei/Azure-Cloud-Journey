@@ -204,11 +204,11 @@ test("shared quotas pause before requests, retain reservations and never gain a 
   const storageUsage: StorageUsage = { checkedAt, month: usage.pacificDay.slice(0, 7), periodStart: checkedAt,
     requests: 0, storedBytes: 0, transferBytes: 0, peakStoredBytes: 0, hostingStoredBytes: 0, hostingTransferBytes: 0, samples: {} };
   const storage = await StorageReservations.open(storageUsage, root);
-  await storage.reserve({ requests: 4499 });
+  await storage.reserve({ requests: 4899 });
   const next = await StorageReservations.open(storageUsage, root);
   await assert.rejects(next.reserve({ requests: 2 }), /quota pause/i);
   const journal = JSON.parse(await readFile(resolve(root, ".data/rollout/storage-journal.json"), "utf8"));
-  assert.equal(journal.months[storageUsage.month].requests, 4499);
+  assert.equal(journal.months[storageUsage.month].requests, 4899);
   assert.throws(() => assertSc900StorageUsage({ ...storageUsage, hostingTransferBytes: 9_000_000_000 }), CloudQuotaPause);
   const disk = await executeSc900CloudPlan(fixture.plan, fixture.approval, {
     workspace: root, adapter: cloud.adapter, refresh: async () => quotas(fixture.plan.bucket), revalidate: fixture.revalidate,
