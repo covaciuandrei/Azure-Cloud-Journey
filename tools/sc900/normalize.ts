@@ -9,9 +9,13 @@ import {
   type Sc900Document, type Sc900Discussion, type Sc900Comment, type Sc900Question,
 } from "../../src/domain/sc900Bank.js";
 import {
-  SC900_EXAM_ID, Sc900CaptureLedgerSchema, sc900OccurrenceId,
+  SC900_EXAM_ID, Sc900CaptureLedgerSchema, Sc900SourcePageUrlSchema, sc900OccurrenceId,
   type Sc900CaptureLedger, type Sc900CaptureAsset,
 } from "../../src/domain/sc900Capture.js";
+import {
+  Sc900QuestionsOnlyAuthorizationSchema, Sc900ScopedCaptureLedgerSchema,
+  type Sc900QuestionsOnlyAuthorization, type Sc900ScopedCaptureLedger,
+} from "../../src/domain/sc900Scope.js";
 import { richAssetIds, type AnswerValue, type RichContent } from "../../src/domain/schemas.js";
 import { mediaExtension } from "../../src/domain/cleanBank.js";
 import { decodeCapturedAsset } from "../ingest/normalize-assets.js";
@@ -22,9 +26,19 @@ import {
 } from "../ingest/normalize-shared.js";
 import {
   byteSha256, canonicalJson, sc900Hash, sc900OptionId, sc900QuestionId, sc900SourceRevision,
+  sc900RawPageInventoryDigest, sc900AssetInventoryDigest, sc900AuthorizationDigest, assertSc900ScopedAuthorization,
 } from "./canonical.js";
 
-const NORMALIZER_VERSION = "sc900-rendered-ui-3";
+const NORMALIZER_VERSION = "sc900-rendered-ui-4";
+const QUESTIONS_ONLY_COMPLETION_REASON = "Questions, answers and images only. Discussions remain unrequested; full acquisition and publication are incomplete.";
+const QUESTIONS_ONLY_DISCUSSION_REASON = "Deferred questions-only capture: discussion requests were not sent to the server.";
+const QuestionsOnlyCompletionSchema = z.object({
+  status: z.literal("incomplete"), reason: z.literal(QUESTIONS_ONLY_COMPLETION_REASON),
+}).strict();
+const QuestionsOnlyDiscussionSchema = z.object({
+  status: z.literal("not-requested"), reason: z.literal(QUESTIONS_ONLY_DISCUSSION_REASON),
+}).strict();
+const MAX_RECEIPT_BYTES = 1024 * 1024;
 const MAX_PAGE_BYTES = 32 * 1024 * 1024;
 const MAX_INPUT_BYTES = 256 * 1024 * 1024;
 const MAX_ASSET_BYTES = 16 * 1024 * 1024;
@@ -52,6 +66,8 @@ export interface Sc900NormalizationOptions {
   draft?: boolean;
   /** Observed source totals, never the number of files in a partial capture. */
   expected?: { pages: number; occurrences: number };
+  /** Explicit owner consent and the exact source-scope receipt bytes it authorizes. */
+  ownerAuthorization?: { receipt: unknown; sourceScopeReceipt: Sc900CaptureInput };
 }
 export interface Sc900NormalizationIssue {
   examId: "sc900";
@@ -113,6 +129,7 @@ export interface Sc900NormalizationResult {
   draftAssets: Sc900DraftAsset[];
   issues: Sc900NormalizationIssue[];
   verifiedCaptureLedger: Sc900CaptureLedger | null;
+  authorizedQuestionsOnlyLedger: Sc900ScopedCaptureLedger | null;
   counts: {
     observedPages: number;
     observedOccurrences: number;
@@ -187,7 +204,7 @@ function withoutImages(content: RichContent): RichContent {
 
 function parseQuestion(
   page: Page, raw: RawQuestion, occurrence: Sc900DraftOccurrence,
-  registry: Map<string, Sc900DraftAsset>, report: Report,
+  registry: Map<string, Sc900DraftAsset>, report: Report, questionsOnlyAuthorized = false,
 ): ParsedQuestion {
   const context = `${page.input.path} / ${raw.heading}`;
   const $ = load(raw.html, undefined, false);
@@ -219,8 +236,17 @@ function parseQuestion(
     httpStatus !== undefined && httpStatus >= 200 && httpStatus < 300 &&
     !raw.discussionLoad.error && !loading && !raw.remainingControls.length && !remaining.length;
   if (!loaded) {
-    report("discussion-unverified", context,
-      `Discussion ${occurrence.discussionState}, HTTP ${httpStatus ?? "unobserved"}; its displayed count is not confirmed, including zero`);
+    const intentionalOmission = questionsOnlyAuthorized &&
+      QuestionsOnlyDiscussionSchema.safeParse(raw.discussionLoad).success &&
+      raw.commentCount === 0 && raw.loadingIndicators === 0;
+    report(intentionalOmission ? "discussion-omitted-owner-authorized" : "discussion-unverified", context,
+      `Discussion ${occurrence.discussionState}, HTTP ${httpStatus ?? "unobserved"}; its displayed count is not confirmed, including zero`,
+      intentionalOmission ? "warning" : "error");
+  }
+  if (questionsOnlyAuthorized) {
+    check(QuestionsOnlyDiscussionSchema.safeParse(raw.discussionLoad).success &&
+      raw.commentCount === 0 && $("ul.chakra-wrap__list").length === 0,
+    "scoped-discussion-content", "Questions-only authorization cannot discard captured discussions or relabel other retrieval states");
   }
   const imageElements = $("img").toArray();
   check(imageElements.length === raw.images.length, "image-count",
@@ -371,7 +397,10 @@ function parseQuestion(
       continue;
     }
     if (!$(section).find("img").length &&
-      /^(?:no comments(?: yet)?|no discussions?(?: yet)?|be the first to comment)[.!]?$/i.test($(section).text().trim())) continue;
+      /^(?:no comments(?: yet)?|no discussions?(?: yet)?|be the first to comment)[.!]?$/i.test($(section).text().trim())) {
+      check(!questionsOnlyAuthorized, "scoped-discussion-content", "An unavailable discussion cannot be represented by a captured empty-state claim");
+      continue;
+    }
     check(markers.length || !$(section).text().trim() && !$(section).find("img").length,
       "unknown-answer-section", "Unrecognized content after the answer controls requires explicit parsing");
     markedAnswer ||= markers.length > 0;
@@ -493,7 +522,7 @@ export function normalizeSc900Captures(
     const capture = parsed.data;
     const match = capture.url.match(/^https:\/\/www\.examprepper\.co\/exam\/128\/([1-9]\d*)\/?$/);
     const pageNumber = match ? Number(match[1]) : NaN;
-    if (!Number.isSafeInteger(pageNumber) || pageNumber > 999999) {
+    if (!Number.isSafeInteger(pageNumber) || !Sc900SourcePageUrlSchema.safeParse(capture.url).success) {
       report("source-url", input.path, `Expected the rendered SC900 exam/128 page URL, received ${capture.url}`);
       continue;
     }
@@ -516,9 +545,6 @@ export function normalizeSc900Captures(
     if (questionNumbers.some((number, index) => number !== first + index) || questionNumbers.length !== expectedCount) {
       report("page-sequence", input.path, `Expected sequential questions starting at ${first}, observed ${questionNumbers.join(", ")}`);
     }
-    if (capture.completion && capture.completion.status !== "complete") {
-      report("capture-incomplete", input.path, `Capture explicitly declares completion.status=${capture.completion.status}`);
-    }
     pages.push({ capture, input, pageNumber, rawSha256: byteSha256(input.content), questionNumbers });
   }
   pages.sort((a, b) => a.pageNumber - b.pageNumber);
@@ -527,6 +553,65 @@ export function normalizeSc900Captures(
     pages.some((page, index) => page.pageNumber !== index + 1) ||
     numbers.length !== options.expected.occurrences || numbers.some((number, index) => number !== index + 1))) {
     report("incomplete-coverage", "coverage", "All observed source pages and question numbers must be captured sequentially and exactly once");
+  }
+  const inventoryPages = pages.map((page) => ({
+    pageNumber: page.pageNumber, url: page.capture.url, rawSha256: page.rawSha256, questionNumbers: page.questionNumbers,
+  }));
+  let authorization: Sc900QuestionsOnlyAuthorization | null = null;
+  let authorizationBinding: { authorizationDigest: string; sourceScopeReceiptSha256: string | null } | null = null;
+  if (options.ownerAuthorization !== undefined) {
+    const consent = Sc900QuestionsOnlyAuthorizationSchema.safeParse(options.ownerAuthorization.receipt);
+    const source = z.object({ path: z.string().min(1), content: z.string().min(1) })
+      .safeParse(options.ownerAuthorization.sourceScopeReceipt);
+    if (!consent.success) report("owner-authorization", "authorization", consent.error.message);
+    if (!source.success) report("source-scope-receipt", "authorization", source.error.message);
+    if (consent.success) {
+      authorizationBinding = {
+        authorizationDigest: sc900AuthorizationDigest(consent.data),
+        sourceScopeReceiptSha256: source.success ? byteSha256(source.data.content) : null,
+      };
+    }
+    if (consent.success && source.success) {
+      let sourceReceiptValid = false;
+      if (Buffer.byteLength(source.data.content) > MAX_RECEIPT_BYTES) {
+        report("source-scope-receipt", source.data.path, "Source-scope receipt exceeds the 1 MiB bound");
+      } else {
+        let json: unknown;
+        try { json = JSON.parse(source.data.content) as unknown; }
+        catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+          report("source-scope-receipt", source.data.path, error.message);
+        }
+        if (json !== undefined) {
+          sourceReceiptValid = json !== null && typeof json === "object" && !Array.isArray(json);
+          if (!sourceReceiptValid) report("source-scope-receipt", source.data.path, "Expected a source-scope receipt JSON object");
+        }
+      }
+      const matches = sourceReceiptValid && options.expected !== undefined &&
+        consent.data.questions === options.expected.occurrences && consent.data.pages === options.expected.pages &&
+        consent.data.sourceScopeReceiptSha256 === byteSha256(source.data.content) &&
+        consent.data.rawPageInventoryDigest === sc900RawPageInventoryDigest(inventoryPages);
+      if (matches) authorization = consent.data;
+      else report("owner-authorization-binding", "authorization",
+        "Owner consent must match the exact source-scope receipt bytes, observed totals and complete raw-page inventory");
+    }
+  }
+  for (const page of pages) {
+    const { capture, input } = page;
+    if (authorization) {
+      const intentional = QuestionsOnlyCompletionSchema.safeParse(capture.completion).success &&
+        Array.isArray(capture.missingAssetUrls) && capture.missingAssetUrls.length === 0;
+      report(intentional ? "capture-incomplete-owner-authorized" : "capture-incomplete", input.path,
+        intentional ? "Only the recorded intentional questions-only discussion omission is covered by owner authorization" :
+          "Scoped capture must declare the exact intentional questions-only completion reason and no missing assets",
+        intentional ? "warning" : "error");
+      const knownImageUrls = new Set(capture.questions.flatMap(question => question.images.map(image => image.currentSrc)));
+      if (capture.assets.some(asset => !knownImageUrls.has(asset.url))) {
+        report("scoped-unreferenced-asset", input.path, "Scoped capture cannot silently omit original assets unrelated to the captured image inventory");
+      }
+    } else if (capture.completion && capture.completion.status !== "complete") {
+      report("capture-incomplete", input.path, `Capture explicitly declares completion.status=${capture.completion.status}`);
+    }
   }
   const registry = new Map<string, Sc900DraftAsset>();
   const draftOccurrences: Sc900DraftOccurrence[] = [];
@@ -553,7 +638,7 @@ export function normalizeSc900Captures(
         continue;
       }
       seenOccurrences.add(occurrence.id);
-      try { parsedQuestions.push(parseQuestion(page, raw, occurrence, registry, report)); }
+      try { parsedQuestions.push(parseQuestion(page, raw, occurrence, registry, report, authorization !== null)); }
       catch (error) {
         if (!(error instanceof CaptureParseError)) throw error;
         report(error.code, `${page.input.path} / ${raw.heading}`, error.message);
@@ -562,31 +647,66 @@ export function normalizeSc900Captures(
   }
   const referencedAssets = new Set(parsedQuestions.flatMap((question) => question.occurrence.assetIds));
   const draftAssets = [...registry.values()].filter((asset) => referencedAssets.has(asset.id)).sort((a, b) => a.id.localeCompare(b.id));
+  const inventoryAssets = draftAssets.map(({ id, contentType, byteLength, width, height }) =>
+    ({ id, contentType, byteLength, width, height }));
+  if (authorization && (authorization.images !== inventoryAssets.length ||
+    authorization.assetInventoryDigest !== sc900AssetInventoryDigest(inventoryAssets))) {
+    report("owner-authorization-assets", "authorization", "Owner consent must match every byte-verified captured media inventory entry");
+  }
+  if (authorization && new Set(parsedQuestions.map((question) => question.occurrence.questionId)).size !== parsedQuestions.length) {
+    report("scoped-duplicate", "coverage", "Scoped acquisition requires independently retained canonical questions; duplicate occurrences cannot be silently merged");
+  }
   let verifiedCaptureLedger: Sc900CaptureLedger | null = null;
-  if (options.expected && !issues.some((issue) => issue.severity === "error")) {
+  let authorizedQuestionsOnlyLedger: Sc900ScopedCaptureLedger | null = null;
+  if (options.expected && authorization && !issues.some((issue) => issue.severity === "error")) {
+    const ledger = Sc900ScopedCaptureLedgerSchema.safeParse({
+      schemaVersion: 2, examId: SC900_EXAM_ID, sourceExamId: "128",
+      captureMethod: "rendered-browser-ui", verified: true,
+      sourceUrl: "https://www.examprepper.co/exam/128/1",
+      capturedAt: pages.map((page) => page.capture.capturedAt).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1),
+      scope: "questions-answers-media",
+      authorizationDigest: sc900AuthorizationDigest(authorization),
+      sourceScopeReceiptSha256: authorization.sourceScopeReceiptSha256,
+      rawPageInventoryDigest: sc900RawPageInventoryDigest(inventoryPages),
+      assetInventoryDigest: sc900AssetInventoryDigest(inventoryAssets),
+      sourceCommentCount: null,
+      reported: { questions: options.expected.occurrences, pages: options.expected.pages },
+      pages: inventoryPages, assets: inventoryAssets,
+      occurrences: draftOccurrences.map((occurrence) => ({
+        id: occurrence.id, questionNumber: occurrence.questionNumber, pageNumber: occurrence.pageNumber,
+        answerRevealed: occurrence.answerRevealed, assetIds: occurrence.assetIds,
+        discussionState: "unavailable", discussionDisposition: "omitted-owner-authorized",
+        sourceCommentCount: null, parsedCommentCount: occurrence.parsedCommentCount, commentIds: occurrence.commentIds,
+      })),
+    });
+    if (ledger.success) {
+      assertSc900ScopedAuthorization(ledger.data, authorization);
+      authorizedQuestionsOnlyLedger = ledger.data;
+    } else report("scoped-capture-ledger", "coverage", ledger.error.message);
+  } else if (options.expected && options.ownerAuthorization === undefined && !issues.some((issue) => issue.severity === "error")) {
     const ledger = Sc900CaptureLedgerSchema.safeParse({
       schemaVersion: 1, examId: SC900_EXAM_ID, sourceExamId: "128",
       captureMethod: "rendered-browser-ui", verified: true,
       sourceUrl: "https://www.examprepper.co/exam/128/1",
       capturedAt: pages.map((page) => page.capture.capturedAt).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1),
       reported: { questions: options.expected.occurrences, pages: options.expected.pages },
-      pages: pages.map((page) => ({
-        pageNumber: page.pageNumber, url: page.capture.url, rawSha256: page.rawSha256, questionNumbers: page.questionNumbers,
-      })),
+      pages: inventoryPages,
       occurrences: draftOccurrences.map((occurrence) => ({
         id: occurrence.id, questionNumber: occurrence.questionNumber, pageNumber: occurrence.pageNumber,
         answerRevealed: occurrence.answerRevealed, discussionState: occurrence.discussionState,
         expectedCommentCount: occurrence.capturedDomCommentCount, parsedCommentCount: occurrence.parsedCommentCount,
         commentIds: occurrence.commentIds, assetIds: occurrence.assetIds,
       })),
-      assets: draftAssets.map(({ id, contentType, byteLength, width, height }) => ({ id, contentType, byteLength, width, height })),
+      assets: inventoryAssets,
     });
     if (ledger.success) verifiedCaptureLedger = ledger.data;
     else report("capture-ledger", "coverage", ledger.error.message);
   }
-  const draftSourceRevision = verifiedCaptureLedger ? sc900SourceRevision(verifiedCaptureLedger) :
+  const captureLedger = authorizedQuestionsOnlyLedger ?? verifiedCaptureLedger;
+  const draftSourceRevision = captureLedger ? sc900SourceRevision(captureLedger) :
     sc900Hash("draft-source", {
       normalizerVersion: NORMALIZER_VERSION, expected: options.expected ?? null,
+      authorizationBinding,
       rawPages: inputs.map((input) => ({ sha256: byteSha256(input.content) })).sort((a, b) => a.sha256.localeCompare(b.sha256)),
     });
   const draftReleaseId = `r_${sc900Hash("draft-release", { normalizerVersion: NORMALIZER_VERSION, sourceRevision: draftSourceRevision })}`;
@@ -639,7 +759,7 @@ export function normalizeSc900Captures(
     schemaVersion: 1, examId: SC900_EXAM_ID, normalizerVersion: NORMALIZER_VERSION,
     publicationState: "blocked-independent-review", observedSourceTotals: options.expected ?? null,
     draftSourceRevision, draftReleaseId,
-    draftDocuments, draftDiscussions, draftOccurrences, draftAssets, issues, verifiedCaptureLedger,
+    draftDocuments, draftDiscussions, draftOccurrences, draftAssets, issues, verifiedCaptureLedger, authorizedQuestionsOnlyLedger,
     counts: {
       observedPages: pages.length, observedOccurrences: draftOccurrences.length,
       normalizedOccurrences: parsedQuestions.length, canonicalQuestions: draftDocuments.length,
@@ -649,7 +769,7 @@ export function normalizeSc900Captures(
         ? draftOccurrences.reduce((sum, occurrence) => sum + occurrence.confirmedCommentCount!, 0) : null,
     },
   };
-  if (!options.draft && !verifiedCaptureLedger) throw new Sc900NormalizationError(result);
+  if (!options.draft && !captureLedger) throw new Sc900NormalizationError(result);
   return result;
 }
 
@@ -657,6 +777,8 @@ export interface Sc900NormalizeDirectoryOptions extends Sc900NormalizationOption
   workspaceRoot?: string;
   inputDirectory?: string;
   outputDirectory?: string;
+  ownerAuthorizationPath?: string;
+  sourceScopeReceiptPath?: string;
 }
 function privatePath(workspace: string, path: string): string {
   if (path.includes("\\") || path.split("/").some((part) => part === ".." || part === "." || part === "")) {
@@ -700,6 +822,33 @@ export async function normalizeSc900Directory(options: Sc900NormalizeDirectoryOp
   if (overlaps(input, output) || overlaps(raw, output)) throw new Error("Normalized output must not overlap source captures");
   await noSymlinks(workspace, input);
   await noSymlinks(workspace, output);
+  if ((options.ownerAuthorizationPath === undefined) !== (options.sourceScopeReceiptPath === undefined)) {
+    throw new Error("Owner authorization and source-scope receipt paths must be supplied together");
+  }
+  let ownerAuthorization = options.ownerAuthorization;
+  if (options.ownerAuthorizationPath !== undefined && options.sourceScopeReceiptPath !== undefined) {
+    if (ownerAuthorization !== undefined) throw new Error("Supply owner authorization as receipt paths or API data, not both");
+    const readReceipt = async (path: string): Promise<Sc900CaptureInput> => {
+      const absolute = privatePath(workspace, path);
+      if (overlaps(absolute, output)) throw new Error("Authorization evidence must remain separate from normalized output");
+      await noSymlinks(workspace, absolute);
+      const metadata = await lstat(absolute);
+      if (!metadata.isFile() || metadata.size > MAX_RECEIPT_BYTES) throw new Error(`Expected a bounded regular receipt file: ${path}`);
+      const bytes = await readFile(absolute);
+      const content = bytes.toString("utf8");
+      if (!Buffer.from(content).equals(bytes)) throw new Error(`Receipt is not valid UTF-8: ${path}`);
+      return { path, content };
+    };
+    const consentInput = await readReceipt(options.ownerAuthorizationPath);
+    const scopeInput = await readReceipt(options.sourceScopeReceiptPath);
+    let receipt: unknown;
+    try { receipt = JSON.parse(consentInput.content) as unknown; }
+    catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      throw new Error(`Invalid owner authorization JSON at ${consentInput.path}: ${error.message}`);
+    }
+    ownerAuthorization = { receipt, sourceScopeReceipt: scopeInput };
+  }
   const inputs: Sc900CaptureInput[] = [];
   const entries = await readdir(input, { withFileTypes: true });
   if (entries.length > 10000) throw new Error("SC900 capture directory exceeds the 10000-page safety limit");
@@ -716,7 +865,7 @@ export async function normalizeSc900Directory(options: Sc900NormalizeDirectoryOp
     if (!Buffer.from(content).equals(bytes)) throw new Error(`Capture is not valid UTF-8: ${file}`);
     inputs.push({ path: `${inputPath}/${entry.name}`, content });
   }
-  const result = normalizeSc900Captures(inputs, options);
+  const result = normalizeSc900Captures(inputs, { ...options, ...(ownerAuthorization ? { ownerAuthorization } : {}) });
   const directory = resolve(output, result.draftReleaseId);
   await noSymlinks(workspace, directory);
   await mkdir(directory, { recursive: true });
@@ -741,11 +890,15 @@ export function parseSc900NormalizeArgs(args: string[]): Sc900NormalizeDirectory
     seen.add(argument);
     if (argument === "--draft") { options.draft = true; continue; }
     if (argument === "--help") { options.help = true; continue; }
-    if (!["--input", "--output", "--expected-pages", "--expected-occurrences"].includes(argument)) throw new Error(`Unknown argument: ${argument}`);
+    if (!["--input", "--output", "--expected-pages", "--expected-occurrences", "--owner-authorization", "--source-scope-receipt"].includes(argument)) {
+      throw new Error(`Unknown argument: ${argument}`);
+    }
     const value = args[++index];
     if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
     if (argument === "--input") options.inputDirectory = value;
     else if (argument === "--output") options.outputDirectory = value;
+    else if (argument === "--owner-authorization") options.ownerAuthorizationPath = value;
+    else if (argument === "--source-scope-receipt") options.sourceScopeReceiptPath = value;
     else {
       if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error(`${argument} requires a positive integer`);
       if (argument === "--expected-pages") pages = Number(value);
@@ -753,6 +906,9 @@ export function parseSc900NormalizeArgs(args: string[]): Sc900NormalizeDirectory
     }
   }
   if ((pages === undefined) !== (occurrences === undefined)) throw new Error("Both observed page and occurrence totals are required");
+  if ((options.ownerAuthorizationPath === undefined) !== (options.sourceScopeReceiptPath === undefined)) {
+    throw new Error("Both --owner-authorization and --source-scope-receipt are required for questions-only authorization");
+  }
   if (pages !== undefined && occurrences !== undefined) options.expected = { pages, occurrences };
   return options;
 }
@@ -761,13 +917,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     const options = parseSc900NormalizeArgs(process.argv.slice(2));
     if (options.help) {
-      console.log("Usage: node --import tsx tools/sc900/normalize.ts [--input .data/sc900/raw/pages] [--output .data/sc900/normalized] [--draft] [--expected-pages N --expected-occurrences N]\nOnly observed source totals permit a verified acquisition ledger. All documents remain provisional; no publication or network access.");
+      console.log("Usage: node --import tsx tools/sc900/normalize.ts [--input .data/sc900/raw/pages] [--output .data/sc900/normalized] [--draft] [--expected-pages N --expected-occurrences N] [--owner-authorization .data/sc900/owner-authorization.json --source-scope-receipt .data/sc900/source-scope.json]\nDefault mode requires fully loaded discussions. Questions-only scope requires exact inventory-bound owner consent and preserves unknown source comment counts. All documents remain provisional; no publication or network access.");
     } else {
       const result = await normalizeSc900Directory(options);
       console.log(JSON.stringify({
         examId: result.examId, draftReleaseId: result.draftReleaseId,
         observedSourceTotals: result.observedSourceTotals, counts: result.counts,
         verifiedCaptureLedger: result.verifiedCaptureLedger !== null, issues: result.issues,
+        authorizedQuestionsOnlyLedger: result.authorizedQuestionsOnlyLedger !== null,
         publicationState: result.publicationState,
       }, null, 2));
       if (result.issues.some((issue) => issue.severity === "error")) process.exitCode = 2;

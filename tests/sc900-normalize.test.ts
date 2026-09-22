@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import { load } from "cheerio";
 import {
@@ -12,7 +13,13 @@ import {
 } from "../src/domain/sc900Bank.js";
 import { Sc900CaptureLedgerSchema } from "../src/domain/sc900Capture.js";
 import {
+  Sc900QuestionsOnlyAuthorizationSchema, Sc900ScopedCaptureLedgerSchema, Sc900PublicationCaptureLedgerSchema,
+  type Sc900QuestionsOnlyAuthorization,
+} from "../src/domain/sc900Scope.js";
+import {
   byteSha256, canonicalJson, sc900OptionId, sc900QuestionId, sc900SourceRevision,
+  sc900Hash, sc900RawPageInventoryDigest, sc900AssetInventoryDigest,
+  sc900AuthorizationDigest, assertSc900ScopedAuthorization,
 } from "../tools/sc900/canonical.js";
 import {
   normalizeSc900Captures, normalizeSc900Directory, parseSc900NormalizeArgs,
@@ -25,6 +32,9 @@ const capturedAt = "2026-09-22T08:00:00.000Z";
 const green = "rgb(104, 211, 145)";
 const white = "rgb(255, 255, 255)";
 const htmlText = (html: string) => load(html, undefined, false).text();
+const normalizerScript = fileURLToPath(new URL("../tools/sc900/normalize.ts", import.meta.url));
+const completionReason = "Questions, answers and images only. Discussions remain unrequested; full acquisition and publication are incomplete.";
+const discussionReason = "Deferred questions-only capture: discussion requests were not sent to the server.";
 interface FixtureQuestion {
   heading: string;
   html: string;
@@ -83,6 +93,51 @@ function input(questions: FixtureQuestion[], assets: RawAsset[] = [], page = 1):
 function normalize(questions: FixtureQuestion[], assets: RawAsset[] = [], draft = false): Sc900NormalizationResult {
   return normalizeSc900Captures([input(questions, assets)], {
     expected: { pages: 1, occurrences: questions.length }, draft,
+  });
+}
+function questionsOnlyInput(questions: FixtureQuestion[], assets: RawAsset[] = [], page = 1): Sc900CaptureInput {
+  const deferred = structuredClone(questions);
+  for (const question of deferred) question.discussionLoad = { status: "not-requested", reason: discussionReason };
+  const captured = input(deferred, assets, page);
+  const json: Record<string, unknown> = JSON.parse(captured.content);
+  json.completion = { status: "incomplete", reason: completionReason };
+  json.missingAssetUrls = [];
+  return { ...captured, content: JSON.stringify(json) };
+}
+function authorize(inputs: Sc900CaptureInput[]): {
+  receipt: Sc900QuestionsOnlyAuthorization; sourceScopeReceipt: Sc900CaptureInput;
+} {
+  const baseline = normalizeSc900Captures(inputs, { draft: true });
+  const pages = inputs.map(capture => {
+    const raw: { url: string; questions: { heading: string }[] } = JSON.parse(capture.content);
+    return {
+      pageNumber: Number(raw.url.split("/").at(-1)), url: raw.url, rawSha256: byteSha256(capture.content),
+      questionNumbers: raw.questions.map(question => Number(question.heading.slice("Question ".length))),
+    };
+  });
+  const assets = baseline.draftAssets.map(({ id, contentType, byteLength, width, height }) =>
+    ({ id, contentType, byteLength, width, height }));
+  const questions = pages.reduce((total, page) => total + page.questionNumbers.length, 0);
+  const sourceScopeReceipt = {
+    path: ".data/sc900/source-scope.json",
+    content: JSON.stringify({ sourceUrl: "https://www.examprepper.co/exam/128/1", questions, pages: pages.length }),
+  };
+  return {
+    sourceScopeReceipt,
+    receipt: Sc900QuestionsOnlyAuthorizationSchema.parse({
+      schemaVersion: 1, examId: "sc900", scope: "questions-answers-media",
+      decision: "authorize-publication-without-source-discussions", authorizedBy: "owner",
+      authorizedAt: capturedAt, authorizationText: "Synthetic owner explicitly authorizes this exact questions, answers and media scope without source discussions.",
+      sourceScopeReceiptSha256: byteSha256(sourceScopeReceipt.content),
+      rawPageInventoryDigest: sc900RawPageInventoryDigest(pages),
+      assetInventoryDigest: sc900AssetInventoryDigest(assets), questions, pages: pages.length, images: assets.length,
+    }),
+  };
+}
+function scoped(inputs: Sc900CaptureInput[], ownerAuthorization = authorize(inputs), draft = false): Sc900NormalizationResult {
+  return normalizeSc900Captures(inputs, {
+    draft, ownerAuthorization,
+    expected: { pages: ownerAuthorization.receipt.pages, occurrences: ownerAuthorization.receipt.questions },
   });
 }
 function doc(result: Sc900NormalizationResult, sourceNumber = 1): Sc900Document {
@@ -519,7 +574,7 @@ test("valid JPEG declared PNG retains exact bytes and both MIME values with the 
     assert.ok((await readFile(path)).equals(jpeg()));
     assert.equal(byteSha256(await readFile(path)), captured.id);
     assert.equal(await readFile(resolve(workspace, originalInput.path), "utf8"), originalInput.content);
-    const cli = spawnSync(process.execPath, ["--import", "tsx", resolve("tools/sc900/normalize.ts"),
+    const cli = spawnSync(process.execPath, ["--import", "tsx", normalizerScript,
       "--draft", "--expected-pages", "1", "--expected-occurrences", "1"], { cwd: workspace, encoding: "utf8" });
     assert.equal(cli.status, 0, cli.stderr);
     assert.equal(JSON.parse(cli.stdout).verifiedCaptureLedger, true);
@@ -812,7 +867,7 @@ test("CLI drafts persist explicit issues with exit 2; strict incomplete captures
     const raw = question();
     raw.discussionLoad = { status: "failed", httpStatus: 429 };
     await persist(workspace, input([raw]));
-    const script = resolve("tools/sc900/normalize.ts");
+    const script = normalizerScript;
     const strict = spawnSync(process.execPath, ["--import", "tsx", script, "--expected-pages", "1", "--expected-occurrences", "1"], {
       cwd: workspace, encoding: "utf8",
     });
@@ -837,6 +892,311 @@ test("CLI arguments require explicit paired observed totals and reject typo or r
     ["--expected-pages", "1"], ["--expected-occurrences", "5"], ["--expected-pages", "1.5"],
     ["--draft", "--draft"], ["--output"], ["--require-complete"], ["--expected-pages", "0"],
   ]) assert.throws(() => parseSc900NormalizeArgs(args));
+});
+
+test("explicit bound owner consent constructs only the distinct questions-only ledger and leaves answers provisional", () => {
+  const imageQuestion = manual();
+  const capture = questionsOnlyInput([
+    imageQuestion.raw,
+    question({ number: 2, prompt: "<p>Second task</p>" }),
+    question({ number: 3, prompt: "<p>Choose two methods.</p>", options: ["<p>Alpha</p>", "<p>Beta</p>", "<p>Gamma</p>"], selected: ["A", "C"] }),
+    question({ number: 4, prompt: "<p>Fourth task</p>" }),
+    question({ number: 5, prompt: "<p>Fifth task</p>" }),
+  ], imageQuestion.assets);
+  const authorization = authorize([capture]);
+  const result = scoped([capture], authorization);
+  const ledger = result.authorizedQuestionsOnlyLedger;
+  assert.ok(ledger);
+  Sc900ScopedCaptureLedgerSchema.parse(ledger);
+  Sc900PublicationCaptureLedgerSchema.parse(ledger);
+  assertSc900ScopedAuthorization(ledger, authorization.receipt);
+  assert.equal(Sc900CaptureLedgerSchema.safeParse(ledger).success, false);
+  assert.equal(result.verifiedCaptureLedger, null);
+  assert.equal(ledger.schemaVersion, 2);
+  assert.equal(ledger.scope, "questions-answers-media");
+  assert.equal(ledger.authorizationDigest, sc900AuthorizationDigest(authorization.receipt));
+  assert.equal(ledger.sourceScopeReceiptSha256, byteSha256(authorization.sourceScopeReceipt.content));
+  assert.equal(ledger.sourceCommentCount, null);
+  assert.equal(result.counts.normalizedOccurrences, 5);
+  assert.equal(result.counts.parsedComments, 0);
+  assert.equal(result.counts.confirmedComments, null);
+  assert.equal(result.draftSourceRevision, sc900SourceRevision(ledger));
+  assert.equal(result.publicationState, "blocked-independent-review");
+  assert.ok(result.issues.every(issue => issue.severity === "warning"));
+  for (const occurrence of ledger.occurrences) {
+    assert.equal(occurrence.answerRevealed, true);
+    assert.equal(occurrence.discussionState, "unavailable");
+    assert.equal(occurrence.discussionDisposition, "omitted-owner-authorized");
+    assert.equal(occurrence.sourceCommentCount, null);
+    assert.equal(occurrence.parsedCommentCount, 0);
+    assert.deepEqual(occurrence.commentIds, []);
+    assert.equal("expectedCommentCount" in occurrence, false);
+  }
+  assert.ok(result.draftOccurrences.every(occurrence =>
+    occurrence.discussionState === "not-requested" && !occurrence.discussionVerified &&
+    occurrence.confirmedCommentCount === null && occurrence.parsedCommentCount === 0));
+  assert.ok(result.draftDocuments.every(document => document.answers.provisional));
+  assert.ok(result.draftDiscussions.every(discussion => discussion.comments.length === 0));
+  assert.deepEqual(scoped([capture], authorization), result);
+  const legacyDraft = normalizeSc900Captures([capture], { draft: true, expected: { pages: 1, occurrences: 5 } });
+  const semantic = (dataset: Sc900NormalizationResult) => dataset.draftDocuments.map(document => ({
+    id: document.question.id, prompt: document.question.prompt, options: document.question.options,
+    kind: document.question.kind, sources: document.question.sources, assetIds: document.question.assetIds,
+    originalAnswers: document.answers.originalAnswers, fixedOptionOrder: document.question.fixedOptionOrder,
+    media: document.question.media.map(({ objectPath: _path, ...asset }) => asset),
+  }));
+  assert.deepEqual(semantic(result), semantic(legacyDraft));
+  assert.deepEqual(result.draftAssets, legacyDraft.draftAssets);
+  assert.notEqual(result.draftSourceRevision, legacyDraft.draftSourceRevision);
+  assert.notEqual(result.draftReleaseId, legacyDraft.draftReleaseId);
+});
+
+test("default mode, omitted flags and incomplete consent cannot authorize unavailable source discussions", () => {
+  const capture = questionsOnlyInput([question()]);
+  const authorization = authorize([capture]);
+  const defaultDraft = normalizeSc900Captures([capture], { draft: true, expected: { pages: 1, occurrences: 1 } });
+  assertBlocked(defaultDraft, "discussion-unverified");
+  assert.equal(defaultDraft.authorizedQuestionsOnlyLedger, null);
+  assert.throws(() => normalizeSc900Captures([capture], { expected: { pages: 1, occurrences: 1 } }), Sc900NormalizationError);
+  for (const receipt of [
+    { scope: "questions-answers-media", omitted: true },
+    { ...authorization.receipt, authorizedBy: "reviewer" },
+    { ...authorization.receipt, decision: "review-draft-only" },
+    { ...authorization.receipt, authorizationText: "" },
+    { ...authorization.receipt, authorizedAt: "not-a-timestamp" },
+    { ...authorization.receipt, scope: "full" },
+    { ...authorization.receipt, examId: "az104" },
+  ]) {
+    const result = normalizeSc900Captures([capture], {
+      draft: true, expected: { pages: 1, occurrences: 1 },
+      ownerAuthorization: { ...authorization, receipt },
+    });
+    assertBlocked(result, "owner-authorization");
+    assert.equal(result.authorizedQuestionsOnlyLedger, null);
+  }
+  const noTotals = normalizeSc900Captures([capture], { draft: true, ownerAuthorization: authorization });
+  assertBlocked(noTotals, "unobserved-totals");
+  assert.equal(noTotals.authorizedQuestionsOnlyLedger, null);
+  const full = normalize([question()]);
+  assert.ok(full.verifiedCaptureLedger);
+  assert.equal(full.authorizedQuestionsOnlyLedger, null);
+  assert.equal(full.draftSourceRevision, sc900Hash("source", Sc900CaptureLedgerSchema.parse(full.verifiedCaptureLedger)));
+});
+
+test("scope receipt, raw bytes, media inventory, counts and consent identity are independently bound", () => {
+  const fixture = manual();
+  const capture = questionsOnlyInput([fixture.raw], fixture.assets);
+  const authorization = authorize([capture]);
+  const valid = scoped([capture], authorization);
+  assert.ok(valid.authorizedQuestionsOnlyLedger);
+  const cases = [
+    { inputs: [{ ...capture, content: `${capture.content}\n` }], authorization, code: "owner-authorization-binding" },
+    { inputs: [capture], authorization: { ...authorization, sourceScopeReceipt: {
+      ...authorization.sourceScopeReceipt, content: `${authorization.sourceScopeReceipt.content}\n`,
+    } }, code: "owner-authorization-binding" },
+    { inputs: [capture], authorization: { ...authorization, receipt: {
+      ...authorization.receipt, rawPageInventoryDigest: "a".repeat(64),
+    } }, code: "owner-authorization-binding" },
+    { inputs: [capture], authorization: { ...authorization, receipt: {
+      ...authorization.receipt, sourceScopeReceiptSha256: "b".repeat(64),
+    } }, code: "owner-authorization-binding" },
+    { inputs: [capture], authorization: { ...authorization, receipt: {
+      ...authorization.receipt, assetInventoryDigest: "c".repeat(64),
+    } }, code: "owner-authorization-assets" },
+    { inputs: [capture], authorization: { ...authorization, receipt: {
+      ...authorization.receipt, images: 3,
+    } }, code: "owner-authorization-assets" },
+  ];
+  for (const item of cases) {
+    const result = scoped(item.inputs, item.authorization, true);
+    assertBlocked(result, item.code);
+    assert.equal(result.authorizedQuestionsOnlyLedger, null);
+    assert.throws(() => scoped(item.inputs, item.authorization), Sc900NormalizationError);
+  }
+  const changedConsent = {
+    ...authorization, receipt: { ...authorization.receipt, authorizationText: `${authorization.receipt.authorizationText} Updated owner instruction.` },
+  };
+  assert.throws(() => assertSc900ScopedAuthorization(valid.authorizedQuestionsOnlyLedger!, changedConsent.receipt), /Owner authorization/);
+  const newlyBound = scoped([capture], changedConsent);
+  assert.ok(newlyBound.authorizedQuestionsOnlyLedger);
+  assert.notEqual(newlyBound.draftSourceRevision, valid.draftSourceRevision);
+  assert.notEqual(newlyBound.draftReleaseId, valid.draftReleaseId);
+  assert.notEqual(newlyBound.authorizedQuestionsOnlyLedger.authorizationDigest, valid.authorizedQuestionsOnlyLedger.authorizationDigest);
+  assert.equal(doc(newlyBound).question.id, doc(valid).question.id);
+  const malformedScope = { ...authorization, sourceScopeReceipt: {
+    ...authorization.sourceScopeReceipt, content: "{",
+  } };
+  assertBlocked(scoped([capture], malformedScope, true), "source-scope-receipt");
+});
+
+test("authorization covers only exact intentional capture markers, never arbitrary failures or source errors", () => {
+  for (const variation of [
+    "wrong-completion", "complete-flag", "missing-assets", "unrevealed", "style",
+    "failed-discussion", "loading-discussion", "wrong-reason", "missing-reason",
+    "http-status", "loading-indicator", "controls", "wrong-source-url", "extra-completion-failure", "extra-discussion-failure",
+  ]) {
+    const captured = questionsOnlyInput([question()]);
+    const page: {
+      url: string; questions: FixtureQuestion[]; missingAssetUrls: string[];
+      completion: { status: string; reason: string };
+    } = JSON.parse(captured.content);
+    const raw = page.questions[0]!;
+    if (variation === "wrong-completion") page.completion.reason = "Question rendering failed.";
+    if (variation === "extra-completion-failure") Object.assign(page.completion, { failure: "answer image missing" });
+    if (variation === "extra-discussion-failure") Object.assign(raw.discussionLoad!, { failure: "unexpected captured state" });
+    if (variation === "complete-flag") page.completion.status = "complete";
+    if (variation === "missing-assets") page.missingAssetUrls = ["https://images.example.test/missing.png"];
+    if (variation === "unrevealed") raw.answerRevealed = false;
+    if (variation === "style") raw.choiceStyles[0]!.borderColor = "rgb(20, 30, 40)";
+    if (variation === "failed-discussion") raw.discussionLoad = { status: "failed", httpStatus: 429 };
+    if (variation === "loading-discussion") raw.discussionLoad = { status: "loading" };
+    if (variation === "wrong-reason") raw.discussionLoad = { status: "not-requested", reason: "Unknown reason" };
+    if (variation === "missing-reason") raw.discussionLoad = { status: "not-requested" };
+    if (variation === "http-status") raw.discussionLoad = { status: "not-requested", reason: discussionReason, httpStatus: 200 };
+    if (variation === "loading-indicator") raw.loadingIndicators = 1;
+    if (variation === "controls") raw.remainingControls = ["Show replies"];
+    if (variation === "wrong-source-url") page.url += "/";
+    const changed = { ...captured, content: JSON.stringify(page) };
+    const authorization = variation === "wrong-source-url" ? authorize([captured]) : authorize([changed]);
+    const result = scoped([changed], authorization, true);
+    assert.equal(result.authorizedQuestionsOnlyLedger, null, variation);
+    assert.equal(result.verifiedCaptureLedger, null, variation);
+    assert.ok(result.issues.some(issue => issue.severity === "error"), variation);
+    assert.throws(() => scoped([changed], authorization), Sc900NormalizationError, variation);
+  }
+});
+
+test("owner omission consent cannot erase captured threads, falsely empty states or loaded discussions", () => {
+  for (const variation of ["root-reply", "forged-zero", "loaded-empty", "empty-state"]) {
+    const captured = questionsOnlyInput([question({
+      ...(variation === "root-reply" || variation === "forged-zero" ? { comments: comment("<p>Root</p>", comment("<p>Reply</p>")) } : {}),
+    })]);
+    const page: { questions: FixtureQuestion[] } = JSON.parse(captured.content);
+    const raw = page.questions[0]!;
+    if (variation === "forged-zero") raw.commentCount = 0;
+    if (variation === "loaded-empty") raw.discussionLoad = { status: "loaded", httpStatus: 200 };
+    if (variation === "empty-state") raw.html = raw.html.replace("Hide Answer</button></div>",
+      "Hide Answer</button></div><div>No comments yet</div>");
+    const changed = { ...captured, content: JSON.stringify(page) };
+    const authorization = authorize([changed]);
+    const result = scoped([changed], authorization, true);
+    assertBlocked(result, "scoped-discussion-content");
+    assert.equal(result.authorizedQuestionsOnlyLedger, null);
+    assert.equal(result.counts.confirmedComments, null);
+    assert.equal(result.draftDocuments.length, 0);
+    assert.throws(() => scoped([changed], authorization), Sc900NormalizationError);
+  }
+});
+
+test("scoped capture retains correct-byte MIME warnings but rejects corrupt media and dimensions", () => {
+  const fixture = manual();
+  fixture.assets[0] = mislabeledJpeg();
+  const captured = questionsOnlyInput([fixture.raw], fixture.assets);
+  const result = scoped([captured]);
+  assert.ok(result.authorizedQuestionsOnlyLedger);
+  assert.equal(result.verifiedCaptureLedger, null);
+  assert.ok(result.issues.some(issue => issue.code === "image-mime" && issue.severity === "warning"));
+  assert.equal(result.draftAssets.find(asset => asset.id === byteSha256(jpeg()))!.contentType, "image/jpeg");
+  assert.ok(result.authorizedQuestionsOnlyLedger.assets.some(asset => asset.id === byteSha256(jpeg()) && asset.contentType === "image/jpeg"));
+  for (const variation of ["corrupt", "dimension", "missing", "unknown"]) {
+    const broken = structuredClone(fixture);
+    if (variation === "corrupt") {
+      const bytes = jpeg().subarray(0, jpeg().length - 2);
+      broken.assets[0] = { ...mislabeledJpeg(), base64: bytes.toString("base64"), byteLength: bytes.length };
+    }
+    if (variation === "dimension") broken.raw.images[0]!.width = 2;
+    if (variation === "missing") broken.assets.shift();
+    if (variation === "unknown") {
+      const bytes = Buffer.from("unknown raster signature");
+      broken.assets[0] = { ...mislabeledJpeg(), base64: bytes.toString("base64"), byteLength: bytes.length };
+    }
+    const changed = questionsOnlyInput([broken.raw], broken.assets);
+    const rejected = scoped([changed], authorize([changed]), true);
+    assert.equal(rejected.authorizedQuestionsOnlyLedger, null, variation);
+    assert.ok(rejected.issues.some(issue => issue.severity === "error"), variation);
+  }
+  const unrelatedAssetCapture = questionsOnlyInput([question()], [asset("https://images.example.test/unrelated.png")]);
+  const unrelated = scoped([unrelatedAssetCapture], authorize([unrelatedAssetCapture]), true);
+  assertBlocked(unrelated, "scoped-unreferenced-asset");
+  assert.equal(unrelated.authorizedQuestionsOnlyLedger, null);
+});
+
+test("scoped receipt conserves sequential multi-page inventory and refuses grouped exact duplicates", () => {
+  const first = questionsOnlyInput(Array.from({ length: 5 }, (_, index) =>
+    question({ number: index + 1, prompt: `<p>Unique task ${index + 1}</p>` })));
+  const second = questionsOnlyInput([question({ number: 6, prompt: "<p>Unique task 6</p>" })], [], 2);
+  const authorization = authorize([first, second]);
+  const result = scoped([second, first], authorization);
+  assert.ok(result.authorizedQuestionsOnlyLedger);
+  assert.equal(result.counts.normalizedOccurrences, 6);
+  assert.deepEqual(result, scoped([first, second], authorization));
+  const incomplete = scoped([first], authorization, true);
+  assertBlocked(incomplete, "incomplete-coverage");
+  assert.equal(incomplete.authorizedQuestionsOnlyLedger, null);
+  const repeated = scoped([first, second, first], authorization, true);
+  assertBlocked(repeated, "duplicate-page");
+  const duplicates = questionsOnlyInput([question(), question({ number: 2 })]);
+  const duplicateResult = scoped([duplicates], authorize([duplicates]), true);
+  assertBlocked(duplicateResult, "scoped-duplicate");
+  assert.equal(duplicateResult.authorizedQuestionsOnlyLedger, null);
+  assert.equal(duplicateResult.draftOccurrences.length, 2);
+});
+
+test("paired private receipt CLI explicitly opts in while preserving immutable output and provisional records", async () => {
+  await withWorkspace(async workspace => {
+    const captured = questionsOnlyInput([question()]);
+    const authorization = authorize([captured]);
+    await persist(workspace, captured);
+    const ownerPath = ".data/sc900/owner-authorization.json";
+    const scopePath = authorization.sourceScopeReceipt.path;
+    await writeFile(resolve(workspace, ownerPath), JSON.stringify(authorization.receipt));
+    await writeFile(resolve(workspace, scopePath), authorization.sourceScopeReceipt.content);
+    const args = [
+      "--owner-authorization", ownerPath, "--source-scope-receipt", scopePath,
+      "--expected-pages", "1", "--expected-occurrences", "1",
+    ];
+    const options = parseSc900NormalizeArgs(args);
+    const result = await normalizeSc900Directory({ ...options, workspaceRoot: workspace });
+    assert.ok(result.authorizedQuestionsOnlyLedger);
+    assert.equal(result.verifiedCaptureLedger, null);
+    const output = resolve(workspace, ".data/sc900/normalized", result.draftReleaseId, "draft.json");
+    assert.deepEqual(JSON.parse(await readFile(output, "utf8")), result);
+    const before = await stat(output);
+    const cli = spawnSync(process.execPath, ["--import", "tsx", normalizerScript, ...args],
+      { cwd: workspace, encoding: "utf8" });
+    assert.equal(cli.status, 0, cli.stderr);
+    const summary: { verifiedCaptureLedger: boolean; authorizedQuestionsOnlyLedger: boolean } = JSON.parse(cli.stdout);
+    assert.equal(summary.verifiedCaptureLedger, false);
+    assert.equal(summary.authorizedQuestionsOnlyLedger, true);
+    assert.equal((await stat(output)).mtimeMs, before.mtimeMs);
+    await writeFile(resolve(workspace, scopePath), `${authorization.sourceScopeReceipt.content}\n`);
+    const stale = spawnSync(process.execPath, ["--import", "tsx", normalizerScript, ...args],
+      { cwd: workspace, encoding: "utf8" });
+    assert.equal(stale.status, 1);
+    assert.match(stale.stderr, /exact source-scope receipt bytes/);
+    assert.equal((await stat(output)).mtimeMs, before.mtimeMs);
+    await assert.rejects(normalizeSc900Directory({
+      workspaceRoot: workspace, ownerAuthorizationPath: ownerPath,
+    }), /supplied together/);
+    await assert.rejects(normalizeSc900Directory({
+      workspaceRoot: workspace, ownerAuthorizationPath: "public/owner.json", sourceScopeReceiptPath: scopePath,
+    }), /restricted/);
+    await assert.rejects(normalizeSc900Directory({
+      workspaceRoot: workspace, ownerAuthorizationPath: ".data/sc900/normalized/owner.json", sourceScopeReceiptPath: scopePath,
+    }), /separate/);
+    const link = ".data/sc900/owner-link.json";
+    await symlink(resolve(workspace, ownerPath), resolve(workspace, link));
+    await assert.rejects(normalizeSc900Directory({
+      workspaceRoot: workspace, ownerAuthorizationPath: link, sourceScopeReceiptPath: scopePath,
+    }), /symbolic link/);
+    await assert.rejects(normalizeSc900Directory({
+      workspaceRoot: workspace, ownerAuthorizationPath: ownerPath, sourceScopeReceiptPath: scopePath,
+      ownerAuthorization: authorization,
+    }), /not both/);
+  });
+  assert.throws(() => parseSc900NormalizeArgs(["--owner-authorization", ".data/sc900/owner.json"]), /Both/);
+  assert.throws(() => parseSc900NormalizeArgs(["--source-scope-receipt", ".data/sc900/scope.json"]), /Both/);
+  assert.throws(() => parseSc900NormalizeArgs(["--omit-discussions"]), /Unknown argument/);
 });
 
 test("private pilot 2d2a5e3 is incomplete, retains all five questions and produces no verified ledger", async (context) => {
