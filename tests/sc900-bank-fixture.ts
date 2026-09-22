@@ -2,9 +2,9 @@ import type { RichContent } from "../src/domain/schemas.js";
 import {
   SC900_BANK_VERSION, Sc900DocumentSchema, type Sc900Discussion, type Sc900Document,
 } from "../src/domain/sc900Bank.js";
-import { SC900_SOURCE_URL, Sc900CaptureLedgerSchema, sc900OccurrenceId } from "../src/domain/sc900Capture.js";
+import { SC900_SOURCE_URL, Sc900CaptureLedgerSchema, sc900OccurrenceId, type Sc900CaptureLedger } from "../src/domain/sc900Capture.js";
 import { SC900_TOPIC_GUIDE_URL, SC900_TOPIC_VERSION } from "../src/domain/sc900Topics.js";
-import type { Sc900PublicationReview } from "../src/domain/sc900Publication.js";
+import { Sc900FullPublicationReviewSchema } from "../src/domain/sc900Publication.js";
 import { byteSha256, sc900Hash, sc900OptionId, sc900QuestionId, sc900SourceRevision } from "../tools/sc900/canonical.js";
 import {
   SC900_DRAFT_RELEASE_ID, buildSc900StaticPlan, prepareSc900Release, sc900OriginalKeyDigest, sc900ReviewTargets,
@@ -15,7 +15,7 @@ export const SC900_FIXTURE_TIMESTAMP = "2026-09-22T00:00:00Z";
 export const sc900FixtureText = (value: string): RichContent =>
   [{ type: "text", spans: [{ type: "text", text: value, marks: [] }] }];
 
-export function sc900BankFixture(): Sc900PublicationInput {
+export function sc900BankFixture(): Sc900PublicationInput & { ledger: Sc900CaptureLedger } {
   const text = sc900FixtureText;
   const timestamp = SC900_FIXTURE_TIMESTAMP;
   const sourceUrl = SC900_SOURCE_URL;
@@ -73,7 +73,7 @@ export function sc900BankFixture(): Sc900PublicationInput {
           explanation: text(paragraph), answerAssetIds: number === 1 ? [] : [assetId],
           provenance: { source: "examprepper", url: sourceUrl },
         }],
-        effectiveAnswer: { value }, provisional: true,
+        effectiveAnswer: { value }, provisional: false,
       },
       discussionEnabled: number === 1,
     });
@@ -130,14 +130,14 @@ export function sc900BankFixture(): Sc900PublicationInput {
   };
 }
 
-export function sc900BankReview(release: Sc900PreparedRelease): Sc900PublicationReview {
-  return {
+export function sc900BankReview(release: Sc900PreparedRelease) {
+  return Sc900FullPublicationReviewSchema.parse({
     schemaVersion: 1, examId: "sc900", releaseId: release.manifest.releaseId,
     sourceRevision: release.manifest.sourceRevision, captureLedgerDigest: release.manifest.captureLedgerDigest,
     reviewer: "Synthetic fixture content reviewer", reviewedAt: SC900_FIXTURE_TIMESTAMP, decision: "approved",
     checks: { allPages: true, allAnswers: true, allComments: true, allAssets: true, topics: true, learning: true, relevance: true },
     questions: sc900ReviewTargets(release),
-  };
+  });
 }
 
 export function sc900BankPlanFixture() {

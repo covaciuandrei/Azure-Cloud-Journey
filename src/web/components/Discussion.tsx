@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Comment } from "../../domain/index.js";
-import type { CleanQuestion as PreparedQuestion } from "../../domain/cleanBank.js";
+import type { StudyQuestion as PreparedQuestion } from "../types.js";
+import { SC900_UNAVAILABLE_DISCUSSIONS_NOTICE } from "../../domain/sc900Scope.js";
 import type { StudyRepository } from "../types.js";
 import { RichContent } from "./RichContent.js";
 import { Icon } from "./Icon.js";
@@ -42,6 +43,7 @@ export function Discussion({ question, repository, releaseId }: {
   const [retry, setRetry] = useState(0);
   const [visible, setVisible] = useState(5);
   useEffect(() => {
+    if (question.discussionScope) return;
     let active = true;
     setComments(null);
     setError(null);
@@ -51,10 +53,11 @@ export function Discussion({ question, repository, releaseId }: {
       if (active) setError(reason instanceof Error ? reason.message : "The discussion could not be loaded.");
     });
     return () => { active = false; };
-  }, [repository, question.id, releaseId, retry]);
+  }, [repository, question.id, question.discussionScope, releaseId, retry]);
   const byId = useMemo(() => new Map(comments?.map((comment) => [comment.id, comment]) ?? []), [comments]);
   const roots = useMemo(() => comments?.filter((comment) => comment.parentId === null)
     .sort((a, b) => b.votes - a.votes || a.treePath[0]! - b.treePath[0]!) ?? [], [comments]);
+  if (question.discussionScope) return <p className="notice" role="note">{SC900_UNAVAILABLE_DISCUSSIONS_NOTICE}</p>;
   if (error) return <div className="inline-error" role="alert"><p>{error}</p>
     <button className="button button-secondary" onClick={() => setRetry(retry + 1)}>Retry discussion</button></div>;
   if (!comments) return <div className="loading-inline" role="status"><span className="spinner" /> Loading discussion</div>;

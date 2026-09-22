@@ -27,6 +27,7 @@ import { checkSc900Availability, type ExamAvailability } from "../exam-availabil
 import { createStudyRepository } from "../data.js";
 import { createDemoRepository } from "../demo-repository.js";
 import { SC900_DEMO_NOTICE } from "../../domain/sc900Demo.js";
+import { SC900_UNAVAILABLE_DISCUSSIONS_NOTICE } from "../../domain/sc900Scope.js";
 
 function navigateHash(hash: string) {
   if (window.location.hash !== hash) window.history.pushState(null, "", hash);
@@ -258,7 +259,7 @@ function AccountWorkspace({ account, offline, route, sc900Availability, active }
         {user && <button className="button button-secondary button-small" disabled={study.profile.syncing || study.profile.conflict || offline.useDownload}
           onClick={() => void study.profile.sync()}>Save progress</button>}
       </div>
-      <OfflineControls offline={offline} getReferences={() => {
+      <OfflineControls offline={offline} discussionsUnavailable={Boolean(catalog?.discussionScope)} getReferences={() => {
         try {
           const guest = readPractice(window.localStorage, undefined, examId);
           return { references: offlineSessionReferences(saved, guest.state),
@@ -271,6 +272,7 @@ function AccountWorkspace({ account, offline, route, sc900Availability, active }
     </section>
     <main className={`app-main app-main-${route.section}`} id="main-content" tabIndex={-1}>
       <div className="workspace-alerts">
+      {examId === "sc900" && catalog?.discussionScope && <p className="notice" role="note">{SC900_UNAVAILABLE_DISCUSSIONS_NOTICE}</p>}
       {demoMode && examId === "sc900" && <p className="notice" role="status">{SC900_DEMO_NOTICE}</p>}
       {route.error && <div className="notice notice-error" role="alert">{route.error}</div>}
       {account.error && <div className="notice notice-error" role="alert"><p>{account.error}</p>

@@ -9,7 +9,10 @@ import {
   sc900FirestoreRoot,
   type Sc900Catalog, type Sc900Discussion, type Sc900Document, type Sc900Manifest,
 } from "../../src/domain/sc900Bank.js";
-import { Sc900CaptureLedgerSchema, type Sc900CaptureLedger } from "../../src/domain/sc900Capture.js";
+import {
+  Sc900PublicationCaptureLedgerSchema, Sc900QuestionsOnlyAuthorizationSchema, Sc900DiscussionScopeSchema,
+  type Sc900PublicationCaptureLedger, type Sc900QuestionsOnlyAuthorization, type Sc900DiscussionScope,
+} from "../../src/domain/sc900Scope.js";
 import { Sc900TopicMapSchema, type Sc900TopicMap } from "../../src/domain/sc900Topics.js";
 import {
   Sc900LearningDatasetSchema, Sc900LearningManifestSchema,
@@ -20,7 +23,7 @@ import { Sc900EligibilityPolicySchema, type Sc900EligibilityPolicy } from "../..
 import {
   Sc900ApprovalReceiptSchema, Sc900ExpectedCaptureSchema, Sc900FinalReviewSchema,
   Sc900PublicationProofSchema, Sc900PublicationReviewSchema,
-  type Sc900ApprovalReceipt, type Sc900FinalReview, type Sc900PublicationReview, type Sc900ReviewTarget,
+  type Sc900ApprovalReceipt, type Sc900FinalReview, type Sc900PublicationReview, type Sc900PublicationReviewTarget,
   type Sc900ExpectedCapture,
 } from "../../src/domain/sc900Publication.js";
 import { richAssetIds } from "../../src/domain/schemas.js";
@@ -32,7 +35,10 @@ import { plainText } from "../ingest/normalize-shared.js";
 import { assertPlannedHeadroom, OperationBudget, writeBudgetForUsage } from "../publish/operation-budget.js";
 import { acquireUploadLock, pacificQuotaDay } from "../publish/quota.js";
 import type { FirestoreUsage } from "../publish/usage.js";
-import { byteSha256, canonicalJson, sc900Hash, sc900OptionId, sc900QuestionId, sc900SourceRevision } from "./canonical.js";
+import {
+  byteSha256, canonicalJson, sc900Hash, sc900OptionId, sc900QuestionId, sc900SourceRevision,
+  assertSc900ScopedAuthorization, sc900DuplicateAdjudicationDigest,
+} from "./canonical.js";
 
 export const SC900_DRAFT_RELEASE_ID = `r_${"0".repeat(64)}`;
 export const SC900_EXPORT_LIMITS = {
@@ -47,7 +53,8 @@ export const SC900_EXPORT_LIMITS = {
 
 export interface Sc900PublicationInput {
   expectedCapture: Sc900ExpectedCapture;
-  ledger: Sc900CaptureLedger;
+  ledger: Sc900PublicationCaptureLedger;
+  ownerAuthorization?: Sc900QuestionsOnlyAuthorization;
   documents: Sc900Document[];
   discussions: Sc900Discussion[];
   topics: Sc900TopicMap;
@@ -58,7 +65,8 @@ export interface Sc900PublicationInput {
 
 export interface Sc900PreparedRelease {
   expectedCapture: Sc900ExpectedCapture;
-  ledger: Sc900CaptureLedger;
+  ledger: Sc900PublicationCaptureLedger;
+  ownerAuthorization?: Sc900QuestionsOnlyAuthorization;
   manifest: Sc900Manifest;
   catalog: Sc900Catalog;
   documents: Sc900Document[];
@@ -101,6 +109,7 @@ const Sc900InventorySchema = z.array(z.object({
 export interface Sc900Publication {
   source: { directory: string };
   expectedCapture: Sc900ExpectedCapture;
+  ownerAuthorization?: Sc900QuestionsOnlyAuthorization;
   manifest: Sc900Manifest;
   catalog: Sc900Catalog;
   documents: Sc900Document[];
@@ -136,6 +145,7 @@ export function sc900OriginalKeyDigest(document: Sc900Document): string {
 function releaseIdentity(input: Omit<Sc900PublicationInput, "assets">): unknown {
   return {
     expectedCapture: input.expectedCapture,
+    ...(input.ownerAuthorization ? { ownerAuthorization: input.ownerAuthorization } : {}),
     ledger: input.ledger,
     documents: input.documents.map(({ releaseId: _release, question, ...document }) => ({
       ...document,
@@ -156,7 +166,20 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
     [...input.assets.values()].reduce((total, bytes) => total + bytes.byteLength, 0) <= SC900_EXPORT_LIMITS.totalBytes,
   "SC900 input exceeds the bounded static export budget");
   const expectedCapture = Sc900ExpectedCaptureSchema.parse(input.expectedCapture);
-  const ledger = Sc900CaptureLedgerSchema.parse(input.ledger);
+  const ledger = Sc900PublicationCaptureLedgerSchema.parse(input.ledger);
+  let ownerAuthorization: Sc900QuestionsOnlyAuthorization | undefined;
+  let discussionScope: Sc900DiscussionScope | undefined;
+  if (ledger.schemaVersion === 2) {
+    ownerAuthorization = Sc900QuestionsOnlyAuthorizationSchema.parse(input.ownerAuthorization);
+    assertSc900ScopedAuthorization(ledger, ownerAuthorization);
+    assert(Date.parse(ownerAuthorization.authorizedAt) <= Date.now(), "Owner scope authorization cannot be future-dated");
+    assert(ownerAuthorization.sourceScopeReceiptSha256 === expectedCapture.receiptSha256,
+      "Owner authorization must bind the independently verified source-scope receipt");
+    discussionScope = Sc900DiscussionScopeSchema.parse({
+      scope: ledger.scope, authorizationDigest: ledger.authorizationDigest, sourceCommentCount: null,
+      storedCommentCount: 0, discussionState: "unavailable", discussionDisposition: "omitted-owner-authorized",
+    });
+  } else assert(input.ownerAuthorization === undefined, "Full-discussion capture cannot silently use a questions-only authorization");
   assert(ledger.reported.questions === expectedCapture.questions && ledger.reported.pages === expectedCapture.pages,
     "SC900 capture ledger does not match the independently verified expected source scope");
   const documents = sorted(input.documents.map((item) => Sc900DocumentSchema.parse(item)), (item) => item.question.id);
@@ -165,7 +188,25 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
   const learning = Sc900LearningDatasetSchema.parse(input.learning);
   learning.explanations = sorted(learning.explanations, (item) => item.questionId);
   const eligibility = Sc900EligibilityPolicySchema.parse(input.eligibility);
-  assertNoCredentialUrls({ expectedCapture, ledger, documents, discussions, topics, learning, eligibility });
+  if (discussionScope) {
+    assert(documents.length === ledger.reported.questions &&
+      documents.every((document) => document.question.sourceOccurrenceIds.length === 1 && document.question.commentCount === 0 &&
+        !document.discussionEnabled) && discussions.every((discussion) => discussion.comments.length === 0),
+    "Questions-only publication must conserve every source record separately and must not claim captured discussions");
+    for (const document of documents) {
+      if (document.question.discussionScope) assert(same(document.question.discussionScope, discussionScope), "Question discussion scope differs from its authorization");
+      document.question.discussionScope = discussionScope;
+    }
+    for (const discussion of discussions) {
+      if (discussion.discussionScope) assert(same(discussion.discussionScope, discussionScope), "Discussion disposition differs from its authorization");
+      discussion.discussionScope = discussionScope;
+    }
+  } else {
+    assert(documents.every((document) => !document.question.discussionScope) && discussions.every((discussion) => !discussion.discussionScope),
+      "Unavailable discussions require the explicit authorized scoped capture ledger");
+  }
+  assertNoCredentialUrls({ expectedCapture, ledger, documents, discussions, topics, learning, eligibility,
+    ...(ownerAuthorization ? { ownerAuthorization } : {}) });
   const sourceRevision = sc900SourceRevision(ledger);
   const captureLedgerDigest = sc900Hash("capture-ledger", ledger);
   eligibility.reviewedQuestionIds.sort();
@@ -200,7 +241,7 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
     assert(question.commentCount === discussion.comments.length, "SC900 question comment count is incomplete");
     for (const comment of discussion.comments) {
       assert(comment.sourceRevision === sourceRevision &&
-        occurrences.find((item) => item.id === comment.sourceOccurrenceId)?.commentIds.includes(comment.id),
+        occurrences.some((item) => item.id === comment.sourceOccurrenceId && item.commentIds.some((id) => id === comment.id)),
       "SC900 comment source attribution does not match the ledger");
     }
     for (const source of question.sources) {
@@ -238,6 +279,22 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
     assert((explanation.correctOptionIds ?? []).every((id) => question.options.some((option) => option.id === id)),
       "SC900 explanation references an unknown option");
     const effective = document.answers.effectiveAnswer.value;
+    if (eligibility.activeQuestionIds.includes(question.id)) {
+      assert(!document.answers.provisional && !["incomplete", "outdated"].includes(explanation.status),
+        "Active SC900 questions require definite reviewed answers, not provisional, incomplete or historical teaching");
+      if (question.readiness.grading === "automatic") {
+        assert(effective.kind === "option-selection" && explanation.correctOptionIds?.length &&
+          sameIds(effective.optionIds, explanation.correctOptionIds) &&
+          explanation.options.every((option) =>
+            ["correct", "incorrect"].includes(option.verdict) &&
+            (option.verdict === "correct") === effective.optionIds.includes(option.optionId)),
+        "Every active automatic SC900 key and option verdict must agree definitively with the reviewed explanation");
+      } else {
+        assert(explanation.answerParts.length > 0 && explanation.answerParts.every((part) =>
+          !/^(?:unknown|unresolved|not provided|not specified|cannot determine|undetermined|tbd|n\/a)[.!]?$/i.test(part.answer.trim())),
+        "Active manual SC900 questions require explicit reviewed answer parts, not unresolved placeholder answers");
+      }
+    }
     if (question.readiness.grading === "automatic" &&
         ["supported", "corrected"].includes(explanation.status)) {
       assert(effective.kind === "option-selection" &&
@@ -268,6 +325,10 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
     if (retirement) {
       assert(sameIds(retirement.sourceNumbers.map(String), document.question.sources.map((source) => String(source.questionNumber))),
         "SC900 retirement source numbers do not match their question");
+      if (retirement.category === "duplicate") {
+        assert(retirement.adjudicationDigest === sc900DuplicateAdjudicationDigest(retirement),
+          "Duplicate exclusion must bind its exact independently adjudicated source, active target and evidence");
+      }
     }
   }
   const countsFor = (selected: Sc900Document[]) => {
@@ -284,7 +345,7 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
   assert(same(eligibility.activeCounts, countsFor(documents.filter((document) =>
     eligibility.activeQuestionIds.includes(document.question.id)))), "SC900 relevance active counts do not match the selected bank");
   const releaseId = `r_${sc900Hash("release", releaseIdentity({
-    expectedCapture, ledger, documents, discussions, topics, learning, eligibility,
+    expectedCapture, ledger, ...(ownerAuthorization ? { ownerAuthorization } : {}), documents, discussions, topics, learning, eligibility,
   }))}`;
   for (const document of documents) {
     document.releaseId = releaseId;
@@ -303,6 +364,7 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
   const counts = countsFor(documents);
   const catalog = Sc900CatalogSchema.parse({
     schemaVersion: 1, examId: "sc900", bankVersion: SC900_BANK_VERSION, releaseId, sourceRevision, counts,
+    ...(discussionScope ? { discussionScope } : {}),
     questions: documents.map(({ question, answers, discussionEnabled }) => ({
       id: question.id,
       number: Math.min(...question.sources.map((source) => source.questionNumber)),
@@ -315,7 +377,8 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
   });
   const manifest = Sc900ManifestSchema.parse({
     schemaVersion: 1, examId: "sc900", bankVersion: SC900_BANK_VERSION, releaseId, sourceRevision, captureLedgerDigest,
-    approvedCommentsDigest: sc900Hash("approved-comments", discussions.flatMap((discussion) => discussion.comments)),
+    approvedCommentsDigest: discussionScope ? null : sc900Hash("approved-comments", discussions.flatMap((discussion) => discussion.comments)),
+    ...(discussionScope ? { discussionScope } : {}),
     catalogUrl: `content/${releaseId}/catalog.json`, questionBaseUrl: `content/${releaseId}/questions/`,
     discussionBaseUrl: `content/${releaseId}/discussions/`, mediaBaseUrl: `content/${releaseId}/media/`, counts,
   });
@@ -326,14 +389,21 @@ export function prepareSc900Release(input: Sc900PublicationInput): Sc900Prepared
       sha256: byteSha256(jsonBytes(item)), sourceRevisions: [item.questionSourceRevision],
     }])),
   });
-  return { expectedCapture, ledger, manifest, catalog, documents, discussions, topics, learning, learningManifest, eligibility, assets };
+  return { expectedCapture, ledger, ...(ownerAuthorization ? { ownerAuthorization } : {}),
+    manifest, catalog, documents, discussions, topics, learning, learningManifest, eligibility, assets };
 }
 
-export function sc900ReviewTargets(release: Sc900PreparedRelease): Sc900ReviewTarget[] {
+export function sc900ReviewTargets(release: Sc900PreparedRelease): Sc900PublicationReviewTarget[] {
   return release.documents.map((document) => ({
     questionId: document.question.id,
     documentHash: sc900Hash("document", document),
-    discussionHash: sc900Hash("discussion", release.discussions.find((item) => item.questionId === document.question.id)),
+    ...(release.ledger.schemaVersion === 2 ? {
+      discussionHash: null,
+      discussionOmissionHash: sc900Hash("discussion-omission", {
+        questionId: document.question.id, discussionScope: document.question.discussionScope,
+        sourceOccurrenceIds: document.question.sourceOccurrenceIds,
+      }),
+    } : { discussionHash: sc900Hash("discussion", release.discussions.find((item) => item.questionId === document.question.id)) }),
     learningHash: sc900Hash("learning", release.learning.explanations.find((item) => item.questionId === document.question.id)),
     topicsHash: sc900Hash("topics", release.topics.assignments[document.question.id]),
     relevanceHash: sc900Hash("relevance", {
@@ -396,17 +466,23 @@ function publicationProof(plan: Sc900StaticPlan) {
   return Sc900PublicationProofSchema.parse({
     schemaVersion: 1, examId: "sc900", expectedCapture: plan.release.expectedCapture,
     ledger: plan.release.ledger, review: plan.review,
+    ...(plan.release.ownerAuthorization ? { ownerAuthorization: plan.release.ownerAuthorization } : {}),
   });
 }
 
 export function buildSc900StaticPlan(input: Sc900PublicationInput, reviewInput: Sc900PublicationReview): Sc900StaticPlan {
   const release = prepareSc900Release(input);
   const review = Sc900PublicationReviewSchema.parse(reviewInput);
+  if (release.ledger.schemaVersion === 2) {
+    assert(review.schemaVersion === 2 && review.authorizationDigest === release.ledger.authorizationDigest &&
+      Date.parse(review.reviewedAt) >= Date.parse(release.ownerAuthorization!.authorizedAt),
+    "Scoped publication requires the matching owner authorization and explicit questions-only review, not a full-discussion claim");
+  } else assert(review.schemaVersion === 1, "The full-discussion ledger requires its original complete discussion review");
   assert(review.releaseId === release.manifest.releaseId &&
     review.sourceRevision === release.manifest.sourceRevision &&
     review.captureLedgerDigest === release.manifest.captureLedgerDigest &&
     Date.parse(review.reviewedAt) >= Date.parse(release.ledger.capturedAt) &&
-    same(sorted(review.questions, (item) => item.questionId), sc900ReviewTargets(release)),
+    same(sorted<Sc900PublicationReviewTarget>(review.questions, (item) => item.questionId), sc900ReviewTargets(release)),
   "Full SC900 review is missing, stale, or does not cover every exact question, answer, discussion, image and metadata record");
   const files = exportFiles(release);
   const reviewDigest = sc900Hash("full-review", review);
@@ -443,6 +519,7 @@ export function createSc900ApprovalReceipt(planInput: Sc900StaticPlan, finalInpu
     schemaVersion: 1, examId: "sc900", bankVersion: SC900_BANK_VERSION,
     releaseId: plan.release.manifest.releaseId, sourceRevision: plan.release.manifest.sourceRevision,
     captureLedgerDigest: plan.release.manifest.captureLedgerDigest,
+    ...(plan.release.manifest.discussionScope ? { discussionScope: plan.release.manifest.discussionScope } : {}),
     planDigest: plan.planDigest, reviewDigest: plan.reviewDigest, fileCount: plan.files.length,
     totalBytes: plan.totalBytes, activate: finalReview !== null, finalReview,
   });
@@ -673,6 +750,7 @@ export async function loadSc900Publication(
   });
   const plan = buildSc900StaticPlan({
     expectedCapture: proof.expectedCapture, ledger: proof.ledger, documents, discussions, learning: dataset,
+    ...(proof.ownerAuthorization ? { ownerAuthorization: proof.ownerAuthorization } : {}),
     topics: Sc900TopicMapSchema.parse(json(`${root}topics.json`)),
     eligibility: Sc900EligibilityPolicySchema.parse(json(`${root}eligibility.json`)),
     assets: new Map(proof.ledger.assets.map((asset) => {
@@ -686,6 +764,7 @@ export async function loadSc900Publication(
   await validateSc900StagedExport(stage, plan, stagedReceipt);
   return {
     source: { directory: stage }, expectedCapture: plan.release.expectedCapture,
+    ...(plan.release.ownerAuthorization ? { ownerAuthorization: plan.release.ownerAuthorization } : {}),
     manifest: plan.release.manifest, catalog: plan.release.catalog,
     documents: plan.release.documents, discussions: plan.release.discussions,
     topics: plan.release.topics, learning: plan.release.learningManifest,

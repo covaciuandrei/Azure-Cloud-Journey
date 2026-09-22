@@ -6,10 +6,23 @@ import type { StudyDocument, StudyRepository } from "../types.js";
 import { AnswerDetails, DiscussionBelow } from "./AnswerDetails.js";
 import { studyTopicLabel as topicLabel } from "../../domain/examTopics.js";
 import { useExplanation } from "./useExplanation.js";
+import type { LearningExplanation } from "../../domain/learning.js";
 
 export function AnswerStatus({ provisional }: { provisional: boolean }) {
   return <span className={`answer-status status-${provisional ? "unresolved" : "source-default"}`}>
     {provisional ? "Provisional" : "Answer key"}</span>;
+}
+
+export function hasDocumentedQualification(document: StudyDocument, explanation: LearningExplanation | undefined): boolean {
+  if (document.examId !== "sc900" || document.answers.provisional || explanation?.status !== "conditional") return false;
+  if (document.question.readiness.grading === "manual") return explanation.answerParts.length > 0;
+  const key = document.answers.effectiveAnswer.value;
+  return key.kind === "option-selection" && Boolean(explanation.correctOptionIds?.length) &&
+    key.optionIds.length === explanation.correctOptionIds!.length &&
+    key.optionIds.every((id) => explanation.correctOptionIds!.includes(id)) &&
+    explanation.options.length === document.question.options.length &&
+    explanation.options.every((option) => ["correct", "incorrect"].includes(option.verdict) &&
+      (option.verdict === "correct") === key.optionIds.includes(option.optionId));
 }
 
 export interface QuestionCardProps {
@@ -45,7 +58,8 @@ export function QuestionCard({
   const correct = new Set(answers.effectiveAnswer.value.kind === "option-selection" ? answers.effectiveAnswer.value.optionIds : []);
   const teachingKey = learning.value?.explanation.correctOptionIds;
   const recordedKeyChanged = Boolean(teachingKey && (teachingKey.length !== correct.size || teachingKey.some((id) => !correct.has(id))));
-  const teachingUncertain = learning.value && ["conditional", "outdated", "incomplete"].includes(learning.value.explanation.status);
+  const documentedQualification = hasDocumentedQualification(document, learning.value?.explanation);
+  const teachingUncertain = !documentedQualification && learning.value && ["conditional", "outdated", "incomplete"].includes(learning.value.explanation.status);
   const provisional = answers.provisional || Boolean(teachingUncertain);
   const visibleKey = recordedKeyChanged ? new Set(teachingKey!) : correct;
   const result = revealed ? gradeResponse(document, response) : null;
@@ -67,13 +81,15 @@ export function QuestionCard({
         <span>{manual ? "Image / self-check" : question.kind === "multi-select" ? "Select all that apply" : "Select one answer"}</span>
         {question.sources.length > 1 && <span>Also listed as {question.sources.slice(1).map((source) => `#${source.questionNumber}`).join(", ")}</span>}
         {provisional && <AnswerStatus provisional />}
+        {documentedQualification && <span className="answer-status">Documented qualification</span>}
         {document.topicIds?.map((topic) => <span className="question-topic" key={topic}>{topicLabel(topic)}</span>)}
       </div>
       {onFlag && <button className={`button button-secondary button-small ${response.flagged ? "flag-selected" : ""}`}
         onClick={onFlag} aria-pressed={response.flagged}>{response.flagged ? "Flagged" : "Flag for review"}</button>}
     </header>
     {document.retirement && <div className="notice" role="note">
-      <strong>Retired from the current question bank</strong>
+      <strong>{document.retirement.category === "duplicate" ? "Duplicate copy excluded from new practice" :
+        document.examId === "sc900" ? "Excluded from the current question bank" : "Retired from the current question bank"}</strong>
       <p>{document.retirement.reason}</p>
       <p>This question is retained only for this saved session. Your recorded score is unchanged.
         Start a new session to practice the current question bank.</p>

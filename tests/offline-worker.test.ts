@@ -653,6 +653,37 @@ test("SC-900 downloads fail closed on inactive, synthetic or mismatched activati
   }
 });
 
+test("SC900 offline activation binds explicit unavailable-discussion scope without claiming empty source threads", async () => {
+  for (const mode of ["valid", "missing-authorization", "wrong-digest", "fake-zero-source", "fake-reviewed-comments"] as const) {
+    const fixture = buildSc900Fixture(`scoped-${mode}`);
+    const scope = { scope: "questions-answers-media", authorizationDigest: hex("owner-receipt"),
+      sourceCommentCount: null, storedCommentCount: 0, discussionState: "unavailable", discussionDisposition: "omitted-owner-authorized" };
+    const bankPath = "/exams/sc900/manifest.json";
+    const availabilityPath = "/exams/sc900/availability.json";
+    const bank = { ...JSON.parse(fixture.files.get(bankPath)!.toString("utf8")),
+      counts: { comments: 0 }, approvedCommentsDigest: mode === "fake-reviewed-comments" ? hex("invented-review") : null,
+      discussionScope: scope };
+    const availableScope = mode === "fake-zero-source" ? { ...scope, sourceCommentCount: 0 } :
+      mode === "wrong-digest" ? { ...scope, authorizationDigest: hex("wrong-owner") } : scope;
+    const availability = { ...JSON.parse(fixture.files.get(availabilityPath)!.toString("utf8")),
+      ...(mode === "missing-authorization" ? {} : { discussionScope: availableScope }) };
+    for (const [path, value] of [[bankPath, bank], [availabilityPath, availability]] as const) {
+      const bytes = Buffer.from(JSON.stringify(value));
+      fixture.files.set(path, bytes);
+      Object.assign(fixture.manifest.files.find((file) => file.url === path)!, { sha256: sha256Hex(bytes), bytes: bytes.length });
+    }
+    fixture.files.set("/exams/sc900/offline-manifest.json", Buffer.from(JSON.stringify(fixture.manifest)));
+    const worker = createWorker(createCacheStorage(), createFakeFetch(fixture.files, createServer()));
+    await (await worker.rpc("DOWNLOAD", mode, { examId: "sc900" })).wait;
+    const state = await worker.status("scoped-state", "sc900");
+    assert.equal(state.ready, mode === "valid", mode);
+    if (mode === "valid") {
+      const cached = (await worker.fetchRequest(bankPath, { headers: { "X-AZ104-Offline": "1" } })).response!;
+      assert.equal((await cached.json()).discussionScope.sourceCommentCount, null);
+    } else assert.match(state.error, /scope|discussion omission/);
+  }
+});
+
 test("SC-900 saved snapshots retain their own topics, teaching and exclusive images", async () => {
   const current = buildSc900Fixture("sc-current-saved");
   const archived = buildSc900Fixture("sc-archived-saved");

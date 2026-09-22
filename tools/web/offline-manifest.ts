@@ -77,6 +77,9 @@ async function buildSc900OfflineManifest(workspace: string, outputDir: string): 
       availability.sourceCaptureDigest !== manifest.captureLedgerDigest) {
     throw new Error("SC-900 offline availability does not activate this exact approved bank, capture, and course.");
   }
+  if (JSON.stringify(availability.discussionScope) !== JSON.stringify(manifest.discussionScope)) {
+    throw new Error("SC900 offline authorization scope differs from its approved availability.");
+  }
   const { files, add } = await createFileList(workspace, outputDir, "sc900");
   const contentRoot = `exams/sc900/content/${manifest.releaseId}/`;
   const catalog = Sc900CatalogSchema.parse(approvedJson(`${contentRoot}catalog.json`));

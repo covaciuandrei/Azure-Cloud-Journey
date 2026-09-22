@@ -271,10 +271,27 @@ the exact release ID and byte hash.
 The separate bank contract is in `src/domain/sc900*.ts`; stable namespaced hashes
 are in `tools/sc900/canonical.ts`. Generic schemas do not guess source totals.
 The publisher requires independently supplied capture-scope counts and a
-verified complete UI-capture ledger, including revealed answers, exact original
-assets and loaded discussions. A verified empty discussion is valid; a failed
-or missing response is not evidence of zero comments. Captured discussion is
-retained in full unless a future explicit exclusion-approval contract is added.
+verified UI-capture ledger complete for its declared scope. The original
+version-1 contract requires revealed answers, exact original assets and loaded
+discussions. A verified empty discussion is valid; a failed or missing response
+is not evidence of zero comments.
+
+An explicit owner authorization can instead approve the distinct version-2
+**questions, answers and media** scope. Its private receipt binds the source
+scope, every raw page and the original asset inventory. Source discussions stay
+`unavailable`, with unknown source totals represented as `null`, not invented
+empty threads or discussion reviews. Every question, original author key,
+image and documentation-reviewed explanation is still required. The interface
+discloses: **Source discussions unavailable; answers reviewed against Microsoft
+documentation**. There is no automatic waiver or permissive fallback.
+
+All source records and images remain archived. Independently adjudicated
+duplicate copies can be excluded from new practice without merging or deleting
+their originals. Duplicate exclusions require an exact evidence digest and an
+active retained target; only that category can omit an irrelevant Microsoft
+citation. Every active automatic key must match definite reviewed option
+verdicts. Provisional, incomplete, historical or unresolved items remain
+excluded from new practice.
 Public attribution, teaching references and rich-content links must not contain
 signed access tokens or credential-bearing URLs. Publication rejects them
 before hashing or exporting, without echoing the values or silently stripping
@@ -301,8 +318,10 @@ private access settings, with no anonymous ACLs or download tokens.
 
 `npm run test:sc900-cloud` exercises only isolated `demo-az104-study` emulators
 with synthetic fixtures. No production upload or SC-900 activation is implied
-by those tests. Full capture, discussion review and factual approval are still
-mandatory; questions-only captures are ineligible. See
+by those tests. Capture completeness and factual approval are mandatory for
+the explicitly declared scope. Questions-only data needs the exact owner
+authorization plus independently reviewed scoped publication, final and cloud
+approvals; a draft or an unauthorized incomplete ledger remains ineligible. See
 [`tools/sc900/README.md`](tools/sc900/README.md) for the guarded plan/apply workflow.
 Budgets are never reset or split by exam, and this executor does not deploy
 Hosting, change application availability, alter rules or modify AZ-104 data.

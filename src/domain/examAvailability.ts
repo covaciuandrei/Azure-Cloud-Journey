@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CleanReleaseIdSchema } from "./cleanBank.js";
 import { Sha256Schema, TimestampSchema } from "./schemas.js";
+import { Sc900DiscussionScopeSchema } from "./sc900Scope.js";
 
 export const Sc900AvailabilitySchema = z.discriminatedUnion("activated", [
   z.object({
@@ -12,6 +13,7 @@ export const Sc900AvailabilitySchema = z.discriminatedUnion("activated", [
     bankReleaseId: CleanReleaseIdSchema,
     courseReleaseId: z.string().regex(/^c_[a-f0-9]{64}$/),
     sourceCaptureDigest: Sha256Schema,
+    discussionScope: Sc900DiscussionScopeSchema.optional(),
     approvedBy: z.string().trim().min(1),
     approvedAt: TimestampSchema,
   }).strict(),

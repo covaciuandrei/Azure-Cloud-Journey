@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { createSc900DemoBank } from "../tools/demo/sc900-fixtures.js";
 import { Sc900CaptureLedgerSchema } from "../src/domain/sc900Capture.js";
 import { Sc900DocumentSchema } from "../src/domain/sc900Bank.js";
+import { Sc900FullPublicationReviewSchema } from "../src/domain/sc900Publication.js";
 import {
   buildSc900StaticPlan, prepareSc900Release, sc900OriginalKeyDigest, sc900ReviewTargets,
   type Sc900PublicationInput,
@@ -18,11 +19,12 @@ import { buildOfflineManifest } from "../tools/web/offline-manifest.js";
 import { fullCourseInputs } from "./full-course-fixture.js";
 import { writeData } from "../tools/review/data.js";
 import { digest } from "../tools/ingest/normalize-shared.js";
+import { sc900ScopedFixture, sc900ScopedReview } from "./sc900-scoped-fixture.js";
 
 const at = "2026-09-22T00:00:00.000Z";
 const note = "Synthetic approval used only by isolated original fixture tests. It does not authorize a factual production course or any real source bank.";
 
-function publicationFixture(seed: string) {
+function publicationFixture(seed: string, scoped = false) {
   const demo = createSc900DemoBank();
   const ledger = Sc900CaptureLedgerSchema.parse({
     schemaVersion: 1, examId: "sc900", sourceExamId: "128", captureMethod: "rendered-browser-ui",
@@ -81,17 +83,19 @@ function publicationFixture(seed: string) {
         sourceQuestions: 40, duplicatesGrouped: 0, omittedComments: 0 }, retired: [],
     },
   };
-  const release = prepareSc900Release(input);
-  const plan = buildSc900StaticPlan(input, {
+  const publicationInput = scoped ? sc900ScopedFixture(input) : input;
+  const release = prepareSc900Release(publicationInput);
+  const plan = buildSc900StaticPlan(publicationInput, scoped ? sc900ScopedReview(release) : Sc900FullPublicationReviewSchema.parse({
     schemaVersion: 1, examId: "sc900", releaseId: release.manifest.releaseId, sourceRevision,
     captureLedgerDigest: release.manifest.captureLedgerDigest, reviewer: "Synthetic content review", reviewedAt: at,
     decision: "approved", checks: { allPages: true, allAnswers: true, allComments: true,
       allAssets: true, topics: true, learning: true, relevance: true }, questions: sc900ReviewTargets(release),
-  });
+  }));
   return { plan, finalReview: {
     schemaVersion: 1 as const, examId: "sc900" as const, releaseId: plan.release.manifest.releaseId,
     planDigest: plan.planDigest, reviewDigest: plan.reviewDigest, reviewer: "Synthetic independent final reviewer",
     reviewedAt: at, independent: true as const, decision: "approve-activation" as const,
+    ...(release.manifest.discussionScope ? { discussionScope: release.manifest.discussionScope } : {}),
   } };
 }
 
@@ -132,8 +136,11 @@ test("SC900 Hosting selection is inactive until exact bank and course approvals 
     const selected = await selectSc900HostingPublication(first.plan, first.finalReview, root);
     assert.equal(selected.active, true);
     assert.equal(JSON.parse((await readFile(resolve(root, `.data/sc900-publication/${first.plan.release.manifest.releaseId}/approval-receipt.json`))).toString()).activate, false);
-    const second = publicationFixture("two");
+    const second = publicationFixture("two", true);
     const updated = await selectSc900HostingPublication(second.plan, second.finalReview, root);
+    const availability = JSON.parse((await publicationFileBytes(updated.files.get("exams/sc900/availability.json")!)).toString("utf8"));
+    assert.equal(availability.discussionScope.sourceCommentCount, null);
+    assert.equal(availability.discussionScope.authorizationDigest, second.plan.release.manifest.discussionScope!.authorizationDigest);
     for (const plan of [first.plan, second.plan]) {
       assert.ok(updated.files.has(`exams/sc900/content/${plan.release.manifest.releaseId}/catalog.json`));
     }

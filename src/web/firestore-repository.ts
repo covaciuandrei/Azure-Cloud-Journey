@@ -33,7 +33,8 @@ export function createFirestoreStudyRepository(
         if (examId === "sc900") Sc900StudyReleasePointerSchema.parse(pointer);
         const value: StudyCatalog = contract.catalog.parse(await reader.document(`${releaseRoot(pointer.releaseId)}/catalogs/${examId}`));
         assertExam(value, examId);
-        if (value.releaseId !== pointer.releaseId || value.sourceRevision !== pointer.sourceRevision) {
+        if (value.releaseId !== pointer.releaseId || value.sourceRevision !== pointer.sourceRevision ||
+            JSON.stringify(value.discussionScope) !== JSON.stringify("discussionScope" in pointer ? pointer.discussionScope : undefined)) {
           throw new Error("Firestore catalog does not match the current study release.");
         }
         if (value.questions.length !== value.counts.questions ||
@@ -67,6 +68,7 @@ export function createFirestoreStudyRepository(
       const { question, answers } = document;
       if (document.releaseId !== catalog.releaseId ||
           question.id !== id || question.commentCount !== summary.commentCount ||
+          JSON.stringify(question.discussionScope) !== JSON.stringify(catalog.discussionScope) ||
           question.readiness.grading !== summary.grading || answers.provisional !== summary.provisional) {
         throw new Error(`Firestore question ${id} does not match the active catalog.`);
       }
@@ -101,6 +103,7 @@ export function createFirestoreStudyRepository(
       if (!summary) throw new Error(`Unknown question ID: ${id}`);
       if (!summary.discussionEnabled) return {
         schemaVersion: 1, ...(examId === "sc900" ? { examId } : {}),
+        ...(catalog.discussionScope ? { discussionScope: catalog.discussionScope } : {}),
         releaseId: catalog.releaseId, questionId: id, comments: [],
       };
       const cached = discussions.get(id);

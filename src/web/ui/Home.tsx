@@ -2,6 +2,7 @@ import type { PracticeAttempt } from "../engine.js";
 import type { StudyCatalog } from "../types.js";
 import { Icon } from "../components/Icon.js";
 import { examConfig, examIdOf } from "../../domain/exams.js";
+import { SC900_UNAVAILABLE_DISCUSSIONS_NOTICE } from "../../domain/sc900Scope.js";
 
 export function Home({ catalog, activeAttempt, onPractice, onExam, onLibrary, onResume, signedIn = false }: {
   catalog: StudyCatalog; activeAttempt: PracticeAttempt | null;
@@ -12,7 +13,7 @@ export function Home({ catalog, activeAttempt, onPractice, onExam, onLibrary, on
   const exam = examConfig(examIdOf(catalog));
   return <section className="landing-page">
     <div className="landing-heading"><h1>{exam.code} practice</h1>
-      <p>Practice questions, explanations, and source discussions. Choose a mode to begin.</p></div>
+      <p>{catalog.discussionScope ? SC900_UNAVAILABLE_DISCUSSIONS_NOTICE : "Practice questions, explanations, and source discussions. Choose a mode to begin."}</p></div>
     {activeAttempt && <div className="landing-resume">
       <div><strong>Continue your session</strong><p>{activeAttempt.mode === "exam" ? "Exam" : "Practice"}:
         {" "}question {activeAttempt.currentIndex + 1} of {activeAttempt.size}.</p></div>
@@ -26,7 +27,7 @@ export function Home({ catalog, activeAttempt, onPractice, onExam, onLibrary, on
         <h2>Exam</h2><p>{exam.mockQuestionCount} questions in {exam.mockDurationMinutes} minutes. Review your answers and explanations when the session ends.</p>
         <button className="button button-secondary" onClick={onExam}>Set up exam</button></article>
       <article><span className="practice-mode-icon"><Icon name="book" size={22} /></span>
-        <h2>Question library</h2><p>Search all {catalog.counts.questions} questions and open any question or discussion directly.</p>
+        <h2>Question library</h2><p>Search all {catalog.counts.questions} questions and open {catalog.discussionScope ? "their reviewed explanations" : "any question or discussion"} directly.</p>
         <button className="button button-secondary" onClick={onLibrary}>Browse questions</button></article>
     </div>
     <dl className="landing-facts">

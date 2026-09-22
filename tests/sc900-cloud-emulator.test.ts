@@ -241,9 +241,41 @@ test("real emulator immutable-document tampering cannot be hidden by a completed
       method: "PATCH", headers: { Authorization: "Bearer owner", "Content-Type": "application/json" },
       body: JSON.stringify({ fields: { payload: { stringValue: "synthetic deliberate corruption" } } }),
     });
+
     assert.ok(tamper.ok);
     await assert.rejects(run(), /immutable content changed/);
     assert.deepEqual(await Promise.all(METADATA_PATHS.map((pointer) => context.adapter.getDocument(pointer))), before);
+  } finally {
+    if (fixture) await clearOwnPointers(fixture.plan, context.firestore);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("real emulator authorized questions-only publication conserves original data and discloses unavailable source threads", {
+  skip: !configured,
+}, async () => {
+  const root = resolve(`.data/sc900-cloud-emulator/${randomUUID()}`);
+  const context = local();
+  let fixture: Awaited<ReturnType<typeof sc900CloudFixture>> | undefined;
+  try {
+    fixture = await sc900CloudFixture(root, true);
+    const { plan } = fixture;
+    const planPath = `.data/sc900-cloud/plans/${plan.planDigest}.json`;
+    const approvalPath = `.data/sc900-cloud/approvals/${plan.planDigest}.json`;
+    await writeCloudFile(root, planPath, plan);
+    await writeCloudFile(root, approvalPath, fixture.approval);
+    const result = await runSc900CloudApply({ workspace: root, planPath, cloudApprovalPath: approvalPath, emulator: true });
+    assert.equal(result.status, "verified");
+    assert.ok(plan.documents.every((item) => !item.path.includes("/comments/")));
+    assert.equal(plan.documents.filter((item) => item.path.includes("/questions/")).length, 2);
+    assert.equal(plan.objects.length, 1);
+    const pointer = await context.adapter.getDocument(METADATA_PATHS[0]);
+    assert.deepEqual(pointer?.data.discussionScope, plan.discussionScope);
+    const question = plan.documents.find((item) => item.path.includes("/questions/"))!;
+    const stored = await context.adapter.getDocument(question.path);
+    const decoded = Sc900DocumentSchema.parse(await decodeSc900CloudEnvelope(stored!.data));
+    assert.equal(decoded.question.discussionScope?.sourceCommentCount, null);
+    assert.equal(decoded.discussionEnabled, false);
   } finally {
     if (fixture) await clearOwnPointers(fixture.plan, context.firestore);
     await rm(root, { recursive: true, force: true });

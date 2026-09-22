@@ -8,8 +8,8 @@ import { CleanCountsSchema, CleanReleaseIdSchema, mediaExtension } from "./clean
 import {
   SC900_EXAM_ID, SC900_SOURCE_BASE_URL, SC900_SOURCE_PAGE_SIZE,
   Sc900OccurrenceIdSchema, Sc900SourceNumberSchema, Sc900PageNumberSchema, Sc900SourcePageUrlSchema,
-  Sc900CaptureLedgerSchema, type Sc900CaptureLedger,
 } from "./sc900Capture.js";
+import { Sc900DiscussionScopeSchema, Sc900PublicationCaptureLedgerSchema, type Sc900PublicationCaptureLedger } from "./sc900Scope.js";
 
 export { SC900_EXAM_ID, Sc900OccurrenceIdSchema } from "./sc900Capture.js";
 export const SC900_BANK_VERSION = "sc900-approved-v1" as const;
@@ -26,6 +26,7 @@ export const Sc900ReleasePointerSchema = z.object({
   bankVersion: z.literal(SC900_BANK_VERSION),
   releaseId: Sc900ReleaseIdSchema,
   sourceRevision: Sha256Schema,
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
 }).strict();
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
 const ids = <T extends z.ZodType>(schema: T) => z.array(schema).refine(unique, "IDs must be unique");
@@ -65,7 +66,8 @@ export const Sc900ManifestSchema = z.object({
   releaseId: Sc900ReleaseIdSchema,
   sourceRevision: Sha256Schema,
   captureLedgerDigest: Sha256Schema,
-  approvedCommentsDigest: Sha256Schema,
+  approvedCommentsDigest: Sha256Schema.nullable(),
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
   catalogUrl: relativePath,
   questionBaseUrl: directory,
   discussionBaseUrl: directory,
@@ -73,6 +75,12 @@ export const Sc900ManifestSchema = z.object({
   counts: Sc900CountsSchema,
 }).strict().superRefine((manifest, context) => {
   const root = `content/${manifest.releaseId}/`;
+  if (manifest.discussionScope ? manifest.approvedCommentsDigest !== null : manifest.approvedCommentsDigest === null) {
+    context.addIssue({ code: "custom", message: "Only explicitly unavailable discussions have no comment-review digest" });
+  }
+  if (manifest.discussionScope && (manifest.counts.comments !== 0 || manifest.counts.duplicatesGrouped !== 0)) {
+    context.addIssue({ code: "custom", message: "Questions-only banks have no stored source threads and conserve every source record" });
+  }
   if (manifest.catalogUrl !== `${root}catalog.json` ||
       manifest.questionBaseUrl !== `${root}questions/` ||
       manifest.discussionBaseUrl !== `${root}discussions/` ||
@@ -104,6 +112,7 @@ export const Sc900QuestionSchema = z.object({
   sourceOccurrenceIds: ids(Sc900OccurrenceIdSchema).nonempty(),
   assetIds: ids(Sha256Schema),
   commentCount: z.number().int().nonnegative(),
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
   readiness: z.object({ grading: z.enum(["automatic", "manual"]) }).strict(),
   media: z.array(Sc900MediaSchema),
   sources: z.array(z.object({
@@ -113,6 +122,9 @@ export const Sc900QuestionSchema = z.object({
   }).strict()).nonempty(),
 }).strict().superRefine((question, context) => {
   const issue = (message: string) => context.addIssue({ code: "custom", message });
+  if (question.discussionScope && (question.commentCount !== 0 || question.sourceOccurrenceIds.length !== 1)) {
+    issue("Questions-only questions require explicit unavailable discussions and one conserved source record");
+  }
   const options = question.options.map((option) => option.id);
   if (!unique(options) || question.fixedOptionOrder.length !== options.length ||
       !question.fixedOptionOrder.every((id) => options.includes(id))) {
@@ -187,10 +199,15 @@ export const Sc900CatalogSchema = z.object({
   bankVersion: z.literal(SC900_BANK_VERSION),
   releaseId: Sc900ReleaseIdSchema,
   sourceRevision: Sha256Schema,
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
   counts: Sc900CountsSchema,
   questions: z.array(Sc900SummarySchema).nonempty(),
 }).strict().superRefine((catalog, context) => {
   const numbers = catalog.questions.flatMap((question) => question.sourceNumbers);
+  if (catalog.discussionScope && (catalog.counts.comments !== 0 || catalog.counts.duplicatesGrouped !== 0 ||
+      catalog.questions.some((question) => question.discussionEnabled || question.sourceNumbers.length !== 1))) {
+    context.addIssue({ code: "custom", message: "Scoped catalog must conserve each source separately and disclose unavailable threads" });
+  }
   if (!unique(catalog.questions.map((question) => question.id)) || !unique(numbers) ||
       catalog.questions.length !== catalog.counts.questions ||
       numbers.length !== catalog.counts.sourceQuestions ||
@@ -263,10 +280,14 @@ export const Sc900DiscussionSchema = z.object({
   examId: z.literal(SC900_EXAM_ID),
   releaseId: Sc900ReleaseIdSchema,
   questionId: QuestionIdSchema,
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
   comments: z.array(Sc900CommentSchema),
 }).strict().superRefine((discussion, context) => {
   const byId = new Map(discussion.comments.map((comment) => [comment.id, comment]));
   const issue = () => context.addIssue({ code: "custom", message: "Invalid SC900 comment thread identity or ancestry" });
+  if (discussion.discussionScope && discussion.comments.length) {
+    context.addIssue({ code: "custom", message: "Unavailable discussions cannot claim any captured thread" });
+  }
   if (byId.size !== discussion.comments.length) issue();
   for (const comment of discussion.comments) {
     const root = byId.get(comment.rootId);
@@ -295,8 +316,8 @@ export function sc900FirestoreRoot(releaseId: string): string {
   return `studyBanks/sc900/releases/${Sc900ReleaseIdSchema.parse(releaseId)}`;
 }
 
-export function sc900SchemasForLedger(input: Sc900CaptureLedger) {
-  const ledger = Sc900CaptureLedgerSchema.parse(input);
+export function sc900SchemasForLedger(input: Sc900PublicationCaptureLedger) {
+  const ledger = Sc900PublicationCaptureLedgerSchema.parse(input);
   const byNumber = new Map(ledger.occurrences.map((item) => [item.questionNumber, item]));
   const pages = new Map(ledger.pages.map((page) => [page.pageNumber, page]));
   const verifyQuestion = (question: Sc900Question, context: z.RefinementCtx) => {
@@ -318,7 +339,8 @@ export function sc900SchemasForLedger(input: Sc900CaptureLedger) {
     manifest: Sc900ManifestSchema.superRefine((manifest, context) => {
       if (manifest.counts.sourceQuestions !== ledger.reported.questions ||
           manifest.counts.images !== ledger.assets.length ||
-          manifest.counts.comments !== ledger.occurrences.reduce((total, item) => total + item.parsedCommentCount, 0)) {
+          manifest.counts.comments !== ledger.occurrences.reduce((total, item) => total + item.parsedCommentCount, 0) ||
+          (ledger.schemaVersion === 2 ? manifest.discussionScope?.authorizationDigest !== ledger.authorizationDigest : Boolean(manifest.discussionScope))) {
         context.addIssue({ code: "custom", message: "SC900 manifest counts must match the complete verified capture ledger" });
       }
     }),

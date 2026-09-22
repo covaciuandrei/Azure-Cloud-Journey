@@ -129,6 +129,7 @@ async function validateSelection(workspace: string, selection: z.infer<typeof se
     schemaVersion: 1, examId: "sc900", activated: true, kind: "approved-source",
     bankReleaseId: selection.activeReleaseId, courseReleaseId: selection.activeCourseReleaseId,
     sourceCaptureDigest: activeReceipt.captureLedgerDigest,
+    ...(activeReceipt.discussionScope ? { discussionScope: activeReceipt.discussionScope } : {}),
     approvedBy: activeReceipt.finalReview.reviewer, approvedAt: activeReceipt.finalReview.reviewedAt,
   }) });
   return { active: true as const, files, receipt: activeReceipt };

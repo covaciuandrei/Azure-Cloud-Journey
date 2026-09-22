@@ -1,7 +1,8 @@
 # SC900 canonical bank and local publication contract
 
-These tools do not capture pages, normalize source HTML, call cloud APIs, upload,
-or update a live application. Imported material belongs only in ignored `.data/`.
+The canonical/publication helpers do not capture pages, call cloud APIs or update
+a live application. The separately guarded executor is documented below.
+Imported material belongs only in ignored `.data/`.
 Tests use original synthetic text and a generated one-pixel image.
 
 ## Identities and source bounds
@@ -84,7 +85,7 @@ independent expectations. The publisher does not infer expectations from the
 ledger itself or hardcode the source count. The caller verifies the receipt
 bytes and supplies their raw SHA-256; the release identity and private proof
 bind that digest. Prepared releases carry `expectedCapture` for safe rebuilds.
-The capture ledger and canonical source revision wire formats are unchanged.
+The full-discussion version-1 ledger and its canonical source hashes are unchanged.
 Draft records can use the exported `SC900_DRAFT_RELEASE_ID`; media paths must
 use that same draft release until binding.
 
@@ -96,12 +97,102 @@ use that same draft release until binding.
   `sc900OriginalKeyDigest(document)` binds retained source answers.
 - `src/domain/sc900Eligibility.ts`: all canonical question IDs are reviewed and
   partitioned into active/retired sets with reconciled active counts.
-  Retirements require rationale and official references.
+  Retirements require rationale and official references, except for the explicitly
+  adjudicated duplicate-copy category described below.
 
 `prepareSc900Release(input)` validates all input and derives an immutable
 `r_<sha256>` from exam-scoped content, capture, and metadata. It replaces draft
 release paths, derives catalog and learning manifests, and derives the
 eligibility policy hash. It does **not** approve anything.
+
+## Explicit owner-authorized questions, answers and media scope
+
+`Sc900CaptureLedgerSchema` still means complete version-1 capture including
+source discussions. Do not feed questions-only results into it or manufacture
+`loaded`, verified-empty or reviewed-comment claims.
+
+`src/domain/sc900Scope.ts` defines a separate `Sc900ScopedCaptureLedgerSchema`:
+`schemaVersion: 2`, `scope: "questions-answers-media"`, `verified: true` only for
+the complete declared scope, and the unchanged source/page/question/image
+attribution fields. It adds `authorizationDigest`, `sourceScopeReceiptSha256`,
+`rawPageInventoryDigest`, `assetInventoryDigest`, and `sourceCommentCount: null`.
+Each occurrence has `discussionState: "unavailable"`,
+`discussionDisposition: "omitted-owner-authorized"`, `sourceCommentCount: null`,
+`parsedCommentCount: 0`, and `commentIds: []`. It has no expected source-comment
+count. Zero parsed/stored comments is not a claim that zero source comments exist.
+
+The private `Sc900QuestionsOnlyAuthorizationSchema` receipt must contain
+`schemaVersion: 1`, `examId: "sc900"`, `scope: "questions-answers-media"`,
+`decision: "authorize-publication-without-source-discussions"`,
+`authorizedBy: "owner"`, `authorizedAt`, the actual `authorizationText`,
+`sourceScopeReceiptSha256`, `rawPageInventoryDigest`, `assetInventoryDigest`,
+and exact `questions`, `pages`, and `images` counts. The coordinator supplies
+this genuine authorization, not an automatic helper or content author.
+
+Use `sc900RawPageInventoryDigest(pages)` over the exact parsed page entries
+sorted by page number, `sc900AssetInventoryDigest(assets)` over parsed asset
+entries sorted by ID, and `sc900AuthorizationDigest(receipt)` over the parsed
+receipt. `assertSc900ScopedAuthorization(ledger, receipt)` verifies all counts,
+digests and inventory bindings. `sc900SourceRevision(ledger)` accepts either
+ledger type; version-2 source identity includes the authorization digest.
+Changing the authorization or any raw page or asset invalidates the source,
+release, metadata and review bindings.
+
+Pass version 2 as `Sc900PublicationInput.ledger`, with the receipt in
+`ownerAuthorization`. It is required for version 2 and forbidden for version 1.
+Existing normalizer `verifiedCaptureLedger` remains version 1 or null; the
+explicit `authorizedQuestionsOnlyLedger` is a separate result. Neither result
+approves answer correctness or publication. A null ledger is never upgraded.
+
+`Sc900ScopedPublicationReviewSchema` requires `schemaVersion: 2`, the same scope
+and `authorizationDigest`. Its checks include `allComments: null`,
+`ownerAuthorizedDiscussionOmission: true`, and
+`answersAgainstMicrosoftDocumentation: true`, alongside the complete
+page/answer/asset/topic/learning/relevance checks. `sc900ReviewTargets` returns
+`discussionHash: null` and an exact `discussionOmissionHash`, not a fake review
+of an empty thread. The review cannot predate owner authorization.
+
+Scoped manifests, catalogs, question records and unavailable-discussion stubs
+carry `discussionScope`, containing the scope, authorization digest, unknown
+source total and explicit unavailable/omitted disposition. A scoped manifest's
+`approvedCommentsDigest` is `null`. All source questions and original assets are
+conserved, one record per source occurrence; no lossy canonical merging is
+allowed in this scope. `counts.comments` and `counts.omittedComments` remain
+stored/filtered-record accounting, not source totals. Full-mode semantics and
+AZ-104 contracts are unchanged.
+
+The private publication proof retains the receipt. Final bank reviews and
+cloud-apply approvals must explicitly repeat the exact public `discussionScope`.
+Hosting availability, Firestore bank metadata, runtime readers and offline
+activation verify the same binding. Owner text and private proof never enter
+the public export. Availability is still inactive until the parent approves
+the bank/course combination. The UI states:
+**Source discussions unavailable; answers reviewed against Microsoft documentation**.
+
+## Duplicate exclusions and definitive active answers
+
+`Sc900DuplicateExclusionSchema` adds only the SC-900 category `"duplicate"` with
+`duplicateOfQuestionId`, `adjudicationDigest`, and substantive `evidence`, plus
+the normal source numbers and rationale. `sources: []` is allowed only for this
+category; a fabricated Microsoft citation is not required to prove that two
+source tasks duplicate one another. Use
+`sc900DuplicateAdjudicationDigest(exclusion)` to bind the exact IDs, source
+numbers, reason, evidence and any supplied references. Any evidence change
+requires fresh adjudication and publication approval.
+
+The retained target must be in `activeQuestionIds`. Self-links, unknown targets,
+excluded targets and cycles are rejected. The duplicate source record, original
+answer, explanation and all its assets remain in the immutable archive and
+Storage; only new-practice selection excludes it. Other exclusion categories
+retain their official-source requirements.
+
+Every active SC-900 record requires `answers.provisional: false` and teaching
+that is neither incomplete nor outdated. For every automatic teaching status,
+the effective key must equal a nonempty reviewed key, every option verdict must
+be `correct` or `incorrect`, and those verdicts must match the key. Active manual
+items require explicit reviewed answer parts. Held/historical items may retain
+provisional source keys. A documented qualification with a definite key is shown
+as a qualification, not as an unreviewed answer.
 
 ## Exact paths
 
@@ -230,9 +321,11 @@ First select an independently approved complete static bank and its **original**
 bytes, compares them to `expectedCapture.receiptSha256`, and validates numeric
 exam 128, the exact terminal page URL/title, sequential last-page headings,
 five-question page allocation, observed totals, zero Next/Last controls, and zero
-discussion requests in this scope-only observation. The full bank's separate
-verified capture ledger must still prove that all discussions and answers were
-captured and reviewed. Questions-only data is not eligible.
+discussion requests in this scope-only observation. The bank's separate ledger
+must prove completeness of its declared capture scope. Full mode requires
+captured/reviewed discussions; version-2 questions-only mode requires the exact
+owner authorization and the scoped independent review. An unapproved partial
+capture is never eligible.
 
 ```bash
 npm run sc900:cloud -- --plan \
@@ -253,6 +346,8 @@ The operator must independently approve that exact plan in a private JSON file.
 `dataKind: "authorized-source"`, `planDigest`, `staticPlanDigest`,
 `sourceScopeSha256`, the approved administrator as `reviewer`, `reviewedAt`,
 and `decision: "approve-cloud-upload-and-metadata-switch"`.
+For questions-only publication also include the exact `discussionScope` from the
+cloud plan. Omission or a different owner-authorization digest blocks apply.
 The command does not generate this approval or accept an approval for another
 plan. The existing isolated user ADC and `AZURE_CLOUD_JOURNEY_ADMIN_EMAIL`
 configuration are required only for explicit production apply.

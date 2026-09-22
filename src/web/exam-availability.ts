@@ -2,6 +2,7 @@ import { Sc900AvailabilitySchema, SC900_UNAVAILABLE_NOTICE } from "../domain/exa
 import { examBaseUrl } from "../domain/exams.js";
 import type { Course } from "../domain/course.js";
 import type { StudyCatalog } from "./types.js";
+import { SC900_UNAVAILABLE_DISCUSSIONS_NOTICE } from "../domain/sc900Scope.js";
 
 export type ExamAvailability =
   | { status: "loading"; notice: string }
@@ -31,11 +32,13 @@ export async function checkSc900Availability(
   if (course.id !== "sc900" || course.releaseId !== availability.courseReleaseId ||
       catalog.examId !== "sc900" || catalog.releaseId !== availability.bankReleaseId ||
       catalog.counts.questions < 1 || catalog.questions.length !== catalog.counts.questions ||
+      JSON.stringify(catalog.discussionScope) !== JSON.stringify(availability.discussionScope) ||
       (demo && catalog.counts.questions !== 10)) {
     throw new Error("SC-900 activation does not match its approved course and question bank.");
   }
   return {
     status: "available",
-    notice: demo ? "10 original synthetic SC-900 sample questions. Not the production bank." : "Available to study",
+    notice: demo ? "10 original synthetic SC-900 sample questions. Not the production bank." :
+      catalog.discussionScope ? SC900_UNAVAILABLE_DISCUSSIONS_NOTICE : "Available to study",
   };
 }

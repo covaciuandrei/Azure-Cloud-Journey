@@ -7,6 +7,7 @@ import { Sc900CloudEnvelopeSchema } from "../../src/domain/sc900Cloud.js";
 import { Sc900CatalogSchema, Sc900CommentSchema, Sc900DocumentSchema, Sc900ReleasePointerSchema } from "../../src/domain/sc900Bank.js";
 import { Sc900LearningExplanationSchema, Sc900LearningManifestSchema } from "../../src/domain/sc900Learning.js";
 import { Sc900TopicMapSchema } from "../../src/domain/sc900Topics.js";
+import { Sc900DiscussionScopeSchema } from "../../src/domain/sc900Scope.js";
 import { Sc900PageNumberSchema, Sc900SourceNumberSchema, sc900SourcePageUrl } from "../../src/domain/sc900Capture.js";
 import { Sha256Schema, TimestampSchema } from "../../src/domain/schemas.js";
 import { assertNoCredentialUrls } from "../../src/domain/publicUrls.js";
@@ -63,6 +64,7 @@ export const Sc900CloudPlanSchema = z.object({
   releaseId: z.string().regex(/^r_[a-f0-9]{64}$/), staticPlanDigest: Sha256Schema,
   bankApprovalSha256: Sha256Schema,
   bankApprovedAt: TimestampSchema,
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
   sourceScopeSha256: Sha256Schema, approvalPath: safeLocalPath, sourceScopePath: safeLocalPath,
   baseline: z.array(z.object({ path: MetadataPathSchema, snapshot: SnapshotSchema }).strict()).length(3),
   documents: z.array(DocumentSchema).min(1).max(20_000),
@@ -77,6 +79,7 @@ export const CloudApplyApprovalSchema = z.object({
   schemaVersion: z.literal(1), examId: z.literal("sc900"), target: z.enum(["production", "emulator"]),
   dataKind: z.enum(["authorized-source", "synthetic-test"]),
   planDigest: Sha256Schema, staticPlanDigest: Sha256Schema, sourceScopeSha256: Sha256Schema,
+  discussionScope: Sc900DiscussionScopeSchema.optional(),
   reviewer: z.string().trim().min(1).max(200), reviewedAt: TimestampSchema,
   decision: z.literal("approve-cloud-upload-and-metadata-switch"),
 }).strict();
@@ -162,6 +165,7 @@ export async function buildSc900CloudPlan(workspace: string, options: {
     document(METADATA_PATHS[0], Sc900ReleasePointerSchema.parse({
       schemaVersion: 1, examId: "sc900", bankVersion: publication.manifest.bankVersion,
       releaseId, sourceRevision: publication.manifest.sourceRevision,
+      ...(publication.manifest.discussionScope ? { discussionScope: publication.manifest.discussionScope } : {}),
     })),
     document(METADATA_PATHS[1], publication.topics),
     document(METADATA_PATHS[2], publication.learning),
@@ -173,6 +177,7 @@ export async function buildSc900CloudPlan(workspace: string, options: {
     bucket: options.target === "production" ? CLOUD_BUCKET : EMULATOR_BUCKET,
     releaseId, staticPlanDigest: publication.receipt.planDigest, bankApprovalSha256,
     bankApprovedAt: publication.receipt.finalReview!.reviewedAt, sourceScopeSha256,
+    ...(publication.manifest.discussionScope ? { discussionScope: publication.manifest.discussionScope } : {}),
     approvalPath: options.approvalPath, sourceScopePath: options.sourceScopePath, baseline, documents, objects, metadata,
   };
   return validateSc900CloudPlan({ ...content, planDigest: sc900Hash("cloud-plan", content) });
@@ -205,13 +210,21 @@ export function validateSc900CloudPlan(raw: unknown): Sc900CloudPlan {
     const leaf = item.path.slice(root.length);
     const id = leaf.split("/")[1];
     if (leaf.startsWith("catalogs/")) {
-      if (Sc900CatalogSchema.parse(payload).releaseId !== plan.releaseId) throw new Error("Foreign cloud catalog release.");
+      const catalog = Sc900CatalogSchema.parse(payload);
+      if (catalog.releaseId !== plan.releaseId ||
+          canonicalJson(catalog.discussionScope ?? null) !== canonicalJson(plan.discussionScope ?? null)) {
+        throw new Error("Foreign cloud catalog release or owner-authorized discussion scope.");
+      }
     } else if (leaf.startsWith("questions/")) {
       const document = Sc900DocumentSchema.parse(payload);
-      if (document.releaseId !== plan.releaseId || document.question.id !== id) throw new Error("Foreign cloud question identity.");
+      if (document.releaseId !== plan.releaseId || document.question.id !== id ||
+          canonicalJson(document.question.discussionScope ?? null) !== canonicalJson(plan.discussionScope ?? null)) {
+        throw new Error("Foreign cloud question identity or owner-authorized discussion scope.");
+      }
     } else if (leaf.startsWith("explanations/")) {
       if (Sc900LearningExplanationSchema.parse(payload).questionId !== id) throw new Error("Foreign cloud explanation identity.");
     } else {
+      if (plan.discussionScope) throw new Error("Questions-only cloud publication cannot upload source comments.");
       const comment = Sc900CommentSchema.parse(payload);
       if (comment.id !== id || envelope.questionId !== comment.questionId) throw new Error("Foreign cloud discussion identity.");
     }
@@ -224,13 +237,12 @@ export function validateSc900CloudPlan(raw: unknown): Sc900CloudPlan {
     if (item.name !== `published/sc900/${plan.releaseId}/assets/${item.sha256}.${item.contentType === "image/jpeg" ? "jpg" : item.contentType.slice(6)}`) {
       throw new Error("Cloud media path differs from the approved immutable media reference.");
     }
-    const metadata = [
-      Sc900ReleasePointerSchema.parse(plan.metadata[0]!.data),
-      Sc900TopicMapSchema.parse(plan.metadata[1]!.data),
-      Sc900LearningManifestSchema.parse(plan.metadata[2]!.data),
-    ];
-    if (metadata.some((item) => item.releaseId !== plan.releaseId ||
-        item.sourceRevision !== metadata[0]!.sourceRevision)) throw new Error("Cloud metadata is not one consistent SC900 release.");
+  }
+  const pointer = Sc900ReleasePointerSchema.parse(plan.metadata[0]!.data);
+  const metadata = [pointer, Sc900TopicMapSchema.parse(plan.metadata[1]!.data), Sc900LearningManifestSchema.parse(plan.metadata[2]!.data)];
+  if (metadata.some((item) => item.releaseId !== plan.releaseId || item.sourceRevision !== pointer.sourceRevision) ||
+      canonicalJson(pointer.discussionScope ?? null) !== canonicalJson(plan.discussionScope ?? null)) {
+    throw new Error("Cloud metadata is not one consistent SC900 release and authorized scope.");
   }
   assertNoCredentialUrls(plan);
   if (Buffer.byteLength(canonicalJson(plan)) > MAX_CLOUD_PLAN_BYTES) throw new Error("SC900 cloud plan exceeds its bounded size.");
@@ -240,6 +252,7 @@ export function validateSc900CloudPlan(raw: unknown): Sc900CloudPlan {
 export function validateCloudApplyApproval(raw: unknown, plan: Sc900CloudPlan): CloudApplyApproval {
   const approval = CloudApplyApprovalSchema.parse(raw);
   if (approval.target !== plan.target || approval.dataKind !== plan.dataKind || approval.planDigest !== plan.planDigest ||
+      canonicalJson(approval.discussionScope ?? null) !== canonicalJson(plan.discussionScope ?? null) ||
       approval.staticPlanDigest !== plan.staticPlanDigest || approval.sourceScopeSha256 !== plan.sourceScopeSha256 ||
       Date.parse(approval.reviewedAt) > Date.now() || Date.parse(approval.reviewedAt) < Date.parse(plan.bankApprovedAt)) {
     throw new Error("Cloud apply approval does not bind this exact source, target and plan after bank approval.");

@@ -292,3 +292,17 @@ test("caller mutation during the final await cannot replace approved nested meta
   assert.equal(result.status, "verified");
   assert.deepEqual(cloud.documents.get(METADATA_PATHS[1])?.data, original);
 }));
+
+test("cloud apply requires explicit acknowledgement of owner-authorized omission and never plans comment writes", async () => workspace(async (root) => {
+  const fixture = await sc900CloudFixture(root, true);
+  assert.equal(fixture.plan.discussionScope?.sourceCommentCount, null);
+  assert.ok(fixture.plan.documents.every((item) => !item.path.includes("/comments/")));
+  assert.equal(fixture.plan.objects.length, fixture.publication.assets.size);
+  const { discussionScope: _scope, ...unacknowledged } = fixture.approval;
+  assert.throws(() => validateCloudApplyApproval(unacknowledged, fixture.plan), /exact source/);
+  const cloud = memoryCloud(fixture.plan);
+  assert.equal((await executeSc900CloudPlan(fixture.plan, fixture.approval, {
+    workspace: root, adapter: cloud.adapter, refresh: async () => quotas(fixture.plan.bucket), revalidate: fixture.revalidate,
+  })).status, "verified");
+  assert.deepEqual(cloud.documents.get(METADATA_PATHS[0])?.data.discussionScope, fixture.plan.discussionScope);
+}));

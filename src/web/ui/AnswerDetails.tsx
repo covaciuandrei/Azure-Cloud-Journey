@@ -5,6 +5,7 @@ import { hasNonImageContent } from "../image-presentation.js";
 import type { StudyDocument, StudyRepository } from "../types.js";
 import { compactJsonParagraphs } from "./codePresentation.js";
 import type { useExplanation } from "./useExplanation.js";
+import { SC900_UNAVAILABLE_DISCUSSIONS_NOTICE } from "../../domain/sc900Scope.js";
 
 function TeachingText({ text }: { text: string }) {
   return <div className="teaching-text">{text.split(/(```[\s\S]*?```)/g).filter(Boolean).map((block, index) => {
@@ -90,6 +91,7 @@ export function AnswerDetails({ document, repository, comparedImages, order, lea
 export function DiscussionBelow({ document, repository }: { document: StudyDocument; repository: StudyRepository }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+  if (document.question.discussionScope) return <p className="notice" role="note">{SC900_UNAVAILABLE_DISCUSSIONS_NOTICE}</p>;
   if (document.discussionEnabled === false || document.question.commentCount === 0) return null;
   return <section className="discussion-below" aria-label="Question discussion">
     <button className="discussion-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>

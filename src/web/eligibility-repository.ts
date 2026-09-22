@@ -1,6 +1,6 @@
-import { EligibilityPolicySchema, retirementFor, type EligibilityPolicy } from "../domain/eligibility.js";
+import { EligibilityPolicySchema, type EligibilityPolicy } from "../domain/eligibility.js";
 import type { StudyCatalog, StudyDocument, StudyRepository } from "./types.js";
-import { Sc900EligibilityPolicySchema } from "../domain/sc900Eligibility.js";
+import { Sc900EligibilityPolicySchema, type Sc900EligibilityPolicy } from "../domain/sc900Eligibility.js";
 import { assertExam, examBaseUrl, type ExamId } from "../domain/exams.js";
 import { loadSc900Manifest } from "./sc900-http.js";
 
@@ -21,7 +21,11 @@ export function httpEligibilityLoader(baseUrl: string, fetcher: typeof fetch = f
 
 export function withCurrentQuestions(repository: StudyRepository, readPolicy: () => Promise<unknown>): StudyRepository {
   const examId = repository.examId ?? "az104";
-  let pending: Promise<EligibilityPolicy> | undefined;
+  let pending: Promise<EligibilityPolicy | Sc900EligibilityPolicy> | undefined;
+  const retirementFor = (policy: EligibilityPolicy | Sc900EligibilityPolicy,
+    question: { id: string; sources: { questionNumber: number }[] }) =>
+    policy.retired.find((item) => item.questionId === question.id ||
+      question.sources.some((source) => item.sourceNumbers.includes(source.questionNumber)));
   const policy = () => {
     if (!pending) {
       const next = readPolicy().then((value) => {

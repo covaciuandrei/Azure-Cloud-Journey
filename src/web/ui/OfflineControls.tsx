@@ -5,8 +5,9 @@ import type { OfflineDownload } from "./useOfflineDownload.js";
 
 const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
 
-export function OfflineControls({ offline, getReferences }: {
+export function OfflineControls({ offline, getReferences, discussionsUnavailable = false }: {
   offline: OfflineDownload; getReferences: () => { references: OfflineReferences; warning: string | null };
+  discussionsUnavailable?: boolean;
 }) {
   const [confirmRemove, setConfirmRemove] = useState<"exam" | "all" | null>(null);
   const [referenceWarning, setReferenceWarning] = useState<string | null>(null);
@@ -18,7 +19,8 @@ export function OfflineControls({ offline, getReferences }: {
       <strong>{examLabel}: {state.ready ? "Available offline" : state.status === "paused" ? "Offline download interrupted" : "Offline study"}</strong>
       <span>{offline.preparing ? "Preparing download..." : busy ? `Saving ${megabytes(state.completedBytes)} / ${megabytes(state.totalBytes)}` :
         state.ready ? `${megabytes(state.totalBytes)} stored${state.updatedAt ? ` \u00b7 ${new Date(state.updatedAt).toLocaleDateString()}` : ""}` :
-          offline.supported ? "Download lessons, questions, discussions and images, with progress and size shown while saving." :
+          offline.supported ? discussionsUnavailable ? "Download lessons, reviewed answers, questions and images. Source discussions are unavailable."
+            : "Download lessons, questions, discussions and images, with progress and size shown while saving." :
             "Offline downloads are available in the hosted app or a production preview."}</span>
     </div>
     <div className="offline-actions">

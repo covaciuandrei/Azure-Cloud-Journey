@@ -122,6 +122,10 @@ export function createStudyRepository(
         await readJson(safeUrl(`content/${version}/catalog.json`), "Study catalog"),
       );
       assertExam(value, examId);
+      if (version === manifest.releaseId &&
+          JSON.stringify(value.discussionScope) !== JSON.stringify(manifest.discussionScope)) {
+        throw new Error("Study catalog discussion scope does not match its approved manifest");
+      }
       if (value.releaseId !== version ||
           (version === manifest.releaseId && value.sourceRevision !== manifest.sourceRevision)) {
         throw new Error("Study catalog release/source revision does not match the manifest");
@@ -159,11 +163,11 @@ export function createStudyRepository(
     const catalog = await loadCatalog(requestedRelease);
     const summary = catalog.questions.find((question) => question.id === id);
     if (!summary) throw new Error(`Unknown question ID: ${id}`);
-    return { summary, version: catalog.releaseId };
+    return { summary, version: catalog.releaseId, discussionScope: catalog.discussionScope };
   };
 
   const loadQuestion = async (id: string, requestedRelease?: string): Promise<StudyDocument> => {
-    const { summary, version } = await knownQuestion(id, requestedRelease);
+    const { summary, version, discussionScope } = await knownQuestion(id, requestedRelease);
     const key = `${version}/${id}`;
     const cached = questionPromises.get(key);
     if (cached) return cached;
@@ -180,6 +184,7 @@ export function createStudyRepository(
           value.question.readiness.grading !== summary.grading ||
           value.answers.provisional !== summary.provisional ||
           value.discussionEnabled !== summary.discussionEnabled ||
+          JSON.stringify(value.question.discussionScope) !== JSON.stringify(discussionScope) ||
           JSON.stringify(value.question.sources.map((source) => source.questionNumber).sort((a, b) => a - b)) !==
             JSON.stringify([...(summary.sourceNumbers ?? [summary.number])].sort((a, b) => a - b))) {
         throw new Error(`Question ${id} does not match its catalog/release metadata`);
@@ -195,9 +200,10 @@ export function createStudyRepository(
   };
 
   const loadDiscussion = async (id: string, requestedRelease?: string): Promise<StudyDiscussion> => {
-    const { summary, version } = await knownQuestion(id, requestedRelease);
+    const { summary, version, discussionScope } = await knownQuestion(id, requestedRelease);
     if (!summary.discussionEnabled || summary.commentCount === 0) {
-      return { schemaVersion: 1, ...(examId === "sc900" ? { examId } : {}), releaseId: version, questionId: id, comments: [] };
+      return { schemaVersion: 1, ...(examId === "sc900" ? { examId } : {}),
+        ...(discussionScope ? { discussionScope } : {}), releaseId: version, questionId: id, comments: [] };
     }
     const key = `${version}/${id}`;
     const cached = discussionPromises.get(key);

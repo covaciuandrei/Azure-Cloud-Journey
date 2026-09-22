@@ -5,6 +5,7 @@ import {
   type Sc900PublicationCaptureLedger, type Sc900QuestionsOnlyAuthorization, type Sc900ScopedCaptureLedger,
 } from "../../src/domain/sc900Scope.js";
 import type { Sc900Question } from "../../src/domain/sc900Bank.js";
+import type { Sc900DuplicateExclusion } from "../../src/domain/sc900Eligibility.js";
 
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
@@ -71,4 +72,14 @@ export function assertSc900ScopedAuthorization(
       ledger.assets.length !== receipt.images) {
     throw new Error("Owner authorization does not bind the exact SC900 questions, source scope, raw pages and original assets.");
   }
+
+}
+export function sc900DuplicateAdjudicationDigest(
+  exclusion: Omit<Sc900DuplicateExclusion, "adjudicationDigest"> | Sc900DuplicateExclusion,
+): string {
+  const { examId, category, questionId, number, sourceNumbers, duplicateOfQuestionId, reason, evidence, sources } = exclusion;
+  return sc900Hash("duplicate-adjudication", {
+    examId, category, questionId, number, sourceNumbers: [...sourceNumbers].sort((a, b) => a - b),
+    duplicateOfQuestionId, reason, evidence, sources,
+  });
 }

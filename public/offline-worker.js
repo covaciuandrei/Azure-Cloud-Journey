@@ -722,6 +722,10 @@
     catch (error) { fail("SC-900 offline availability is not valid JSON."); }
     var keys = ["schemaVersion", "examId", "activated", "kind", "bankReleaseId", "courseReleaseId",
       "sourceCaptureDigest", "approvedBy", "approvedAt"];
+    if (isPlainObject(record) && Object.prototype.hasOwnProperty.call(record, "discussionScope")) {
+      keys.push("discussionScope");
+      validateDiscussionScope(record.discussionScope);
+    }
     var course = job.plan.find(function (file) { return COURSE_PATH_RE.test(file.url); });
     if (!isPlainObject(record) || Object.keys(record).length !== keys.length ||
         Object.keys(record).some(function (key) { return keys.indexOf(key) === -1; }) ||
@@ -734,6 +738,18 @@
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(record.approvedAt) ||
         !Number.isFinite(Date.parse(record.approvedAt))) {
       fail("SC-900 offline availability does not activate this exact approved bank and course.");
+    }
+
+  }
+
+  function validateDiscussionScope(scope) {
+    var keys = ["scope", "authorizationDigest", "sourceCommentCount", "storedCommentCount", "discussionState", "discussionDisposition"];
+    if (!isPlainObject(scope) || Object.keys(scope).length !== keys.length ||
+        Object.keys(scope).some(function (key) { return keys.indexOf(key) === -1; }) ||
+        scope.scope !== "questions-answers-media" || typeof scope.authorizationDigest !== "string" || !SHA_RE.test(scope.authorizationDigest) ||
+        scope.sourceCommentCount !== null || scope.storedCommentCount !== 0 ||
+        scope.discussionState !== "unavailable" || scope.discussionDisposition !== "omitted-owner-authorized") {
+      fail("SC-900 offline discussion scope lacks an explicit owner-authorized omission.");
     }
   }
 
@@ -809,6 +825,14 @@
     }).then(function (records) {
       var availability = records[0], bank = records[1], pointer = records[2];
       var course = job.plan.find(function (file) { return COURSE_PATH_RE.test(file.url); });
+      if (availability.discussionScope || bank.discussionScope) {
+        validateDiscussionScope(availability.discussionScope);
+        validateDiscussionScope(bank.discussionScope);
+        if (availability.discussionScope.authorizationDigest !== bank.discussionScope.authorizationDigest ||
+            !bank.counts || bank.counts.comments !== 0 || bank.approvedCommentsDigest !== null) {
+          fail("SC-900 offline bank differs from its authorized discussion omission.");
+        }
+      }
       if (!isPlainObject(bank) || bank.examId !== "sc900" || bank.releaseId !== job.state.releaseId ||
           bank.captureLedgerDigest !== availability.sourceCaptureDigest ||
           !isPlainObject(pointer) || pointer.schemaVersion !== 3 || pointer.id !== "sc900" || pointer.active !== true ||
