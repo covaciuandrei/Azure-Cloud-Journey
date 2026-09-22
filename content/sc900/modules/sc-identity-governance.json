@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-identity-governance",
+  "title": "Identity governance and protection: access should stay justified",
+  "summary": "Follow the science fair through joining, changing duties and leaving, then respond to suspicious identities without confusing business approval with threat detection.",
+  "priority": "core",
+  "priorityReason": "Access reviews, privileged activation and identity risk solve different problems that remain after a user can sign in.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/id-governance/identity-governance-overview",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe Microsoft Entra ID Governance.",
+    "Describe access reviews.",
+    "Describe Privileged Identity Management capabilities.",
+    "Describe Microsoft Entra ID Protection."
+  ],
+  "lessons": [
+    {
+      "id": "sc-access-lifecycle-reviews-pim",
+      "title": "Give access a purpose, an owner and an end",
+      "summary": "Plan joiner, mover and leaver changes, review ongoing need, and activate privileged roles only when justified.",
+      "objectives": [
+        "Explain identity and access lifecycle governance.",
+        "Describe entitlement management and access packages.",
+        "Distinguish access review decisions from applied access changes.",
+        "Explain PIM eligibility, activation, approval and time limits."
+      ],
+      "sections": [
+        {
+          "id": "sc-governance-purpose-lifecycle",
+          "title": "A valid account can still have unjustified access",
+          "blocks": [
+            { "type": "paragraph", "text": "Radu helped prepare the science fair last term. He is still a genuine student, has a working passkey and uses a healthy laptop. None of those facts proves he should still edit this term's judging schedule. Authentication asks whether the caller controls an identity. Governance asks whether that identity should have particular access, for what reason, under whose responsibility and for how long. Microsoft Entra ID Governance supports that continuing process through identity lifecycle, access lifecycle and privileged-access capabilities. It is not merely another sign-in screen or a product that declares everybody trustworthy." },
+            { "type": "paragraph", "text": "A joiner arrives and needs appropriate access to begin work. A mover changes duties and needs old access reconsidered as well as new access added. A leaver no longer belongs to the organization or project and needs access removed according to policy. At school, these can mean joining a science-fair team, moving from registration desk to equipment support, and finishing the project. Removing a project assignment need not delete the student's entire school identity. Conversely, when somebody leaves the school completely, removing one project group is not a complete organization-wide offboarding plan." },
+            { "type": "paragraph", "text": "Lifecycle automation depends on trustworthy events and attributes, such as an approved start date or department change. Lifecycle Workflows can automate supported joiner, mover and leaver tasks, and provisioning can maintain accounts in integrated applications. Neither feature can safely infer a real-world job change from a nickname. The school must know which system owns the relevant data, which resources are connected and what happens if a task fails. Disabling sign-in, removing group assignments, revoking sessions, deprovisioning app accounts and retaining required records are separate actions with service-specific behavior. Governance coordinates them; it does not make every dependency instantaneous." }
+          ]
+        },
+        {
+          "id": "sc-entitlement-access-packages",
+          "title": "Bundle an approved job, not an entire organization",
+          "blocks": [
+            { "type": "paragraph", "text": "Entitlement management helps organize requests for access through access packages and policies. An access package can bundle supported resource roles, such as a group membership, an enterprise application's role and a SharePoint site role. For the science fair, a Volunteer package might include the planning group and the app's RegistrationHelper role. Its policy can define who may request it, who approves, how long the assignment lasts and whether continued access must be reviewed. The package represents a justified collection of access, not a software installer or a license that unlocks every Entra feature." },
+            { "type": "paragraph", "text": "The school should distinguish eligible requesters from approved recipients. Being allowed to ask for the Volunteer package does not necessarily mean the request is automatically approved. A package policy can require Ana's approval and a project end date. The approver should understand what the package grants, not merely recognize Radu's name. External collaborators can also be governed through supported entitlement scenarios, but guest lifecycle settings and billing have their own conditions. Do not assume every guest object disappears as soon as any one package ends, especially if other access or lifecycle arrangements exist." },
+            { "type": "paragraph", "text": "A mover exposes a common mistake. If Radu moves from registration desk to equipment support, adding EquipmentHelper while leaving RegistrationHelper forever creates accumulated privilege. The correct question is not only what access he now needs, but which earlier justification has ended. Temporary overlap might be valid while he trains a replacement, but it should have an owner and a deadline. A Conditional Access policy cannot answer that business question just because his sign-in is low risk. The workflow and the resource owner need to decide whether the old access remains appropriate." }
+          ]
+        },
+        {
+          "id": "sc-access-review-cycle",
+          "title": "Review continued need, then make the result real",
+          "blocks": [
+            { "type": "paragraph", "text": "Access reviews ask suitable reviewers to confirm whether existing access is still needed. They can address group memberships, application assignments, access packages and supported role assignments. The reviewer might be a group owner, a named responsible person or, in supported designs, the user themselves. A recurring review creates a routine instead of waiting for a breach or an audit. The question is about continuing business need, not whether the password was correct last week. Recommendations can help draw attention to inactivity, but a lack of recent sign-ins is evidence to consider rather than infallible proof that access is unnecessary." },
+            { "type": "paragraph", "text": "A review needs a clear scope, reviewers, deadline and outcome handling. Suppose the school reviews the cloud-managed, assigned ScienceFairVolunteers group and Ana denies Radu's old membership. During the review, a decision in a report is not an immediate revocation of that membership. The review must complete and its results must be applied, automatically if configured or through an authorized manual step. Afterwards, the school verifies the effective result. If Radu also has a separate direct application assignment, removing the reviewed group membership does not erase that separate route." },
+            { "type": "paragraph", "text": "The source of membership matters. Applying a review does not rewrite an on-premises-mastered group, override a dynamic membership rule or necessarily remove access inherited through another nested group. Those situations need action at the authoritative source or through the correct assignment path. An access review is therefore not a magic revoke-everything button. It creates accountable decisions and can apply supported changes within its scope. The school should preserve the reviewer, decision, reason and actual result so an auditor can distinguish a completed conversation from access that was truly removed." }
+          ]
+        },
+        {
+          "id": "sc-pim-eligible-active",
+          "title": "Be eligible to administer without administering all day",
+          "blocks": [
+            { "type": "paragraph", "text": "Some work needs powerful permissions for a short time. Ana, acting as the authorized IT coordinator, may need to repair a teaching VM during a maintenance window. Keeping that role active through every email-reading session increases the opportunity for misuse or mistakes. Microsoft Entra Privileged Identity Management, or PIM, supports controlling privileged access through eligibility, activation, time limits and oversight. It can manage supported Entra roles, Azure resource roles and group scenarios. PIM does not choose a sensible role automatically; the school must still select the minimum permissions and appropriate scope." },
+            { "type": "paragraph", "text": "Eligible means the person can perform the configured activation process when the role is needed. Active means the role's permissions can currently be used. A permanent eligible assignment is not the same as permanent active access: eligibility can remain while each activation is temporary. An assignment can also be time-bound. During activation, requirements may include MFA, a justification, an approval and a chosen duration within the configured maximum. Approval is a configurable requirement, not something every activation universally requires. When the policy does require it, a pending request is not already an active role." },
+            { "type": "paragraph", "text": "Just-in-time access reduces how long a privileged assignment is usable. If Ana activates a VM-management role for an hour, she receives the permissions of that role at its assigned scope, not automatically Owner over the subscription. When the activation ends, that temporary grant no longer supplies the permission. However, PIM expiry does not undo an unrelated permanent assignment that grants the same operation. Reviewing effective access remains necessary. Notifications and audit history help show who activated what and why; they are evidence for oversight, not a promise that every privileged action is harmless." },
+            { "type": "diagram", "title": "Eligibility is not yet active privilege", "description": "The activation requirements are configured by the organization. This example includes approval; it is not a claim that all PIM policies do.", "nodes": [
+              { "id": "sc-pim-eligible", "label": "Eligible", "detail": "Named role and scope", "column": 0, "row": 0 },
+              { "id": "sc-pim-request", "label": "Request activation", "detail": "Justification, proof and approval", "column": 1, "row": 0 },
+              { "id": "sc-pim-active", "label": "Time-limited active", "detail": "Use only assigned permissions", "column": 2, "row": 0 },
+              { "id": "sc-pim-end", "label": "Activation ends", "detail": "Temporary grant stops", "column": 2, "row": 2 },
+              { "id": "sc-pim-review", "label": "Review eligibility", "detail": "Is future activation still justified?", "column": 0, "row": 2 }
+            ], "edges": [
+              { "from": "sc-pim-eligible", "to": "sc-pim-request", "label": "Need a privileged task" },
+              { "from": "sc-pim-request", "to": "sc-pim-active", "label": "Configured requirements met" },
+              { "from": "sc-pim-active", "to": "sc-pim-end", "label": "Duration expires" },
+              { "from": "sc-pim-end", "to": "sc-pim-review", "label": "Keep governance separate" },
+              { "from": "sc-pim-review", "to": "sc-pim-eligible", "label": "Retain only if justified" }
+            ] }
+          ]
+        },
+        {
+          "id": "sc-worked-governance-term",
+          "title": "Worked application: one student's whole project lifecycle",
+          "blocks": [
+            { "type": "example", "title": "Join, move, review and leave with evidence", "scenario": "Assume the school has the necessary feature entitlements and integrated resources. Its Volunteer package grants membership in a cloud-managed assigned group and the RegistrationHelper app role. Ana approves requests; assignments have a project end date. Later, Radu changes duties.", "steps": [
+              { "action": "Approve Radu's Volunteer request only after confirming his assigned project job and the package's contents.", "why": "A joiner needs useful access, but eligibility to request is not evidence of business approval." },
+              { "action": "When he moves to equipment support, grant the approved new access and give the old registration assignment only a short documented handover period.", "why": "Mover governance prevents access from accumulating silently while allowing a justified transition." },
+              { "action": "At the handover deadline, have Ana deny the old Volunteer access-package assignment in its entitlement-management access review and complete the review.", "why": "The resource owner confirms that the earlier business need has ended rather than guessing from sign-in success. Reviewing the package assignment addresses the bundle, not just one group." },
+              { "action": "Apply the completed review's supported changes and verify removal of the package assignment and its old group and app access.", "why": "A recorded denial is not sufficient. Separate grants or authoritative sources can preserve access unless checked; the package review does not remove unrelated assignments." },
+              { "action": "At the project end, expire the remaining project package, verify downstream removal and retain required project records separately.", "why": "Leaving the project should end project access without deleting Radu's continuing student identity or inventing a data-retention policy." }
+            ], "result": "The school can explain when Radu received access, why it changed and how removal was verified. Governance follows the whole relationship, not merely the account's creation date." }
+          ]
+        },
+        {
+          "id": "sc-worked-pim-maintenance",
+          "title": "Worked application: a one-hour maintenance job",
+          "blocks": [
+            { "type": "example", "title": "Approve a bounded activation, not permanent ownership", "scenario": "Ana has an eligible Azure VM-management role at the teaching resource-group scope. Assume no other assignment grants the same operation. The configured PIM policy requires MFA, a reason and an approver, with a maximum activation of one hour.", "steps": [
+              { "action": "Before activation, record that Ana is eligible but cannot use this assignment's VM-management permissions yet.", "why": "Eligibility prepares a controlled route to privilege; it is not an already active grant." },
+              { "action": "Request the maintenance window, provide the required reason and proof, and wait for the designated approval.", "why": "The stated policy includes approval. The request remaining pending means the privileged assignment is not yet active." },
+              { "action": "After approval and activation, perform only the intended teaching-resource task within the allowed duration.", "why": "Activation preserves the role and scope. It does not upgrade Ana to subscription Owner or directory Global Administrator." },
+              { "action": "After the hour, check that the activation ended and retain its audit record.", "why": "The temporary grant should no longer authorize the operation. Any separately granted access would require its own review." }
+            ], "result": "The maintenance task has an accountable activation and a bounded privilege window rather than permanent broad authority." },
+            { "type": "prediction", "id": "sc-predict-review-not-applied", "prompt": "Ana has denied Radu's membership in a review that is still running. Automatic application is disabled. Must the membership already be gone?", "answer": "No. The review must complete and an authorized operator must apply its supported results.", "explanation": "Review decisions and actual authorization changes are separate states. After application, verify other access routes too." },
+            { "type": "callout", "tone": "exam", "title": "Choose the lifecycle question", "text": "Request a bundle for a job: entitlement management. Confirm continued need: access reviews. Temporarily activate administrative privilege: PIM. Detect a possibly compromised identity: ID Protection. Requiring MFA does not perform all four jobs." },
+            { "type": "paragraph", "text": "Licensing is capability-specific. The current licensing guide retains PIM and previously available core access-review and entitlement capabilities in Entra ID P2, while advanced governance capabilities and Lifecycle Workflows require Entra ID Governance or a qualifying suite. Guest billing and other connected services have separate rules. Do not simplify this to all governance is free, all governance is P2, or P2 contains every new review feature. The paper scenarios assume the required entitlements and avoid preview-only governance features. This course maps the announced October 21, 2026 objective outline, which is still future at the September 22 review date." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-gov-check-mover", "kind": "single", "prompt": "Radu moves from registration desk to equipment support. What makes this a governance task rather than just a new account task?", "choices": [
+          { "id": "add-only", "text": "All previous access should remain permanently because he is still a student.", "explanation": "Continuing school membership does not justify every old project permission." },
+          { "id": "review-old-new", "text": "Approve the new access and reconsider old access, allowing only documented time-limited overlap when justified.", "explanation": "Mover governance addresses both the new job and the end of the earlier justification." },
+          { "id": "reset-only", "text": "Reset his password; that automatically removes old application roles.", "explanation": "A credential reset does not replace authorization lifecycle management." }
+        ], "correctIds": ["review-old-new"], "explanation": "The role change should alter access according to business need, not merely increase the number of assignments." },
+        { "id": "sc-gov-check-package", "kind": "single", "prompt": "The school needs approved access to a planning group and a supported application role for a fixed project period. Which concept best fits?", "choices": [
+          { "id": "package", "text": "An entitlement-management access package with request, approval and expiration policies.", "explanation": "The package groups relevant access and gives it a governed assignment lifecycle." },
+          { "id": "firewall", "text": "A firewall rule that automatically grants every document role.", "explanation": "Network filtering does not supply application and group entitlements." },
+          { "id": "license-alone", "text": "A premium identity license with no access configuration.", "explanation": "Licensing a feature does not decide who should receive the package's permissions." }
+        ], "correctIds": ["package"], "explanation": "Choose the capability that governs the requested access bundle, not merely sign-in or network reachability." },
+        { "id": "sc-gov-check-apply", "kind": "single", "prompt": "A completed review denied Radu's cloud-managed assigned-group membership, but automatic application is off. What is needed next?", "choices": [
+          { "id": "already-universal", "text": "Nothing; the decision already removed every permission Radu holds anywhere.", "explanation": "A review decision is not automatic universal revocation, and its scope is limited." },
+          { "id": "enable-mfa", "text": "Require another MFA prompt to convert the denial into membership removal.", "explanation": "Authentication does not apply access-review decisions or remove existing group membership." },
+          { "id": "apply-verify", "text": "Apply the supported result and verify membership and other relevant access routes.", "explanation": "Application changes the reviewed assignment; separate direct or inherited access can still exist." }
+        ], "correctIds": ["apply-verify"], "explanation": "Completion, application and effective-access verification are different stages." },
+        { "id": "sc-gov-check-pim", "kind": "single", "prompt": "Ana is eligible for a VM-management role, but an activation requiring approval is still pending. What can she infer?", "choices": [
+          { "id": "not-active", "text": "This eligible assignment has not yet become active privilege.", "explanation": "The configured activation requirements must be met before its permissions can be used." },
+          { "id": "permanent-owner", "text": "PIM has made her permanent subscription Owner.", "explanation": "PIM does not replace the assigned role, scope or duration with universal ownership." },
+          { "id": "approval-irrelevant", "text": "Approval can be ignored because she already passed MFA.", "explanation": "The scenario explicitly requires both verification and approval." }
+        ], "correctIds": ["not-active"], "explanation": "Eligibility is the ability to activate through policy, not permission to bypass that policy." },
+        { "id": "sc-gov-check-expiry", "kind": "single", "prompt": "A PIM activation ends, but Ana also has a separate permanent role granting the same operation. Does PIM expiry prove she has lost all access to that operation?", "choices": [
+          { "id": "all-grants-erased", "text": "Yes, every role assignment is deleted when any activation ends.", "explanation": "Ending one temporary grant does not remove unrelated role assignments." },
+          { "id": "other-route", "text": "No. The separate permanent assignment must be evaluated and governed too.", "explanation": "Effective access can come from more than one grant, so governance must account for the other route." },
+          { "id": "change-tenant-name", "text": "Only if the tenant's display name changes.", "explanation": "A display name does not determine role-assignment effectiveness." }
+        ], "correctIds": ["other-route"], "explanation": "Just-in-time access is meaningful only when broad parallel grants are also controlled." }
+      ],
+      "takeaways": [
+        "Governance follows access through joining, moving and leaving.",
+        "Access packages bundle supported resource roles with policy, not unlimited permission.",
+        "An access-review decision must be applied through a supported path and its effect verified.",
+        "PIM eligibility, active privilege and assignment duration are separate concepts.",
+        "PIM approval is configurable, and activation does not expand the assigned role or scope.",
+        "Licensing differs between core P2 capabilities, advanced governance and guest scenarios."
+      ],
+      "sourceIds": ["sc-governance-overview", "sc-governance-licensing", "sc-reviews-overview", "sc-reviews-apply", "sc-pim-overview", "sc-governance-guide"]
+    },
+    {
+      "id": "sc-identity-risk-and-protection",
+      "title": "Investigate a risky identity, not just a blocked packet",
+      "summary": "Distinguish sign-in risk from user risk and follow a proportionate response through detection, access policy, remediation and verification.",
+      "objectives": [
+        "Describe Microsoft Entra ID Protection and its risk reports.",
+        "Distinguish risk about a sign-in from risk about an account.",
+        "Explain risk-based Conditional Access and supported remediation.",
+        "Separate identity risk from network attacks and business access reviews."
+      ],
+      "sections": [
+        {
+          "id": "sc-protection-risk-types",
+          "title": "Two different questions about compromise",
+          "blocks": [
+            { "type": "paragraph", "text": "The science-fair app records an unusual sign-in for Ana while she is teaching. Separately, the school receives a detection indicating that credentials associated with an account were leaked. Both concern identity, but they do not ask exactly the same question. Microsoft Entra ID Protection detects, helps investigate and supports remediation of identity-based risks. Its signals can inform Conditional Access policies and broader security investigations. It is not a promise that every compromise will be detected, or that every unusual sign-in is malicious. Risk is an evidence-based assessment that guides a response." },
+            { "type": "paragraph", "text": "Sign-in risk estimates whether a particular authentication request is being made by someone other than the legitimate account owner. Its focus is the event: this sign-in, in this context. User risk estimates whether the identity itself is compromised, considering relevant detections and activity. Leaked credentials are a clear example of evidence about the account, even if the next sign-in arrives from a familiar location. These categories can influence each other, but are not interchangeable labels. A safe-looking request does not automatically repair an account whose credential is known to an attacker." },
+            { "type": "paragraph", "text": "Risk levels such as low, medium and high express confidence, not a moral judgment about the student or teacher. Signals can include unfamiliar sign-in properties, anonymous IP usage, password spray evidence and leaked credentials. Some detections are calculated during authentication; others appear after offline analysis. Therefore a risk report can change after the initial request. A school trip, new laptop or privacy service may explain some unusual context, but that possibility is a reason to investigate, not a rule that travel-related alerts must always be dismissed. Use the actual evidence and known activity." }
+          ]
+        },
+        {
+          "id": "sc-risk-detection-policy-response",
+          "title": "A detector and a policy have different jobs",
+          "blocks": [
+            { "type": "paragraph", "text": "ID Protection produces risk information. A risk-based Conditional Access policy specifies the access response for the chosen population, resources and risk condition. For example, a sign-in-risk policy can require appropriate strong authentication when the configured risk level is met. A separate user-risk policy can require account-risk remediation. Microsoft warns not to combine sign-in-risk and user-risk conditions into one policy. Keeping them separate reflects the two questions and avoids requiring both conditions to match before protecting a situation that should trigger either response independently." },
+            { "type": "paragraph", "text": "The current risk-policy guidance recommends Require risk remediation for high user risk, with an authentication-strength requirement and an every-time sign-in-frequency session control. The response accounts for how the user signs in. For password-based users, supported remediation includes a secure password change after successful MFA. For passwordless users, session revocation and reauthentication address a different recovery path. This is more accurate than teaching that every risky identity must type a replacement password, regardless of its credential model. Fundamentals learners should understand the intended correction rather than memorize a particular portal screenshot." },
+            { "type": "paragraph", "text": "Preparation determines whether self-remediation works. Users need the required registered methods before an incident. A hybrid user's supported password remediation needs the appropriate writeback configuration and entitlement. A user who cannot complete the required proof may be blocked and need verified administrator assistance instead. A routine password change outside the risk-remediation flow should not be assumed to satisfy every secure-remediation requirement. Likewise, a policy configured only in report-only mode produces evaluation information rather than enforcing that policy's access controls. The school must distinguish a proposed response from an enabled one." }
+          ]
+        },
+        {
+          "id": "sc-risk-investigate-reports",
+          "title": "Read the evidence before clearing the alert",
+          "blocks": [
+            { "type": "paragraph", "text": "ID Protection exposes reports for risk detections, risky sign-ins and risky users. A detection is a piece of security evidence; the sign-in report organizes relevant events around authentication attempts; the user report helps examine the account-level situation. These views help investigators answer what happened, when it happened and which identity was involved. The correct response is not always reset every password. Investigators should compare the event with known activity, inspect associated evidence using their authorized role, and choose containment or recovery appropriate to the finding." },
+            { "type": "paragraph", "text": "Suppose Ana confirms through a trusted channel that she was teaching and did not initiate the suspicious request. That supports escalation, but the investigator should still record the evidence and examine related activity instead of merely clicking a status until it turns green. A confirmed compromise may require credential recovery, session handling and inspection of actions performed with the account. If evidence establishes a false positive, an authorized operator can mark the appropriate event safe or dismiss risk using the supported process. Dismissing a warning changes its treatment; it does not undo stolen data or automatically repair a compromised device." },
+            { "type": "paragraph", "text": "Security roles are also bounded. A role that can read reports need not be allowed to edit Conditional Access or reset every user's password. One trained operator might investigate while another authorized administrator performs recovery. Sending information to a SIEM such as Microsoft Sentinel can support correlation with other evidence, but it does not make ID Protection and Sentinel the same product. Keep the actions proportionate and auditable. A school's response should protect the account and learning environment without exposing a student's private information in an unnecessary public incident log." }
+          ]
+        },
+        {
+          "id": "sc-worked-risk-school",
+          "title": "Worked application: two alerts during the fair",
+          "blocks": [
+            { "type": "example", "title": "Respond to the event and the account separately", "scenario": "Assume the school has full ID Protection entitlement and two enabled, separately configured risk-based Conditional Access policies. Ana has registered the required methods. Her first alert concerns a suspicious sign-in; another password-based account has confirmed leaked-credential evidence. Neither account is part of a real lab.", "steps": [
+              { "action": "For the suspicious sign-in, inspect the event and apply the sign-in-risk policy's strong-authentication requirement.", "why": "The immediate question is whether this request belongs to the legitimate user. A configured challenge can let the genuine user prove control, while a failed challenge does not earn access." },
+              { "action": "Investigate Ana's explanation through an established school contact route and examine related activity.", "why": "Unusual context is not a conviction, and an attacker-controlled message is not reliable confirmation. The result must follow evidence." },
+              { "action": "For the leaked password, treat the account as a user-risk problem and follow the supported secure remediation flow.", "why": "A normal-looking next sign-in does not make the exposed password private again. In this password-based case, secure password change after MFA addresses that credential." },
+              { "action": "If either user cannot complete the required proof, use the verified administrator recovery process rather than disabling protection for everyone.", "why": "Self-remediation prerequisites can fail. A blanket exception would expose unrelated school users and would not establish the caller's identity." },
+              { "action": "Verify risk status, access results and relevant account activity after remediation, while checking that ordinary resource permissions remain appropriate.", "why": "Closing a risk finding and approving business access are separate outcomes. Neither guarantees that no earlier harmful action occurred." }
+            ], "result": "The school addresses each alert according to what it says: proof for a suspicious request, recovery for compromised credentials, and evidence-based follow-up for both." }
+          ]
+        },
+        {
+          "id": "sc-risk-product-boundaries",
+          "title": "Select the missing control, not the loudest product name",
+          "blocks": [
+            { "type": "paragraph", "text": "Compare four failures. A web server is overwhelmed by traffic: network and DDoS protection are relevant. A user's credential appears compromised: ID Protection and identity remediation are relevant. A genuine former volunteer still has unnecessary editing permission: governance and access review are relevant. A legitimate technician needs temporary elevated authority: PIM is relevant. The same school can need all four, but one control does not substitute for another. A risk detection might involve an IP address without becoming a firewall rule, and a low-risk sign-in does not justify permanent administrative privilege." },
+            { "type": "paragraph", "text": "Password Protection and ID Protection are especially easy to confuse. Password Protection evaluates weak password choices during change or reset. ID Protection reasons about possible identity compromise using detections and risk. A strong password can still be stolen, and a weak password choice does not itself describe a complete risky-sign-in investigation. Similarly, an access review might remove permissions from a perfectly uncompromised person because their project ended. Governance manages justified access, while protection responds to evidence that the identity may not be under its rightful user's control." },
+            { "type": "prediction", "id": "sc-predict-risk-vs-governance", "prompt": "Radu has a low-risk sign-in with a valid passkey, but his project ended last month. Does the low-risk result prove he should keep the score-editor role?", "answer": "No. It says nothing sufficient about his continuing business need for that role.", "explanation": "Governance must reconsider the ended project assignment. Risk detection and strong authentication do not approve a new access justification." },
+            { "type": "callout", "tone": "exam", "title": "Remember the subject of the question", "text": "Sign-in risk concerns a particular authentication request. User risk concerns possible identity compromise. Access review concerns continuing need. PIM concerns controlled privileged activation. DDoS protection concerns traffic attacks. A problem can involve several subjects, so identify the exact failure before selecting a product." }
+          ]
+        },
+        {
+          "id": "sc-risk-current-boundaries",
+          "title": "Current features do not erase licensing or dates",
+          "blocks": [
+            { "type": "paragraph", "text": "Full ID Protection investigation and risk-based policy capabilities require appropriate premium entitlement, typically Entra ID P2 or a qualifying suite. Lower tiers can expose limited risk information without granting the complete premium workflow. Some detections depend on signals from other licensed Defender products, and workload-identity risk has its own Workload Identities Premium requirements. The human-user examples in this lesson do not claim that every workload is covered by a policy targeting users. A service principal cannot be expected to answer Ana's phone-based challenge just because both identities appear in the directory." },
+            { "type": "paragraph", "text": "As checked on September 22, 2026, Microsoft announces retirement of legacy risk policies configured directly in ID Protection on October 1, 2026. That date is still future at this review, not a completed event. New teaching uses risk-based Conditional Access rather than directing learners to build a dependency on the legacy policy screens. This policy retirement is separate from the SC-900 outline's announced October 21, 2026 effective date. An old page using Azure AD is not automatically wrong, but an old policy workflow needs current lifecycle context. The optional lab stays on paper and never changes production protection." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-risk-check-event-account", "kind": "single", "prompt": "Which distinction correctly describes sign-in risk and user risk?", "choices": [
+          { "id": "event-account", "text": "Sign-in risk concerns a particular request; user risk concerns possible compromise of the identity.", "explanation": "The subjects differ even when detections from sign-ins contribute to account-level risk." },
+          { "id": "network-ports", "text": "Both are names for blocked network port ranges.", "explanation": "They describe identity risk, not firewall configuration." },
+          { "id": "permission-count", "text": "User risk is simply the number of folders a user can open.", "explanation": "Excess access needs governance, but risk is not merely a count of permissions." }
+        ], "correctIds": ["event-account"], "explanation": "Ask whether the evidence concerns this authentication attempt or the identity more broadly." },
+        { "id": "sc-risk-check-remediation", "kind": "single", "prompt": "A password-based account has confirmed leaked-credential evidence. Which response matches the lesson's enabled user-risk policy?", "choices": [
+          { "id": "ignore-familiar", "text": "Ignore it if the next request comes from the school's familiar IP address.", "explanation": "A familiar location does not make an exposed credential secret again." },
+          { "id": "give-owner", "text": "Grant Owner so the user can manage the alert.", "explanation": "Extra Azure authority does not remediate compromised credentials and adds risk." },
+          { "id": "secure-flow", "text": "Use the supported secure remediation flow, including required proof and secure password change for this password-based case.", "explanation": "The response addresses the account's credential compromise under the stated policy and prerequisites." }
+        ], "correctIds": ["secure-flow"], "explanation": "User-risk remediation differs from simply accepting a normal-looking sign-in or increasing permissions." },
+        { "id": "sc-risk-check-separate-policies", "kind": "single", "prompt": "The school wants a response when either a sign-in is risky or an account is risky. How should those conditions be represented according to current guidance?", "choices": [
+          { "id": "separate-policies", "text": "Use separate sign-in-risk and user-risk Conditional Access policies.", "explanation": "This follows the documented warning and preserves the independent response to each type of risk." },
+          { "id": "combine-both", "text": "Require both conditions in one policy so either one alone always triggers it.", "explanation": "Combining conditions does not express that promised either-or behavior and is specifically discouraged." },
+          { "id": "report-only-protection", "text": "Leave both in report-only mode and claim their access controls are already enforced.", "explanation": "Report-only evaluates a proposed policy rather than enforcing that policy's decision." }
+        ], "correctIds": ["separate-policies"], "explanation": "The detector supplies risk information; enabled policies supply the configured response." },
+        { "id": "sc-risk-check-product", "kind": "single", "prompt": "A former volunteer authenticates safely but still holds a project permission after the project ended. Which capability directly addresses that stated problem?", "choices": [
+          { "id": "ddos", "text": "DDoS protection.", "explanation": "Traffic availability protection does not review whether a person still needs an app role." },
+          { "id": "access-review", "text": "An access review and supported application of its removal decision.", "explanation": "The failure is unjustified continuing access, which requires governance rather than stronger authentication alone." },
+          { "id": "risk-is-approval", "text": "ID Protection automatically approves permanent access because the sign-in is low risk.", "explanation": "A low-risk assessment is not a business approval or role assignment." }
+        ], "correctIds": ["access-review"], "explanation": "Match the control to the failure: governance for ended business need, protection for possible identity compromise." }
+      ],
+      "takeaways": [
+        "Sign-in risk concerns an event; user risk concerns possible identity compromise.",
+        "Detections supply evidence, while risk-based Conditional Access specifies an enabled access response.",
+        "Password-based and passwordless remediation do not have identical recovery paths.",
+        "Self-remediation needs preparation, and unresolved cases need verified administrator assistance.",
+        "Identity risk, traffic attacks and unjustified permissions require different controls.",
+        "Full risk capabilities are licensed, and announced retirement dates must remain future-qualified."
+      ],
+      "sourceIds": ["sc-protection-overview", "sc-risk-types", "sc-risk-detections", "sc-risk-policies", "sc-risk-remediation"]
+    }
+  ],
+  "glossary": [
+    { "term": "Identity governance", "definition": "Processes and controls that keep identities and access justified throughout their lifecycle." },
+    { "term": "Joiner, mover, leaver", "definition": "Lifecycle stages for arriving, changing responsibilities and ending a relationship." },
+    { "term": "Access package", "definition": "A governed bundle of supported resource roles assigned under an entitlement-management policy." },
+    { "term": "Access review", "definition": "A process for confirming whether existing access remains appropriate and applying supported outcomes." },
+    { "term": "Eligible assignment", "definition": "An assignment whose permissions require the configured activation process before use." },
+    { "term": "Active assignment", "definition": "An assignment whose role permissions are currently available for use." },
+    { "term": "Just-in-time access", "definition": "Making privileged permission available for a limited period when the task requires it." },
+    { "term": "Sign-in risk", "definition": "An assessment that a particular authentication request might not belong to the legitimate user." },
+    { "term": "User risk", "definition": "An assessment that an identity might be compromised." },
+    { "term": "Risk remediation", "definition": "Supported steps that address detected identity risk rather than merely hiding an alert." }
+  ],
+  "sources": [
+    { "id": "sc-governance-overview", "url": "https://learn.microsoft.com/en-us/entra/id-governance/identity-governance-overview", "title": "Microsoft Entra ID Governance overview", "supports": "Identity, access and privileged lifecycles; provisioning, workflows and entitlement-management purposes." },
+    { "id": "sc-governance-licensing", "url": "https://learn.microsoft.com/en-us/entra/id-governance/licensing-fundamentals", "title": "Identity Governance licensing fundamentals", "supports": "Core P2 versus advanced governance capabilities, Lifecycle Workflows, PIM and separately scoped guest licensing." },
+    { "id": "sc-reviews-overview", "url": "https://learn.microsoft.com/en-us/entra/id-governance/access-reviews-overview", "title": "Access reviews overview", "supports": "Reviewing continuing access to groups, apps, packages and roles with suitable reviewers and recurrence." },
+    { "id": "sc-reviews-apply", "url": "https://learn.microsoft.com/en-us/entra/id-governance/complete-access-review", "title": "Complete and apply an access review", "supports": "Decisions versus applied results, automatic and manual application, and synced, nested and dynamic membership limits." },
+    { "id": "sc-pim-overview", "url": "https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-configure", "title": "Privileged Identity Management overview", "supports": "Eligible versus active, assignment duration, conditional approval, MFA, justification, scope and audit." },
+    { "id": "sc-governance-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "The published outline is effective October 21, 2026, still future at the September 22, 2026 review." },
+    { "id": "sc-protection-overview", "url": "https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection", "title": "Microsoft Entra ID Protection overview", "supports": "Detection, investigation, reports and remediation; P2, limited lower-tier visibility and workload licensing distinctions." },
+    { "id": "sc-risk-types", "url": "https://learn.microsoft.com/en-us/entra/id-protection/concept-risk-detection-types", "title": "Risk detection types and levels", "supports": "Account and event risk, confidence levels, real-time and offline analysis." },
+    { "id": "sc-risk-detections", "url": "https://learn.microsoft.com/en-us/entra/id-protection/concept-identity-protection-risks", "title": "Risk detections", "supports": "Examples of leaked credentials, unfamiliar properties and other detections, with signal-specific licensing." },
+    { "id": "sc-risk-policies", "url": "https://learn.microsoft.com/en-us/entra/id-protection/howto-identity-protection-configure-risk-policies", "title": "Configure risk policies", "supports": "Separate user and sign-in policies, remediation prerequisites, passwordless differences and announced October 1, 2026 legacy-policy retirement." },
+    { "id": "sc-risk-remediation", "url": "https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-risk-based-user", "title": "Require remediation for risky users", "supports": "Current Require risk remediation, authentication strength and mandatory every-time sign-in-frequency control." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: a term of access and two incident cards",
+    "purpose": "Distinguish lifecycle decisions, temporary privilege and identity-risk responses using fictional evidence.",
+    "prerequisites": ["A blank local worksheet or paper.", "Only fictional users, grants and alerts from the module; no tenant access is needed."],
+    "costWarning": "This paper exercise creates no Azure charges. Do not activate trials, start paid governance or risk features, change roles, run workflows, dismiss live risks or reset real accounts.",
+    "steps": [
+      "Write Radu's joining date, project role, approving owner and access-package end date.",
+      "Add a mover event and identify old access that should end after the documented handover.",
+      "Write one review denial, then separately record completion, application and verification of removal.",
+      "Draw Ana's eligible role, pending approval, one-hour active window and expiry, keeping its original scope.",
+      "Add a separate permanent grant and explain why expiry of the temporary activation does not remove it.",
+      "Create a suspicious-sign-in card and a leaked-credential card, then identify the risk subject for each.",
+      "Describe the supported response and an administrator-assistance path if a required proof is unavailable.",
+      "Add a traffic-flood card and explain why an identity policy alone is not the appropriate availability protection."
+    ],
+    "expectedResults": ["The lifecycle record accounts for both granting and removing access.", "The PIM timeline distinguishes eligibility from activation and preserves role scope.", "The incident decisions distinguish identity compromise, ended business need and network traffic problems."],
+    "cleanup": ["Discard the fictional incident cards or keep them only as local study notes.", "No real account, role, policy, resource or security alert needs cleanup."]
+  }
+}

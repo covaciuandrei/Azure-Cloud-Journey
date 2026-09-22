@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-authentication-access",
+  "title": "Authentication and access: prove, decide, permit",
+  "summary": "Protect the science-fair identities with suitable authentication, recovery and access decisions, without confusing a successful sign-in with permission to administer everything.",
+  "priority": "core",
+  "priorityReason": "Authentication methods, MFA, password management, Conditional Access and roles are distinct fundamentals that must work together.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/identity/authentication/overview-authentication",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe authentication methods.",
+    "Describe multifactor authentication.",
+    "Describe password protection and management capabilities.",
+    "Describe Microsoft Entra Conditional Access.",
+    "Describe Microsoft Entra roles and role-based access control."
+  ],
+  "lessons": [
+    {
+      "id": "sc-authentication-mfa-passwords",
+      "title": "Prove identity without making recovery the weak link",
+      "summary": "Reason about independent factors, passwordless sign-in, phishing resistance and supported recovery methods for an ordinary school user.",
+      "objectives": [
+        "Compare password, app, passkey and other authentication methods by purpose.",
+        "Explain why MFA needs independent factor categories rather than two passwords.",
+        "Distinguish SSPR, banned-password protection and smart lockout.",
+        "Qualify method support and licensing for cloud reset and hybrid writeback."
+      ],
+      "sections": [
+        {
+          "id": "sc-auth-method-purpose",
+          "title": "The method must match the operation",
+          "blocks": [
+            { "type": "paragraph", "text": "Radu knows his school account name. So does anybody who has seen his project email. The name identifies the account being claimed; an authentication method provides evidence that the caller controls that identity. A password is one possible proof, but a stolen password lets somebody else make the same claim. Authentication therefore needs more thought than whether a login page contains a password box. The school must consider what the proof establishes, whether an attacker can copy or relay it, whether the student can use it reliably, and what happens when the device holding it is lost." },
+            { "type": "paragraph", "text": "Microsoft Entra supports several methods, including passwords, Microsoft Authenticator experiences, passkeys, Windows Hello for Business, certificates, OATH verification codes and phone methods. An OATH code is a changing code produced by a registered authenticator or token; it is not the same as OAuth, a protocol used in authorization scenarios. The important learning habit is to ask which operation a method supports. Primary sign-in, additional verification, password reset and recovery after losing every credential are not interchangeable operations. A method that works for one can be unavailable for another." },
+            { "type": "table", "caption": "Selected capabilities from the current authentication matrix, not a complete deployment checklist", "headers": ["Method or experience", "Useful purpose", "Boundary to remember"], "rows": [
+              ["Passkey, including a FIDO2 security key", "Passwordless sign-in and strong authentication.", "The current matrix does not list passkeys as an SSPR method."],
+              ["Microsoft Authenticator push or software OATH code", "Additional verification and supported SSPR scenarios.", "Authenticator passwordless phone sign-in is a different experience and is not itself an SSPR method."],
+              ["Email one-time passcode", "Supported SSPR proof for tenant members; certain guest sign-in flows.", "Do not present ordinary member email OTP as a general workforce MFA sign-in method."],
+              ["Windows Hello for Business", "Device-bound passwordless sign-in.", "A Windows unlock gesture is not automatically an SSPR proof."],
+              ["Password", "A common primary sign-in proof.", "Knowing it can support a password change, but a forgotten password cannot prove its own reset."]
+            ] },
+            { "type": "paragraph", "text": "This table is deliberately selective. The live matrix also includes methods with special requirements and hardware OATH support labelled preview. Preview means the capability is not being presented as an unconditional generally available choice. A student does not need to memorize every row to select the right product, but must avoid the false rule that everything called an authentication method can reset a password. Administrators check the current matrix, tenant policy, supported client and user population before promising a method. The lesson's worked recovery case uses an ordinary internal user with explicitly supported, pre-registered proofs." }
+          ]
+        },
+        {
+          "id": "sc-independent-mfa-factors",
+          "title": "Two proofs are not always two factors",
+          "blocks": [
+            { "type": "paragraph", "text": "Multifactor authentication uses more than one factor category: something you know, something you have, or something you are. A password is knowledge. Control of a registered authenticator or hardware security key is possession. A fingerprint used to unlock an appropriate credential is a biometric factor. Two different passwords remain two pieces of knowledge, not MFA. A password plus the answer to a memorable question has the same problem. Counting screens is also misleading: one well-designed passwordless interaction can combine possession of a cryptographic credential with a local PIN or biometric unlock." },
+            { "type": "paragraph", "text": "Imagine an attacker learns Radu's password from another breached website. Requiring a separate registered authenticator prevents that password alone from completing the protected sign-in. This does not mean that all MFA methods resist every attack. A fake page can ask the victim to type a current verification code, or an attacker can pressure the victim to approve an unexpected notification. Number matching helps against indiscriminate push approvals, but an ordinary push notification is not equivalent to a phishing-resistant passkey. Independent factors increase protection; how they are implemented determines which attacks remain possible." },
+            { "type": "paragraph", "text": "Registration prepares the proof; policy determines when it is required; successful verification satisfies the challenge. These are three different events. Registering an authenticator does not mean every app request will display another prompt. A previous valid authentication claim may satisfy a requirement, subject to policy and session rules. Conversely, a method saved in an account is useless if the person cannot access it or the current policy does not accept it. Teach users never to approve a prompt they did not initiate and to use the school's verified support route if something unexpected happens." }
+          ]
+        },
+        {
+          "id": "sc-passwordless-phishing",
+          "title": "Passwordless and phishing-resistant are related, not identical",
+          "blocks": [
+            { "type": "paragraph", "text": "A passkey uses public-key cryptography rather than sending a reusable password to a website. The authenticator holds a private key, while the service holds the corresponding public key. During a genuine sign-in, the user unlocks the credential with a local gesture such as a PIN or fingerprint, and the authenticator proves control of the key. The PIN is not a second school password sent to the cloud. The credential is bound to the intended service, so a lookalike site cannot simply collect a reusable secret that works at the real service." },
+            { "type": "paragraph", "text": "A FIDO2 security key can carry a device-bound passkey. Other passkeys can be held on a supported device or synchronized through a credential provider, subject to the organization's policy. Do not assume every passkey is physically confined to one device, or that a synchronized passkey has the same attestation properties as a hardware-bound one. For fundamentals, remember the security property: the cryptographic proof is tied to the legitimate service. Phishing-resistant does not mean invulnerable to malware, stolen sessions, unsafe recovery or inappropriate permissions. The rest of the account and device still needs protection." },
+            { "type": "paragraph", "text": "Passwordless means the user does not supply a password for that sign-in. It does not, by itself, guarantee phishing resistance. Microsoft Authenticator passwordless phone sign-in and a passkey held in Authenticator are distinct experiences, even though the same app can be involved. Microsoft identifies passkeys and Windows Hello for Business among phishing-resistant choices; ordinary app codes and push approvals should not be given that label. When Ana chooses a method for sensitive school administration, she should name the required security property and check supported methods, rather than asking vaguely for an app on a phone." }
+          ]
+        },
+        {
+          "id": "sc-password-protection-recovery",
+          "title": "Prevent weak passwords, slow guesses and recover accounts",
+          "blocks": [
+            { "type": "paragraph", "text": "Self-service password reset, or SSPR, helps an eligible user regain access after forgetting a password or in supported lockout scenarios. The user proves identity through previously registered, allowed recovery methods, then sets a password that passes the relevant policy. This reduces help-desk work without making recovery an unauthenticated shortcut. A password change is different: the user knows the current password and wants a new one. Password writeback is different again: an eligible hybrid change or reset is written to the authoritative on-premises directory through configured components and permissions." },
+            { "type": "paragraph", "text": "Microsoft Entra Password Protection helps prevent weak password choices. Its global banned-password list and, where licensed, an organization's custom list are checked during password changes and resets. A school might add organization-specific weak terms, such as a widely known school nickname. The service evaluates normalized terms and variants, not just literal text equality. It is not accurate to promise that every password containing any banned substring is always rejected; the overall evaluation matters. This feature improves password selection. It does not send an MFA challenge, restore a forgotten password or remove excessive document permissions." },
+            { "type": "paragraph", "text": "Smart lockout addresses attempted sign-ins rather than the initial password choice. It helps limit malicious guessing and can distinguish familiar from unfamiliar sign-in behavior, reducing the chance that attackers lock legitimate users out. That is not a guarantee that genuine users can never be locked out. Default smart lockout is available to Entra customers, while customizing settings requires qualifying premium licensing. Password Protection's global cloud-only protection is also distinct from licensed custom lists and on-premises protection. These qualifications prevent the misleading claim that every password-related feature is free in every deployment." }
+          ]
+        },
+        {
+          "id": "sc-sspr-boundaries",
+          "title": "Recovery depends on entitlement, registration and account type",
+          "blocks": [
+            { "type": "paragraph", "text": "For an ordinary user, SSPR needs the user to be in scope, have the required entitlement and possess enough registered methods allowed by policy. Offering several possible methods is not the same as requiring several proofs during a reset. If a policy needs two proofs and Radu registered only one usable method, the missing preparation cannot be fixed by guessing another password. The school needs a verified assistance process. Nor should a lesson assume that Radu's passkey automatically counts as one SSPR proof: the current authentication matrix says it does not." },
+            { "type": "table", "caption": "Three licensing questions, checked September 22, 2026", "headers": ["Scenario", "Documented examples of entitlement", "What that does not imply"], "rows": [
+              ["Cloud-only password change when the password is known", "Included in Entra ID Free.", "Not a blanket forgotten-password reset entitlement."],
+              ["Cloud-only forgotten-password reset", "Microsoft 365 Business Standard, Business Premium, or Entra ID P1/P2 are listed examples.", "Not permission to use every premium identity feature."],
+              ["Hybrid password change or reset with on-premises writeback", "Business Premium or Entra ID P1/P2 are listed examples.", "Business Standard alone does not provide writeback; connectors, permissions and policies also matter."]
+            ] },
+            { "type": "paragraph", "text": "Administrator recovery is a separate policy case. Microsoft's dedicated password-policy article documents a normally stronger two-gate administrator reset policy, prohibits security questions for administrators, and describes trial, free-tenant and tenant-configuration exceptions. It also documents a separate setting that can disable administrator SSPR and notes that administrator SSPR does not simply follow every ordinary Authentication methods policy setting. Do not test student recovery with an administrator account and assume the result represents students. Inspect the actual policy and account role before making an operational promise." },
+            { "type": "callout", "tone": "caution", "title": "Source scope and dated phone transition", "text": "The SSPR deep-dive introduction conflicts with the dedicated policy article about administrator enablement. This course uses the dedicated administrator-policy explanation and an ordinary-user worked case. Separately, the September 16, 2026 phone-retirement FAQ includes SSPR in the public-cloud workforce scope: Microsoft-provided SMS/voice is scheduled to retire February 1, 2027 for most users, including internal guests, and July 1, 2027 for Global Administrators and external users. These are future dates. External ID customer tenants, Azure AD B2C and other cloud environments are not covered by that same announced schedule; do not generalize it to every identity service." }
+          ]
+        },
+        {
+          "id": "sc-worked-auth-recovery",
+          "title": "Worked application: secure Radu before the deadline",
+          "blocks": [
+            { "type": "example", "title": "A sign-in plan and a separate reset plan", "scenario": "Radu is an ordinary cloud-managed internal school user. Assume the school has a qualifying cloud-reset license, a configured two-proof SSPR policy, and has verified that his alternate email and app verification code are supported, allowed and registered. The school also supports a passkey for his normal sign-in.", "steps": [
+              { "action": "Choose the passkey for normal sign-in and explain the local PIN or biometric gesture.", "why": "The method avoids a reusable school password at sign-in and provides phishing-resistant proof bound to the legitimate service." },
+              { "action": "Explain that two memorized passwords would not provide the same multifactor protection.", "why": "Both are knowledge factors; the passkey combines control of the credential with user verification." },
+              { "action": "Before a password problem, confirm both supported reset proofs remain usable through the school's approved process.", "why": "SSPR depends on preparation and policy. The sign-in passkey is not silently counted as a reset method." },
+              { "action": "If he forgets a password needed elsewhere, use the approved SSPR path and both configured proofs, then choose a password accepted by protection policies.", "why": "Recovery verifies Radu before changing the secret, and Password Protection separately rejects weak choices." },
+              { "action": "Treat repeated malicious password guesses as a sign-in protection issue and missing folder permission as an authorization issue.", "why": "Smart lockout addresses guessing; neither lockout nor a successful reset grants new document access." }
+            ], "result": "Radu has a safer sign-in method and a separately justified recovery route. Each feature solves a named problem without being mistaken for an all-purpose security switch." },
+            { "type": "prediction", "id": "sc-predict-two-passwords", "prompt": "A school adds a second memorized password after the first password. Has it added a second authentication factor category?", "answer": "No. Both proofs are something the user knows.", "explanation": "MFA is about distinct factors, not the number of screens or secret strings. A supported possession-based or biometric factor changes that reasoning." },
+            { "type": "callout", "tone": "exam", "title": "Read the verb in the problem", "text": "Reject a weak new password: Password Protection. Limit guessing attempts: smart lockout. Recover a forgotten password: SSPR. Prove identity with independent factors: MFA. Resist a fake sign-in site's credential relay: choose a phishing-resistant method. None of these verbs means assign Azure Owner." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-auth-check-method", "kind": "single", "prompt": "Radu can sign in with a passkey. Can the school assume that passkey is an SSPR verification method?", "choices": [
+          { "id": "all-methods-reset", "text": "Yes, every primary sign-in method is automatically an SSPR method.", "explanation": "The current matrix separates sign-in capabilities from SSPR support." },
+          { "id": "check-reset-support", "text": "No. Passkeys are not listed for SSPR in the current matrix, so a supported recovery route is needed.", "explanation": "Strong sign-in does not remove the requirement to plan allowed and registered reset methods." },
+          { "id": "passkey-is-password", "text": "Yes, because a passkey simply sends his old password more safely.", "explanation": "A passkey proves control of a cryptographic key rather than forwarding his old password." }
+        ], "correctIds": ["check-reset-support"], "explanation": "Check support for the operation being performed, not only the method's sign-in strength." },
+        { "id": "sc-auth-check-factors", "kind": "single", "prompt": "Which statement correctly describes factor independence?", "choices": [
+          { "id": "two-secrets", "text": "Two different memorized passwords always provide MFA.", "explanation": "Both belong to the knowledge category, even if entered on different screens." },
+          { "id": "two-prompts", "text": "An MFA sign-in must always show two separate prompts.", "explanation": "A supported passwordless method can combine possession and local user verification in one interaction." },
+          { "id": "different-categories", "text": "A password plus control of a separately registered authenticator can supply different factors.", "explanation": "Knowledge and possession differ; the implementation and policy still determine how the proof is accepted." }
+        ], "correctIds": ["different-categories"], "explanation": "Count independent factor categories rather than clicks, pages or password strings." },
+        { "id": "sc-auth-check-protection", "kind": "single", "prompt": "Which pairing correctly separates prevention, sign-in resistance and recovery?", "choices": [
+          { "id": "correct-separation", "text": "Password Protection checks weak new passwords; smart lockout limits guessing; SSPR supports eligible recovery.", "explanation": "The three controls act at different stages and address different failures." },
+          { "id": "lockout-makes-strong", "text": "Smart lockout changes every weak password into a strong one.", "explanation": "Lockout affects sign-in attempts; it does not rewrite users' password choices." },
+          { "id": "reset-gives-permission", "text": "SSPR grants document permissions after any successful reset.", "explanation": "A reset restores credential use, not new resource authorization." }
+        ], "correctIds": ["correct-separation"], "explanation": "Choose the feature that changes the failed stage of the access process." },
+        { "id": "sc-auth-check-writeback", "kind": "single", "prompt": "The school has Business Standard and cloud-only SSPR. Is that alone enough to promise hybrid password writeback?", "choices": [
+          { "id": "everything-in-reset", "text": "Yes, every reset entitlement includes on-premises writeback.", "explanation": "The current licensing table explicitly separates cloud reset from hybrid writeback." },
+          { "id": "separate-requirements", "text": "No. Qualifying writeback licensing and a correctly configured on-premises path are also required.", "explanation": "Business Premium or qualifying Entra premium entitlement are listed examples, and licensing does not configure the connector." },
+          { "id": "federation-license", "text": "Yes, as long as someone renames the tenant to Federated.", "explanation": "Names neither configure federation nor establish writeback entitlement or functionality." }
+        ], "correctIds": ["separate-requirements"], "explanation": "A paid product entitlement and a working integration are separate prerequisites." },
+        { "id": "sc-auth-check-phishing", "kind": "single", "prompt": "A sensitive sign-in needs a proof bound to the legitimate service rather than a code that could be relayed through a fake page. Which choice best fits?", "choices": [
+          { "id": "sms-code", "text": "A text-message code, because every MFA method is phishing-resistant.", "explanation": "MFA improves on password-only access, but codes can still be stolen or relayed." },
+          { "id": "push-equivalence", "text": "Any ordinary push approval, because it is identical to a passkey in Authenticator.", "explanation": "The ordinary push experience and passkey experience have different security properties." },
+          { "id": "passkey", "text": "A supported passkey with local user verification.", "explanation": "Its origin-bound cryptographic proof addresses verifier impersonation and credential relay." }
+        ], "correctIds": ["passkey"], "explanation": "Specify phishing resistance, not merely the presence of a second step." }
+      ],
+      "takeaways": [
+        "Primary sign-in, MFA, SSPR and complete account recovery have different method support.",
+        "Two passwords are not two factor categories, and one passwordless interaction can satisfy MFA.",
+        "Passkeys provide phishing-resistant cryptographic proof; not every passwordless or app-based method does.",
+        "Password Protection, smart lockout and SSPR solve different problems.",
+        "Cloud change, cloud reset and hybrid writeback have different entitlement and setup requirements.",
+        "Administrator exceptions and announced phone-retirement dates must not be generalized to all users."
+      ],
+      "sourceIds": ["sc-auth-matrix", "sc-mfa", "sc-passkeys", "sc-sspr-licenses", "sc-sspr-policy", "sc-sspr-flow", "sc-password-ban", "sc-smart-lockout", "sc-phone-timeline", "sc-phone-faq"]
+    },
+    {
+      "id": "sc-conditional-access-and-roles",
+      "title": "Decide whether this request is acceptable, then apply permission",
+      "summary": "Use Conditional Access for contextual access requirements and roles for permitted operations, keeping the school directory separate from Azure resource administration.",
+      "objectives": [
+        "Explain signals, decisions, grant controls and session controls in Conditional Access.",
+        "Compare customizable Conditional Access with security defaults.",
+        "Distinguish Microsoft Entra roles from Azure RBAC roles and scopes.",
+        "Trace authentication, policy and authorization through a school request."
+      ],
+      "sections": [
+        {
+          "id": "sc-ca-signals-decision",
+          "title": "A correct password is only part of the decision",
+          "blocks": [
+            { "type": "paragraph", "text": "Ana needs to open the science-fair judging application. The school would like more protection for that application than for reading a public event timetable. It also cares whether she is using a managed school laptop or an unknown personal computer. Microsoft Entra Conditional Access evaluates configured conditions and applies access requirements. A useful mental model is signals plus a decision plus enforcement. It does not replace authentication: it can require stronger authentication as part of the access decision. It also does not replace the application's rules about who may edit final scores." },
+            { "type": "paragraph", "text": "Signals can include the user or group, target application, device information, network or IP location, and identity risk where licensed. A policy might say that members of the judging staff accessing the results app must use a compliant device and a specified authentication strength. An IP address is context, not proof of a person's honesty or nationality. A compliant-device requirement also depends on a service supplying valid compliance information. Calling a laptop SchoolLaptop in its display name is not a substitute for that signal. Good reasoning checks the actual configured condition rather than inferring trust from a label." },
+            { "type": "paragraph", "text": "Policies produce decisions such as blocking access or granting access subject to controls. A grant control can require MFA, an authentication strength, or a compliant device. Authentication strength narrows which methods can satisfy the requirement, for example selecting phishing-resistant MFA rather than accepting every available MFA method. If a policy requires all of its selected controls, completing only one is insufficient. Administrators can also configure alternatives in supported cases. The problem must state the intended combination; otherwise assuming that MFA always overrides a device failure gives the wrong result." },
+            { "type": "diagram", "title": "Policy does not create the application permission", "description": "Context and configured rules determine access conditions. The destination still checks what the caller may do.", "nodes": [
+              { "id": "sc-ca-context", "label": "Signals", "detail": "User, app, device, location, risk", "column": 0, "row": 0 },
+              { "id": "sc-ca-policy", "label": "Policy decision", "detail": "Block or require controls", "column": 1, "row": 0 },
+              { "id": "sc-ca-proof", "label": "Grant controls", "detail": "Required authentication and device state", "column": 2, "row": 0 },
+              { "id": "sc-ca-session", "label": "Session controls", "detail": "Supported session behavior", "column": 1, "row": 2 },
+              { "id": "sc-ca-permission", "label": "App authorization", "detail": "May Ana edit these scores?", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "sc-ca-context", "to": "sc-ca-policy", "label": "Evaluate context" },
+              { "from": "sc-ca-policy", "to": "sc-ca-proof", "label": "Require proof and conditions" },
+              { "from": "sc-ca-policy", "to": "sc-ca-session", "label": "Set session requirements" },
+              { "from": "sc-ca-proof", "to": "sc-ca-permission", "label": "Access still needs permission" }
+            ] }
+          ]
+        },
+        {
+          "id": "sc-ca-session-and-limits",
+          "title": "Grant controls and session controls answer different questions",
+          "blocks": [
+            { "type": "paragraph", "text": "A grant control addresses the conditions for access. A session control addresses supported behavior during the resulting session, such as sign-in frequency or persistent browser sessions. Sign-in frequency can require users to reauthenticate after an interval or in particular situations. It is not an application role, and it does not mean a student receives editing permission for exactly that interval. Some session controls require application support or another licensed service. A sign-in frequency policy is also not a universal stopwatch that instantly deletes every cookie held by every third-party application." },
+            { "type": "paragraph", "text": "Conditional Access is evaluated in the identity access process, with enforcement after first-factor authentication as described in Microsoft's overview. It is not the frontline mechanism for absorbing a denial-of-service attack against the public school website. A firewall or DDoS protection addresses network traffic problems that an MFA requirement cannot solve. Similarly, Conditional Access does not scan every file for malware or automatically discover whether a teacher still has a valid business reason for a folder. Device security, application protection, governance and network controls remain separate layers." },
+            { "type": "paragraph", "text": "A tenant can have several applicable policies. Do not imagine them as a simple first-match firewall list in which the first allow rule cancels everything below it. Applicable requirements must be satisfied, and an applicable block decision prevents access. In a design review, list the policy population, target resource and conditions before predicting the outcome. Report-only mode helps evaluate a proposed policy without enforcing that policy's access decision, but it is not the same as protection already being on. A real rollout also needs controlled pilots, recovery arrangements and careful handling of emergency access." }
+          ]
+        },
+        {
+          "id": "sc-defaults-and-entitlement",
+          "title": "A baseline is not a custom policy editor",
+          "blocks": [
+            { "type": "paragraph", "text": "Security defaults offers a preconfigured identity-security baseline at no extra licensing cost. It includes MFA registration, MFA requirements for administrators and users when needed, and blocking legacy authentication. This is useful for an organization that needs basic protection without designing a collection of custom policies. It is not a menu for writing a special exception for every class, application or location. The baseline evolves, so old descriptions of its exact prompts should not be treated as permanent guarantees. The fundamentals distinction is a managed baseline versus policies tailored to an organization's requirements." },
+            { "type": "paragraph", "text": "Conditional Access is the customizable option and normally requires Entra ID P1 or an included entitlement, such as Microsoft 365 Business Premium. User-risk and sign-in-risk policies require ID Protection entitlement, typically Entra ID P2 or a qualifying suite. Other connected features, such as device compliance services, may have their own licensing. Therefore having a directory is not evidence that all these controls are licensed. Equally, buying a license does not design safe rules or register users' methods. Entitlement enables use of a capability; configuration determines its behavior." },
+            { "type": "paragraph", "text": "Organizations replacing security defaults with Conditional Access disable the baseline as part of a planned transition and establish equivalent or stronger coverage, rather than stacking both as independently customizable policy systems. These lessons do not ask you to make that change in a real tenant. Nor should you read a legacy per-user MFA status of Disabled as proof that a person has no MFA requirement: security defaults or Conditional Access can enforce MFA through another mechanism. Look at the governing policy and sign-in result instead of trusting one old status field." }
+          ]
+        },
+        {
+          "id": "sc-directory-versus-resource-roles",
+          "title": "Different doors have different role systems",
+          "blocks": [
+            { "type": "paragraph", "text": "A role groups permissions for a type of job. Role-based access control lets administrators assign those permissions to an appropriate principal rather than giving everyone unrestricted authority. Microsoft Entra roles manage directory resources and identity services. For example, a User Administrator can perform supported user-management tasks, while a Conditional Access Administrator manages Conditional Access policies. Role permissions have boundaries: a role allowed to reset ordinary users is not automatically allowed to reset every more privileged administrator. Choose a role from its documented operations, not from how senior its name sounds." },
+            { "type": "paragraph", "text": "Azure RBAC controls operations on Azure resources. Its role assignment connects a principal, a role definition and a scope: who, what actions, and where. Reader can view resource-management information; Contributor can manage resources but cannot assign Azure roles; Owner additionally permits Azure role assignment within scope. More focused roles are preferable when they fit the job. These management roles are not a universal promise of access to every piece of application data. Reading stored blobs, editing the judging app's records and managing a virtual machine can use different permissions." },
+            { "type": "paragraph", "text": "Scope matters as much as the role name. An Azure role assigned to the teaching resource group should not be described as a grant over an unrelated live resource group. Broader assignments can be inherited by resources below them, and adding a narrow Reader role does not generally cancel a separate broader Contributor grant. In Entra, roles have their own supported scopes, such as the whole directory or an administrative unit for supported tasks. A resource group is not an Entra administrative unit. The school's identity organization and Azure resource organization are different structures." },
+            { "type": "paragraph", "text": "Global Administrator is a highly privileged Entra role, not automatic Azure subscription Owner. Azure Owner is not automatic Global Administrator either. There is a deliberate Global Administrator access-elevation mechanism for Azure access management, but that explicit action is not a reason to collapse the two systems in a fundamentals answer. A question that asks who can maintain users points toward Entra roles. A question that asks who can manage a virtual machine at a resource scope points toward Azure RBAC. Successful MFA grants neither role by itself." }
+          ]
+        },
+        {
+          "id": "sc-worked-ca-score-request",
+          "title": "Worked application: can Ana open the score editor?",
+          "blocks": [
+            { "type": "example", "title": "Evaluate the stated policy before the app role", "scenario": "Assume Ana is in JudgingStaff, has the app's ScoreEditor permission, and has the required licensing. An enabled Conditional Access policy targets that group and app, requiring both phishing-resistant MFA and a compliant device. No other policy changes the result.", "steps": [
+              { "action": "Evaluate Ana on a compliant school laptop using a supported passkey.", "why": "The group and app match, and both stated grant requirements can be satisfied. The passkey and compliant state solve different conditions." },
+              { "action": "Check ScoreEditor at the destination before allowing a score change.", "why": "Passing Conditional Access permits access under the policy; the app's authorization still determines the operation." },
+              { "action": "Repeat the prediction for an unmanaged personal device that is not marked compliant, even if Ana uses the same passkey.", "why": "The policy requires both controls. Strong authentication does not cancel the missing compliant-device condition." },
+              { "action": "Compare Radu on the compliant laptop, assuming the same access conditions but no ScoreEditor permission.", "why": "Even if he passes authentication and policy, he remains unauthorized to edit scores. Assigning a stronger authentication method is not the missing app permission." }
+            ], "result": "Ana's permitted request succeeds under the stated assumptions, the noncompliant-device request fails the policy, and Radu cannot edit scores without the separate application authorization." }
+          ]
+        },
+        {
+          "id": "sc-worked-role-scope",
+          "title": "Worked application: divide identity help from Azure maintenance",
+          "blocks": [
+            { "type": "example", "title": "Two jobs, two authorization boundaries", "scenario": "The school asks one approved technician to maintain ordinary student accounts and another to view Azure teaching resources. Neither needs unrestricted control of the entire environment. All reasoning stays on paper.", "steps": [
+              { "action": "Select an appropriate Entra user-management role for the approved account-maintenance tasks and confirm its supported scope.", "why": "The objects being managed are directory users. Azure VM Contributor would not supply the required directory administration." },
+              { "action": "Assign Azure Reader at the teaching resource-group scope for the resource-inspection task.", "why": "The technician needs management-plane visibility, not modification or permission-assignment powers over the live subscription." },
+              { "action": "List a forbidden task beside each design: resetting a more privileged account without authority, or changing the live website's VM.", "why": "A negative example makes least privilege concrete and prevents the word administrator from hiding the boundary." },
+              { "action": "Keep authentication requirements in the sign-in policy rather than treating either role assignment as an MFA setting.", "why": "Permissions and the proof required to use an identity are separate controls." }
+            ], "result": "The job, role system and scope agree. Neither technician receives a permanent universal administrator role just to solve a narrow task." },
+            { "type": "prediction", "id": "sc-predict-ca-not-role", "prompt": "Ana meets every Conditional Access requirement but has no Azure role on the teaching resource group. Does the successful policy result let her restart its virtual machine?", "answer": "No. The required Azure resource authorization is still missing.", "explanation": "Conditional Access establishes acceptable access conditions. Azure RBAC evaluates the allowed Azure operation and scope." },
+            { "type": "callout", "tone": "exam", "title": "Separate proof, context and permitted operation", "text": "Authentication proves a claim to identity. Conditional Access applies contextual requirements. Roles and application permissions authorize operations. Security defaults supplies a baseline, not fine-grained customization. Buying a license, passing MFA or owning a device does not automatically supply the other missing pieces." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-access-check-both", "kind": "single", "prompt": "An enabled policy requires both phishing-resistant MFA and a compliant device. Ana satisfies the first condition but her device is not compliant. What follows under those assumptions?", "choices": [
+          { "id": "mfa-overrides", "text": "MFA automatically overrides the device requirement.", "explanation": "The policy explicitly requires both conditions; authentication strength is not a device exception." },
+          { "id": "device-still-required", "text": "The policy's access requirements are not satisfied.", "explanation": "The missing compliant state prevents access despite the valid strong authentication." },
+          { "id": "becomes-reader", "text": "Conditional Access automatically assigns Azure Reader instead.", "explanation": "Conditional Access does not convert failed conditions into Azure role assignments." }
+        ], "correctIds": ["device-still-required"], "explanation": "Read how the selected controls are combined before predicting the decision." },
+        { "id": "sc-access-check-session", "kind": "single", "prompt": "Which example is a session control rather than a grant control or resource permission?", "choices": [
+          { "id": "frequency", "text": "Requiring reauthentication according to a supported sign-in frequency setting.", "explanation": "It controls session behavior, subject to how the application participates in authentication." },
+          { "id": "vm-role", "text": "Assigning permission to restart a VM.", "explanation": "That is Azure resource authorization, not a session control." },
+          { "id": "compliant", "text": "Requiring a device to be marked compliant before granting access.", "explanation": "That is a grant requirement rather than a session-lifetime setting." }
+        ], "correctIds": ["frequency"], "explanation": "Session controls do not assign app roles or replace grant requirements." },
+        { "id": "sc-access-check-defaults", "kind": "single", "prompt": "The school wants a different access condition for one sensitive app and selected staff groups. Which approach fits?", "choices": [
+          { "id": "custom-defaults", "text": "Edit arbitrary per-app exceptions inside security defaults.", "explanation": "Security defaults is a preconfigured baseline rather than a custom policy system." },
+          { "id": "password-only", "text": "Turn off all protection because app-specific requirements are impossible.", "explanation": "Conditional Access exists to express contextual and targeted requirements." },
+          { "id": "licensed-ca", "text": "Design licensed Conditional Access policies and plan the transition from the baseline safely.", "explanation": "Conditional Access supports customization; licensing and continuity of protection must also be considered." }
+        ], "correctIds": ["licensed-ca"], "explanation": "The need for targeting and customization distinguishes Conditional Access from the baseline." },
+        { "id": "sc-access-check-role-systems", "kind": "multiple", "prompt": "Select the two accurate statements about the school's role design.", "choices": [
+          { "id": "directory-role", "text": "An Entra user-management role is relevant to maintaining ordinary student directory accounts.", "explanation": "The task concerns directory objects, subject to the role's supported permissions and scope." },
+          { "id": "scoped-reader", "text": "Azure Reader scoped to the teaching resource group fits viewing that group's resource-management information.", "explanation": "The role and scope match resource inspection without granting change authority." },
+          { "id": "global-owner", "text": "Every Global Administrator automatically has Azure Owner on every subscription.", "explanation": "The role systems are separate by default; an explicit elevation path does not make the statement true." },
+          { "id": "mfa-authorizes", "text": "Successful MFA grants whichever Azure role the user asks for.", "explanation": "Authentication is not a role-assignment authority or automatic authorization grant." }
+        ], "correctIds": ["directory-role", "scoped-reader"], "explanation": "Match the managed object and required operation to the correct role system and scope." }
+      ],
+      "takeaways": [
+        "Conditional Access combines signals with policy decisions and enforced controls.",
+        "Grant controls, session controls and app permissions have different jobs.",
+        "Security defaults is a baseline; customized Conditional Access requires appropriate entitlement and safe planning.",
+        "Entra roles govern directory administration, while Azure RBAC governs scoped Azure resource operations.",
+        "A passed authentication or policy check does not create missing authorization."
+      ],
+      "sourceIds": ["sc-ca-overview", "sc-ca-session", "sc-security-defaults", "sc-access-roles", "sc-risk-license"]
+    }
+  ],
+  "glossary": [
+    { "term": "Authentication factor", "definition": "A category of proof, such as knowledge, possession or a biometric characteristic." },
+    { "term": "Passkey", "definition": "An origin-bound cryptographic credential used for phishing-resistant sign-in with local user verification." },
+    { "term": "Passwordless", "definition": "A sign-in experience that does not require the user to enter a password." },
+    { "term": "SSPR", "definition": "Self-service password reset, allowing eligible users to change or reset passwords using supported verification." },
+    { "term": "Password writeback", "definition": "Writing a supported cloud-initiated password change or reset to the authoritative on-premises directory." },
+    { "term": "Smart lockout", "definition": "Protection against malicious password guessing that evaluates failed sign-in behavior." },
+    { "term": "Conditional Access", "definition": "An Entra policy capability that evaluates context and applies access requirements." },
+    { "term": "Grant control", "definition": "A requirement that must be met before access can be granted under a policy." },
+    { "term": "Session control", "definition": "A policy control governing supported session behavior, such as reauthentication frequency." },
+    { "term": "Role assignment", "definition": "A grant connecting a principal with defined permissions at an appropriate scope." }
+  ],
+  "sources": [
+    { "id": "sc-auth-matrix", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-methods", "title": "Microsoft Entra authentication methods matrix", "supports": "Current primary, MFA and SSPR support; passkey and passwordless distinctions; hardware OATH preview qualification." },
+    { "id": "sc-mfa", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-mfa-howitworks", "title": "Microsoft Entra MFA overview", "supports": "Knowledge, possession and biometric factor categories; stronger proof than password alone." },
+    { "id": "sc-passkeys", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-authentication-passkeys-fido2", "title": "Passkeys in Microsoft Entra ID", "supports": "Origin-bound cryptography, local user verification, device-bound and synced passkeys and attestation boundaries." },
+    { "id": "sc-sspr-licenses", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-licensing", "title": "SSPR licensing requirements", "supports": "Separate cloud change, cloud reset and hybrid writeback entitlements, checked September 22, 2026." },
+    { "id": "sc-sspr-policy", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-policy", "title": "Password policies and administrator reset differences", "supports": "Dedicated administrator two-gate policy, separate disable setting, method restrictions and documented exceptions." },
+    { "id": "sc-sspr-flow", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-howitworks", "title": "SSPR deep dive", "supports": "Ordinary-user scope, registered allowed methods and writeback checks; its administrator-default wording conflicts with the dedicated policy article." },
+    { "id": "sc-password-ban", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-password-ban-bad", "title": "Microsoft Entra Password Protection", "supports": "Global and custom banned terms, normalization and scoring, cloud and on-premises licensing boundaries." },
+    { "id": "sc-smart-lockout", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/howto-password-smart-lockout", "title": "Prevent attacks using smart lockout", "supports": "Default protection, familiar and unfamiliar behavior, premium customization and limitations." },
+    { "id": "sc-phone-timeline", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement", "title": "Microsoft-provided SMS and voice retirement", "supports": "Future February and July 2027 population-specific retirements, not a claim of completed retirement in September 2026." },
+    { "id": "sc-phone-faq", "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement-faq", "title": "SMS and voice retirement FAQ", "supports": "September 16, 2026 clarification of SSPR inclusion, public-cloud scope, internal guests, external users and excluded tenant types." },
+    { "id": "sc-ca-overview", "url": "https://learn.microsoft.com/en-us/entra/identity/conditional-access/overview", "title": "Conditional Access overview", "supports": "Signals, decisions, grant controls, enforcement timing and P1 versus risk-based P2 prerequisites." },
+    { "id": "sc-ca-session", "url": "https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-session-lifetime", "title": "Conditional Access session lifetime", "supports": "Sign-in frequency, session behavior and application-participation qualifications." },
+    { "id": "sc-security-defaults", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/security-defaults", "title": "Security defaults", "supports": "No-extra-cost baseline, lack of arbitrary customization, per-user MFA status distinction and replacement with Conditional Access." },
+    { "id": "sc-access-roles", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/rbac-and-directory-admin-roles", "title": "Azure roles and Microsoft Entra roles", "supports": "Directory and Azure authorization boundaries, principal-role-scope reasoning and explicit elevation exception." },
+    { "id": "sc-risk-license", "url": "https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection", "title": "Microsoft Entra ID Protection overview", "supports": "Risk-based policy licensing and limited lower-tier visibility do not imply free full protection." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: five gates to the score editor",
+    "purpose": "Predict authentication, recovery, policy and authorization results without changing any tenant.",
+    "prerequisites": ["Paper or a local text document.", "The fictional policies and users in this module; no real credentials or student information."],
+    "costWarning": "No Azure operation is required and the paper lab has no cloud cost. Do not enable trials, buy licenses, enroll devices, reset accounts or change security defaults or Conditional Access in a real tenant.",
+    "steps": [
+      "Draw columns for identity, authentication proof, Conditional Access requirements, application permission and expected result.",
+      "Add Ana on a compliant laptop with a passkey and ScoreEditor, then explain why each gate is satisfied.",
+      "Change only the laptop compliance result and predict the outcome of a policy requiring both controls.",
+      "Restore the laptop result but remove ScoreEditor; explain why stronger MFA cannot repair the missing permission.",
+      "Write a separate recovery row for ordinary-user Radu with the two supported proofs assumed in the lesson.",
+      "Remove one recovery proof and explain why a passkey is not silently substituted for it.",
+      "Match weak password choice, repeated guesses and forgotten password to Password Protection, smart lockout and SSPR."
+    ],
+    "expectedResults": ["Different failed gates produce different explanations rather than one generic access fix.", "The recovery design uses supported methods and appropriate entitlement.", "No outcome depends on inventing an Azure administrator role."],
+    "cleanup": ["Delete the fictional local worksheet if it is no longer useful.", "No tenant cleanup is needed because no settings or accounts were changed."]
+  }
+}

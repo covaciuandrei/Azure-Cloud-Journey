@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-entra-identities",
+  "title": "Microsoft Entra identities: who is asking?",
+  "summary": "Follow a school science fair from people and laptops to cloud applications, then distinguish the directory, hybrid sign-in and identities used by software.",
+  "priority": "core",
+  "priorityReason": "Choosing an identity service starts with recognizing the caller and separating identity, authentication and permission.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/fundamentals/whatis",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe Microsoft Entra ID.",
+    "Describe identity types, including workload identities.",
+    "Describe hybrid identity."
+  ],
+  "lessons": [
+    {
+      "id": "sc-entra-tenants-and-identity-types",
+      "title": "Give the school a directory, not a master key",
+      "summary": "Identify people, devices and services, and explain what a tenant provides without confusing it with a subscription or automatic access.",
+      "objectives": [
+        "Explain Microsoft Entra ID and its tenant directory.",
+        "Recognize human, device and workload identities.",
+        "Distinguish identity records, sign-in, permissions and service licenses."
+      ],
+      "sections": [
+        {
+          "id": "sc-directory-purpose",
+          "title": "A school needs to recognize callers",
+          "blocks": [
+            { "type": "paragraph", "text": "The fictional Dunarea school is preparing a science fair. Ana coordinates the teachers, Radu is a student volunteer, and Elena is a visiting judge from a partner school. They use a planning website and shared documents from both school and home. The website must answer two different questions: who is asking, and what may that caller do? Being connected to the school Wi-Fi is not enough. A stolen laptop can connect, and a genuine teacher might need to work from another town. Identity gives the service a more useful starting point than physical location alone." },
+            { "type": "paragraph", "text": "Microsoft Entra ID is Microsoft's cloud identity and access management service. It maintains identity information, authenticates supported callers, and supplies identity information and policy controls for connected applications. A directory is the organized collection of identity objects, such as users, groups, devices and application identities. A tenant is an organization's particular instance of the service, including that directory and its identity configuration. Think of the tenant as the school's identity environment, not simply a list of email addresses. Its settings determine how school identities are used across connected services." },
+            { "type": "paragraph", "text": "An application can trust Entra ID instead of inventing its own password database. After the appropriate sign-in and policy checks, Entra can issue a token that the application validates. A token is a structured security message, not permission to do anything anywhere. The intended application checks its recipient, validity and relevant identity information, then enforces its own authorization. This lets the planning website recognize Radu without receiving his reusable school password. Single sign-on can reduce repeated sign-in prompts across integrated applications, but it does not remove their access rules or guarantee that users never authenticate again." }
+          ]
+        },
+        {
+          "id": "sc-tenant-resource-boundaries",
+          "title": "The tenant is not the Azure bill",
+          "blocks": [
+            { "type": "paragraph", "text": "The school might also run the website on Azure. Its Azure subscription is a resource-management and billing boundary. A resource group organizes related Azure resources inside that subscription. Neither is a class register. An Azure subscription trusts one Entra directory at a time, and several subscriptions can use the same directory. Therefore the school can separate teaching experiments from its live website while keeping the same staff identities. Creating Radu's directory account does not create a virtual machine, purchase a Microsoft 365 license or grant him access to every subscription." },
+            { "type": "paragraph", "text": "Four separate gates help diagnose a problem. Identity establishes which account is involved. Authentication checks a claim to that identity. Authorization determines permitted actions on a particular resource. Licensing determines whether an organization or user has the product entitlement required for a feature. Connectivity is another practical requirement: an authorized user still cannot reach an unavailable website. If Elena signs in but cannot open the judges' folder, resetting her password is not the first answer. Check the folder permission and relevant service entitlement instead of assuming every access error is a sign-in failure." },
+            { "type": "diagram", "title": "One identity environment, several separate access decisions", "description": "The directory represents the callers. Each destination still needs its own permission decisions; the arrows do not grant access.", "nodes": [
+              { "id": "sc-id-callers", "label": "Callers", "detail": "People, devices and software", "column": 0, "row": 0 },
+              { "id": "sc-id-tenant", "label": "School tenant", "detail": "Directory and identity policies", "column": 1, "row": 0 },
+              { "id": "sc-id-app", "label": "Planning app", "detail": "Student and judge permissions", "column": 2, "row": 0 },
+              { "id": "sc-id-subscription", "label": "Azure subscription", "detail": "Scoped Azure resource roles", "column": 1, "row": 2 },
+              { "id": "sc-id-docs", "label": "Shared documents", "detail": "Document and workspace access", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "sc-id-callers", "to": "sc-id-tenant", "label": "Represented by identities" },
+              { "from": "sc-id-tenant", "to": "sc-id-app", "label": "Trusted sign-in information" },
+              { "from": "sc-id-subscription", "to": "sc-id-tenant", "label": "Trusts directory" },
+              { "from": "sc-id-tenant", "to": "sc-id-docs", "label": "Recognized identities" }
+            ] }
+          ]
+        },
+        {
+          "id": "sc-human-device-workload",
+          "title": "A person, a laptop and an overnight service are different callers",
+          "blocks": [
+            { "type": "paragraph", "text": "A human identity represents a person acting in a role, such as Radu submitting a project or Ana reviewing a schedule. People should normally have individual accounts, rather than one shared teacher password, so access and accountability follow the actual person. Groups collect identities for a purpose, such as ScienceFairJudges. A group can make access assignment easier, but its friendly name has no security power by itself. The document service must actually use that group in an access assignment. Membership and permission are related through configuration, not through a naming convention." },
+            { "type": "paragraph", "text": "A device identity represents a computer, tablet or phone. Entra registration, Entra join and Entra hybrid join are ways to establish device identities, with different ownership and management scenarios. A student's registered personal laptop and a school-owned joined computer are not automatically equivalent. The identity record provides information that policies can use, but merely appearing in a directory does not prove that the device is healthy, encrypted or compliant. Device management services such as Intune can supply management and compliance information. Entra ID does not become antivirus software just because it knows a laptop's identity." },
+            { "type": "paragraph", "text": "A workload identity represents software doing work: an application, a service or another automated process. At midnight, the science-fair report generator reads approved project data while all teachers are asleep. That is a workload operation, not Ana using a browser. Microsoft uses applications, service principals and managed identities in its workload identity model. The next lesson separates those terms. The immediate lesson is simpler: do not solve unattended access by copying Ana's password into a script. A separately authorized workload identity avoids tying the service's availability and permissions to a teacher's daily account." }
+          ]
+        },
+        {
+          "id": "sc-external-identity-boundary",
+          "title": "Welcome a judge without adopting her entire school",
+          "blocks": [
+            { "type": "paragraph", "text": "Elena already has an account at the partner school. In a normal business-to-business collaboration arrangement, the host school can represent her as a guest while she authenticates through her existing identity provider. Her home organization and the resource organization have different responsibilities. Her home identity proves who she is; Dunarea still decides which of its resources she may use. Inviting her does not give Dunarea ownership of her home account, and removing her local access need not delete that home account. This is a useful example of collaboration across a trust boundary." },
+            { "type": "paragraph", "text": "Do not infer everything from the words Member and Guest. They describe a directory relationship, not a complete explanation of where the identity is managed, where its password is checked, or which resources it can reach. The usual external guest scenario is helpful, but internal guests and external members also exist. Likewise, a familiar email address is not proof that the selected object belongs to the correct tenant. In a real system, administrators inspect the actual account, tenant and assignments. In our paper scenario, we deliberately label Elena's home identity and the school's guest representation separately." }
+          ]
+        },
+        {
+          "id": "sc-worked-fair-directory",
+          "title": "Worked application: prepare identities before opening the fair",
+          "blocks": [
+            { "type": "example", "title": "One project, three kinds of caller", "scenario": "The school already has a workforce tenant and an integrated planning app. Radu may submit a project, Elena may judge submitted projects, and the report service may read approved results. No one needs Azure administration merely to perform those jobs.", "steps": [
+              { "action": "On the design sheet, represent Radu with his individual school user and Elena with a clearly identified external guest relationship.", "why": "The app must distinguish people and retain the external trust boundary. A shared judge password would erase accountability." },
+              { "action": "Record the school laptop as a separate device identity, without assigning it the label compliant merely because it exists.", "why": "The device and the person are different policy inputs. Device health must come from an appropriate management or compliance process." },
+              { "action": "Give the report service its own workload identity and list its required read operation.", "why": "An overnight service must authenticate without borrowing Ana's interactive account. Its permissions should follow its task." },
+              { "action": "Assign the intended app or document permissions separately and check any required product licenses.", "why": "The directory makes callers recognizable; it does not automatically make them judges, Azure administrators or licensed users of every product." }
+            ], "result": "The school has a defensible identity map. Each caller can be connected to an intended task, and no identity record is mistaken for a universal access grant." }
+          ]
+        },
+        {
+          "id": "sc-identity-distinction",
+          "title": "Predict the boundary before choosing a product",
+          "blocks": [
+            { "type": "prediction", "id": "sc-predict-guest-folder", "prompt": "Elena successfully authenticates, but the planning app says she has no judge assignment. Would creating a second Azure subscription fix this?", "answer": "No. The missing app assignment must be addressed in the app's authorization model.", "explanation": "A subscription changes an Azure resource boundary. It neither proves Elena's identity again nor assigns her the app's judge permission." },
+            { "type": "callout", "tone": "exam", "title": "Recognize the service, not just a familiar word", "text": "Entra ID supplies cloud identity and access capabilities. A firewall filters network traffic; Intune manages devices; Azure RBAC authorizes Azure resource operations. None is a substitute for all the others. Microsoft Entra is a product family, not a promise that every family feature comes with the free directory." },
+            { "type": "paragraph", "text": "Azure Active Directory, often written Azure AD, is the previous name for Microsoft Entra ID. An older explanation is not automatically false just because it uses that name. However, a screenshot, portal path or authentication recommendation can become outdated independently of the name. These lessons use current service names and conceptual examples rather than asking you to follow old administration screens. The objective guide checked on September 22, 2026 describes an announced October 21, 2026 outline. That future outline organizes this course, but is not labelled as already effective; candidates taking an earlier exam should confirm the applicable guide." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-id-check-tenant", "kind": "single", "prompt": "The school wants one staff directory and separate live and experimental Azure subscriptions. Which statement fits?", "choices": [
+          { "id": "one-directory", "text": "Both subscriptions can trust the same Entra directory while retaining separate scoped permissions.", "explanation": "One directory can support multiple subscriptions; the access assignments need not be identical." },
+          { "id": "directory-is-bill", "text": "A directory and a subscription are the same object with different names.", "explanation": "Identity configuration and Azure resource billing are different boundaries." },
+          { "id": "duplicate-everyone", "text": "Every staff member must have a duplicate identity for every subscription.", "explanation": "The trust relationship does not impose duplicate directories or users." }
+        ], "correctIds": ["one-directory"], "explanation": "Separate the identity environment from resource containment and authorization." },
+        { "id": "sc-id-check-caller", "kind": "single", "prompt": "A service generates reports at midnight with nobody signed in. Which identity category best describes its caller?", "choices": [
+          { "id": "student", "text": "Human identity, because a teacher originally requested the report.", "explanation": "The business requester is not necessarily the identity executing the unattended operation." },
+          { "id": "workload", "text": "Workload identity, with permissions limited to the service's job.", "explanation": "Software can authenticate and be authorized independently of an interactive user." },
+          { "id": "device-only", "text": "Device identity, which automatically permits every app on the computer to read results.", "explanation": "Recognizing a device does not authorize all software or replace workload-specific permissions." }
+        ], "correctIds": ["workload"], "explanation": "Identify who or what actually requests access, not just who benefits from the result." },
+        { "id": "sc-id-check-device", "kind": "single", "prompt": "Radu's laptop has an Entra device record. What can you safely conclude from that fact alone?", "choices": [
+          { "id": "healthy", "text": "It is compliant with every school security requirement.", "explanation": "Registration is not evidence that compliance checks have passed." },
+          { "id": "administrator", "text": "Radu can administer Azure virtual machines from it.", "explanation": "Azure permissions are not granted by the existence of a device object." },
+          { "id": "represented", "text": "The device is represented in the directory, where its information can support decisions.", "explanation": "A device identity is useful context, not a blanket statement of health or authority." }
+        ], "correctIds": ["represented"], "explanation": "Device identity, device management and resource permission answer different questions." },
+        { "id": "sc-id-check-guest", "kind": "single", "prompt": "Elena signs in through her partner-school identity but cannot open the judges' folder. What is the relevant next distinction?", "choices": [
+          { "id": "permission", "text": "Successful authentication does not establish the folder permission.", "explanation": "The host school must separately authorize access to its folder." },
+          { "id": "delete-home", "text": "The host school must delete Elena's home account and recreate it.", "explanation": "That does not follow from an authorization failure and misunderstands the external boundary." },
+          { "id": "buy-vm", "text": "A new virtual machine automatically grants guest document access.", "explanation": "Compute capacity is unrelated to the folder's access assignment." }
+        ], "correctIds": ["permission"], "explanation": "First identify which gate failed: recognition, authentication, permission, licensing or connectivity." }
+      ],
+      "takeaways": [
+        "A tenant contains a directory and identity configuration; an Azure subscription contains resource and billing boundaries.",
+        "Humans, devices and workloads need distinct identity reasoning.",
+        "A known identity still needs the correct authorization and product entitlement.",
+        "External collaboration preserves separate home and resource organization responsibilities.",
+        "Azure AD is an earlier name, not sufficient evidence that a concept is obsolete."
+      ],
+      "sourceIds": ["sc-identity-family", "sc-device-identity", "sc-workload-managed", "sc-role-boundaries", "sc-user-types", "sc-study-guide"]
+    },
+    {
+      "id": "sc-hybrid-and-workload-identities",
+      "title": "Connect old school accounts and new software safely",
+      "summary": "Separate synchronization from password validation, then follow an application from its definition to its locally authorized workload identity.",
+      "objectives": [
+        "Explain hybrid identity without equating synchronization with federation.",
+        "Compare password hash synchronization, pass-through authentication and federation.",
+        "Distinguish application objects, service principals and managed identities."
+      ],
+      "sections": [
+        {
+          "id": "sc-ad-ds-and-cloud",
+          "title": "Two identity systems can cooperate without becoming identical",
+          "blocks": [
+            { "type": "paragraph", "text": "Before adopting cloud applications, the school used Windows Server Active Directory Domain Services, or AD DS. It still uses domain accounts for some classroom computers and an older local application. AD DS provides directory and domain capabilities such as domain join, Group Policy and traditional authentication using Kerberos or NTLM. Entra ID is not simply that domain controller moved to a website. It is designed for cloud identity and modern application integration. A teacher can use related identities in both systems, but that does not make their protocols, management tools or responsibilities interchangeable." },
+            { "type": "paragraph", "text": "Hybrid identity connects an on-premises identity environment with the cloud identity environment. For our scenario, the school maintains selected user attributes in AD DS and synchronizes them to Entra ID using a supported synchronization solution, such as Microsoft Entra Connect Sync or Cloud Sync. Ana can then be represented consistently in both environments. Synchronization copies and maintains selected identity information according to configuration. It does not mean every attribute moves in both directions, every change is immediate, or the cloud directory has replaced all local infrastructure. Always ask which system remains authoritative for the property being changed." },
+            { "type": "paragraph", "text": "Microsoft Entra Domain Services is another product, not another name for Entra ID or AD DS synchronization. It supplies managed domain capabilities for compatible applications that need traditional domain features in Azure. If the school needs cloud sign-in for a modern website, Entra ID is the direct identity answer. If an application specifically depends on LDAP or Kerberos, its requirements need separate assessment. Neither inviting a guest nor adding an MFA prompt rewrites that application. Product selection begins with the missing capability rather than picking whichever product contains the word identity." }
+          ]
+        },
+        {
+          "id": "sc-sync-versus-authentication",
+          "title": "Copying an account and checking a password are separate jobs",
+          "blocks": [
+            { "type": "paragraph", "text": "A synchronized user does not have to be a federated user. Synchronization answers how selected identity information reaches Entra. The sign-in method answers who validates the user's credential. Microsoft explicitly documents that choosing Connect Sync or Cloud Sync does not itself decide the authentication behavior. A school can retain an on-premises source for identities while using cloud password validation. Equally, it can synchronize identities while redirecting authentication to another trusted provider. These decisions are connected in the overall design but must not be collapsed into one word such as hybrid." },
+            { "type": "paragraph", "text": "With password hash synchronization, a derived hash of the on-premises password hash is synchronized for cloud validation. The plain password is not copied into a readable cloud list. Entra can validate the sign-in without asking an on-premises domain controller to check that password for every request. This reduces the sign-in dependency on the school's local connection. However, a new password or changed account state still needs the relevant synchronization to reach the cloud. An outage can therefore affect freshness even when an already synchronized credential continues to work. Availability and immediate policy synchronization are different properties." },
+            { "type": "paragraph", "text": "Pass-through authentication keeps the Entra sign-in flow but uses on-premises agents to validate passwords against AD DS. Microsoft groups it under cloud authentication because Entra handles the sign-in process, even though password validation happens on-premises. Federation instead hands authentication to a separate trusted identity provider, such as AD FS, whose assertion Entra accepts under the configured trust. Both introduce dependencies on that external authentication infrastructure. Federation is not required just to reuse a school username. Also, configuring password hash synchronization as a backup does not by itself promise automatic failover from pass-through authentication." },
+            { "type": "table", "caption": "Ask where validation happens, not just where the account appears", "headers": ["Design", "Password validation", "Important consequence"], "rows": [
+              ["Password hash synchronization", "Entra validates using synchronized derived credential material.", "Cloud sign-in can continue independently of a live on-premises password check, but changes need synchronization."],
+              ["Pass-through authentication", "An on-premises agent validates with AD DS.", "The authentication path depends on available agents, connectivity and domain services."],
+              ["Federation", "A separate trusted identity provider authenticates the user.", "The trust and provider availability matter; this is not merely copying directory attributes."]
+            ] }
+          ]
+        },
+        {
+          "id": "sc-worked-hybrid-school",
+          "title": "Worked application: the internet cable is disconnected",
+          "blocks": [
+            { "type": "example", "title": "Choose cloud validation for the stated dependency", "scenario": "The school wants to keep its existing AD DS identities but reduce reliance on the school building for ordinary cloud password sign-in. Assume password hash synchronization is supported, permitted and healthy before a local connection outage. Ana uses a previously synchronized password from home.", "steps": [
+              { "action": "Keep AD DS as the source for the selected school identity attributes and synchronize the required representation to Entra.", "why": "The school retains its local identity investment without treating the cloud copy as an unrelated new person." },
+              { "action": "Choose password hash synchronization for this password-validation requirement rather than assuming federation is mandatory.", "why": "Entra can validate the synchronized credential in the cloud. Pass-through authentication or a local federation service would retain a live local dependency." },
+              { "action": "During the outage, distinguish Ana's already synchronized credential from a password changed locally after connectivity failed.", "why": "The first may still work for cloud sign-in; the second has not yet reached Entra. The design does not synchronize through a broken connection." },
+              { "action": "When connectivity returns, verify synchronization and the app's separate access rules.", "why": "Restoring identity freshness does not automatically repair a missing document permission or remove every existing session." }
+            ], "result": "The choice follows the school's actual dependency requirement. Hybrid identity is preserved without mislabelling all synchronized accounts as federated." }
+          ]
+        },
+        {
+          "id": "sc-app-and-service-principal",
+          "title": "An app definition is not the same as its local identity",
+          "blocks": [
+            { "type": "paragraph", "text": "The science-fair planning app also needs an identity configuration. An application object is the app's definition in its home tenant: it records information used to integrate the software with the identity platform. A service principal is the app's local representation in a particular tenant. Think of the application object as a published school-club rulebook and each service principal as a particular school's recognized instance of that club. The analogy is limited, but it helps separate a definition from the locally controlled object that participates in access decisions." },
+            { "type": "paragraph", "text": "If another school consents to use a multitenant app, that school can have its own service principal referring to the same application definition. The schools do not thereby share one unrestricted set of permissions. Each local relationship needs the appropriate consent and authorization. App registrations is the administration view associated with application objects; Enterprise applications is associated with service principals. These are views of different identity objects, not two copies of the application server. An app registration does not deploy the app's code, and seeing an enterprise application does not prove that every requested permission has been granted." },
+            { "type": "paragraph", "text": "Software can act for a signed-in person or independently as an application. In the first case, delegated access involves a user context and permitted delegated operations. In the second, an unattended workload uses its own authorized identity. Do not infer unrestricted data access merely because authentication succeeded. The report service should read the approved results it needs, not every student's private file. Giving a workload a human administrator's secret obscures this boundary and makes password changes, staff departures and audits harder. The identity model should express the actual actor and the smallest justified task." }
+          ]
+        },
+        {
+          "id": "sc-managed-identity-lifecycle",
+          "title": "Let the platform manage credentials, not your access decisions",
+          "blocks": [
+            { "type": "paragraph", "text": "A managed identity is a workload identity whose credentials Azure manages for a supported resource. The application can obtain Entra tokens without storing a password or client secret in its source code. A special service principal represents the managed identity in the tenant; unlike an ordinary application service principal, it does not need an associated application object. This is why application, service principal and managed identity should not be taught as three unrelated kinds of login. They are related concepts with different lifecycle and management responsibilities." },
+            { "type": "paragraph", "text": "A system-assigned managed identity belongs to one supporting Azure resource and shares that resource's lifecycle. Deleting the resource deletes that identity. A user-assigned managed identity is a separate Azure resource with an independent lifecycle and can be attached to more than one supported resource. User-assigned does not mean a human user account. Sharing one identity may simplify continuity, but it also shares its permissions among the attached workloads, so separate trust boundaries still deserve separate identities. Neither type grants access automatically, makes an unsupported target accept Entra tokens or opens a blocked network path." }
+          ]
+        },
+        {
+          "id": "sc-worked-report-identity",
+          "title": "Worked application: replace the teacher's password in a design",
+          "blocks": [
+            { "type": "example", "title": "Authorize the report generator, not Ana", "scenario": "The report generator runs on a supported Azure hosting resource and reads one approved-results storage container that supports Entra authentication. Its design currently proposes using Ana's password. This is a paper review, not a tenant change.", "steps": [
+              { "action": "Replace the proposed human credential with a managed identity suitable for the host.", "why": "Azure manages the identity's credentials, removing the need to store Ana's reusable password in the service." },
+              { "action": "Select a system-assigned identity if this single host and identity should retire together; choose a separate user-assigned identity if the documented lifecycle requires independence.", "why": "The choice follows lifecycle and sharing requirements, not an assumption that one type is always safer in every design." },
+              { "action": "Grant only the required read permission at the appropriate data scope, then record a negative case such as writing results.", "why": "Token acquisition proves the workload identity, while the target's authorization still controls allowed operations." },
+              { "action": "Account for the target's network rules and the retirement of unused permissions.", "why": "Managed credentials do not provide connectivity or automatically clean up every separate role assignment and dependency." }
+            ], "result": "The workload has a traceable identity and deliberately limited access without borrowing a teacher's authority." },
+            { "type": "prediction", "id": "sc-predict-managed-no-role", "prompt": "The report generator obtains a token with its new managed identity, but nobody granted container read access. Will removing the password from its code make the read succeed?", "answer": "No. Credential handling is improved, but the missing read authorization still blocks access.", "explanation": "Managed identity removes developer-managed credentials. The target service must still authorize the exact workload and operation." },
+            { "type": "callout", "tone": "exam", "title": "Four distinctions to carry forward", "text": "Synchronization is not federation. Entra ID is not AD DS or Entra Domain Services. An application definition is not its tenant-local service principal. Managed identity is not automatic permission. Match the named problem to the capability that actually changes it." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "sc-hybrid-check-sync", "kind": "single", "prompt": "Ana's AD DS account is synchronized to Entra. Does that fact prove her cloud sign-in uses federation?", "choices": [
+          { "id": "always-federated", "text": "Yes, synchronization and federation are the same process.", "explanation": "Synchronization maintains identity data; federation delegates authentication to a trusted provider." },
+          { "id": "inspect-auth", "text": "No, the sign-in method must be established separately.", "explanation": "A synchronized identity can use password hash synchronization, pass-through authentication or federation." },
+          { "id": "no-cloud-signin", "text": "No, synchronized identities cannot sign in to cloud apps.", "explanation": "Enabling consistent cloud access is a central hybrid identity use case." }
+        ], "correctIds": ["inspect-auth"], "explanation": "Account origin and credential-validation location are separate design questions." },
+        { "id": "sc-hybrid-check-outage", "kind": "single", "prompt": "The school needs ordinary cloud password validation without a live local password check on every request. Which option fits the stated requirement?", "choices": [
+          { "id": "local-federation", "text": "A federation provider available only inside the school.", "explanation": "The cloud sign-in still depends on the trusted provider being reachable and operational." },
+          { "id": "pta", "text": "Pass-through authentication with only an on-premises agent.", "explanation": "That agent validates against the local directory, so the local dependency remains." },
+          { "id": "phs", "text": "Password hash synchronization with cloud validation.", "explanation": "An already synchronized credential can be validated in Entra without a live local domain-controller check." }
+        ], "correctIds": ["phs"], "explanation": "This addresses the stated dependency, while synchronized password and account changes still require processing." },
+        { "id": "sc-workload-check-principal", "kind": "single", "prompt": "Two schools use the same multitenant planning app. Which object expresses the app's local identity in each tenant?", "choices": [
+          { "id": "principal", "text": "A service principal in each tenant.", "explanation": "Each tenant has its local representation with its own granted access relationship." },
+          { "id": "global-permission", "text": "One shared unrestricted permission set automatically applied to both schools.", "explanation": "A shared app definition does not merge the tenants' authorization decisions." },
+          { "id": "subscription", "text": "An Azure subscription containing all user passwords.", "explanation": "A subscription is neither the app's local security principal nor a password directory." }
+        ], "correctIds": ["principal"], "explanation": "Distinguish the home application definition from the local instance used for access decisions." },
+        { "id": "sc-workload-check-managed", "kind": "multiple", "prompt": "Select the two correct statements for the report generator's managed identity design.", "choices": [
+          { "id": "credential-management", "text": "Azure manages the identity credentials, but the target still needs an explicit appropriate access grant.", "explanation": "Removing a stored secret does not remove authorization requirements." },
+          { "id": "independent-lifecycle", "text": "A user-assigned managed identity can survive replacement of an attached host.", "explanation": "It is managed as an independent resource rather than deleted automatically with that host." },
+          { "id": "human-owner", "text": "User-assigned means the identity always inherits Ana's human administrator roles.", "explanation": "It is a workload identity with its own permissions, not Ana's account." },
+          { "id": "open-network", "text": "Managed identity automatically bypasses the storage firewall.", "explanation": "Authentication does not create network reachability or override network restrictions." }
+        ], "correctIds": ["credential-management", "independent-lifecycle"], "explanation": "Separate credential lifecycle, permission scope and connectivity when evaluating workload access." }
+      ],
+      "takeaways": [
+        "Hybrid identity can keep an on-premises source while enabling cloud access.",
+        "Password hash synchronization, pass-through authentication and federation validate through different paths.",
+        "A copied identity record does not tell you which path sign-in uses.",
+        "Application objects define apps; service principals represent them locally.",
+        "Managed identity removes developer-managed credentials, not the need for least privilege."
+      ],
+      "sourceIds": ["sc-hybrid-signin", "sc-app-principals", "sc-workload-managed", "sc-identity-family"]
+    }
+  ],
+  "glossary": [
+    { "term": "Tenant", "definition": "An organization's instance of Entra identity services, including a directory and identity configuration." },
+    { "term": "Directory", "definition": "An organized collection of identity objects and related information." },
+    { "term": "Workload identity", "definition": "An identity used by software rather than an interactive human." },
+    { "term": "Device identity", "definition": "A directory representation of a device that can provide information for policy decisions." },
+    { "term": "Hybrid identity", "definition": "An identity arrangement connecting on-premises and cloud identity environments." },
+    { "term": "Federation", "definition": "A trust arrangement in which a service accepts authentication performed by another identity provider." },
+    { "term": "Application object", "definition": "An app's identity definition in its home tenant." },
+    { "term": "Service principal", "definition": "A tenant-local security principal representing an application or another supported workload identity." },
+    { "term": "Managed identity", "definition": "A workload identity with credentials managed by Azure for supported resources." },
+    { "term": "Source of authority", "definition": "The system responsible for maintaining an identity or a particular property." }
+  ],
+  "sources": [
+    { "id": "sc-identity-family", "url": "https://learn.microsoft.com/en-us/entra/fundamentals/whatis", "title": "Microsoft Entra product family", "supports": "The allocated URL redirects to the current family overview, which distinguishes Entra ID, Domain Services and related products." },
+    { "id": "sc-device-identity", "url": "https://learn.microsoft.com/en-us/entra/identity/devices/overview", "title": "Device identity in Microsoft Entra ID", "supports": "Device objects, registration, join and hybrid join as identity inputs, distinct from device management." },
+    { "id": "sc-workload-managed", "url": "https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview", "title": "Managed identities for Azure resources", "supports": "Human, device and workload categories; platform credential management; system-assigned and user-assigned lifecycles." },
+    { "id": "sc-role-boundaries", "url": "https://learn.microsoft.com/en-us/azure/role-based-access-control/rbac-and-directory-admin-roles", "title": "Azure roles and Microsoft Entra roles", "supports": "Identity administration and scoped Azure resource authorization are distinct." },
+    { "id": "sc-user-types", "url": "https://learn.microsoft.com/en-us/entra/external-id/user-properties", "title": "Properties of an external collaboration user", "supports": "Home and resource identity relationships; Member and Guest do not uniquely determine identity origin." },
+    { "id": "sc-hybrid-signin", "url": "https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/choose-ad-authn", "title": "Choose a hybrid identity authentication method", "supports": "Synchronization versus authentication, password hash synchronization, pass-through authentication, federation and outage dependencies." },
+    { "id": "sc-app-principals", "url": "https://learn.microsoft.com/en-us/entra/identity-platform/app-objects-and-service-principals", "title": "Application and service principal objects", "supports": "Home application definition, tenant-local service principals, consent relationships and the managed identity exception." },
+    { "id": "sc-study-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "The outline fetched September 22, 2026 is explicitly effective October 21, 2026, an announced future date." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: map the science-fair callers",
+    "purpose": "Practice identifying callers and trust boundaries without creating accounts or touching school infrastructure.",
+    "prerequisites": ["Paper or a local drawing application.", "Only the fictional names and resources in these lessons; no real school data."],
+    "costWarning": "The paper exercise costs nothing in Azure. Do not create a tenant, subscription, app registration, managed identity or hosted app; real infrastructure and premium features can incur charges.",
+    "steps": [
+      "Draw the school tenant, partner tenant, planning app and an Azure subscription as separate boxes.",
+      "Add Radu's user, Elena's local guest representation, a school laptop and the report generator.",
+      "Label each as human, device or workload, and draw the partner-school authentication relationship.",
+      "Write the smallest intended operation beside each caller, without treating the identity record as a permission grant.",
+      "Draw AD DS and compare cloud password validation with a live local validation path during an imagined network outage.",
+      "Choose a managed identity lifecycle for the report generator and explain what happens when its host is replaced."
+    ],
+    "expectedResults": ["The drawing separates tenant identity, Azure resource boundaries and application authorization.", "The outage prediction follows the selected sign-in method, not just the word synchronized.", "The report generator has its own limited identity rather than Ana's password."],
+    "cleanup": ["Close or discard the fictional diagram when finished.", "No cloud cleanup is needed because no accounts, credentials or resources were created."]
+  }
+}

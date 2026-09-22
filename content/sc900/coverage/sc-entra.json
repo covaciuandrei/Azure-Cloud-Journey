@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "domainId": "sc-entra",
+  "reviewedAt": "2026-09-22",
+  "objectives": [
+    {
+      "objectiveId": "sc-i-01",
+      "lessons": [
+        {
+          "moduleId": "sc-entra-identities",
+          "lessonId": "sc-entra-tenants-and-identity-types",
+          "sectionIds": ["sc-directory-purpose", "sc-tenant-resource-boundaries", "sc-worked-fair-directory"],
+          "checkpointIds": ["sc-id-check-tenant", "sc-id-check-guest"],
+          "evidence": "Explains Entra ID, tenant and directory boundaries, then separates authentication, authorization, licensing and Azure resources. The science-fair identity map assigns app permissions independently of directory creation, and checkpoints test shared-directory subscriptions and the authenticated judge's missing folder permission."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-02",
+      "lessons": [
+        {
+          "moduleId": "sc-entra-identities",
+          "lessonId": "sc-entra-tenants-and-identity-types",
+          "sectionIds": ["sc-human-device-workload", "sc-external-identity-boundary", "sc-worked-fair-directory"],
+          "checkpointIds": ["sc-id-check-caller", "sc-id-check-device"],
+          "evidence": "Classifies people, devices and unattended services, distinguishing device representation from compliance and external identity relationships from permissions. The worked school map identifies all three callers and the checkpoints assess workload identity and the limited meaning of a device record."
+        },
+        {
+          "moduleId": "sc-entra-identities",
+          "lessonId": "sc-hybrid-and-workload-identities",
+          "sectionIds": ["sc-app-and-service-principal", "sc-managed-identity-lifecycle", "sc-worked-report-identity"],
+          "checkpointIds": ["sc-workload-check-principal", "sc-workload-check-managed"],
+          "evidence": "Separates home application definitions, tenant-local service principals and platform-managed workload credentials. The report-generator application replaces a teacher credential with deliberately authorized managed identity, while checkpoints assess tenant representation, independent lifecycle and missing permission or connectivity."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-03",
+      "lessons": [
+        {
+          "moduleId": "sc-entra-identities",
+          "lessonId": "sc-hybrid-and-workload-identities",
+          "sectionIds": ["sc-ad-ds-and-cloud", "sc-sync-versus-authentication", "sc-worked-hybrid-school"],
+          "checkpointIds": ["sc-hybrid-check-sync", "sc-hybrid-check-outage"],
+          "evidence": "Explains authoritative AD DS attributes and synchronization independently from password validation, comparing hash synchronization, pass-through and federation. The local-outage worked scenario selects cloud validation while preserving change-synchronization limits, and checkpoints reject the assumption that all synchronized accounts are federated."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-04",
+      "lessons": [
+        {
+          "moduleId": "sc-authentication-access",
+          "lessonId": "sc-authentication-mfa-passwords",
+          "sectionIds": ["sc-auth-method-purpose", "sc-passwordless-phishing", "sc-worked-auth-recovery"],
+          "checkpointIds": ["sc-auth-check-method", "sc-auth-check-phishing"],
+          "evidence": "Compares current method capabilities and explains passkey cryptography, passwordless experiences and phishing resistance without equating every sign-in method with SSPR. Radu's worked plan chooses a passkey and a separate supported recovery route, assessed through method-purpose and phishing-resistance checkpoints."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-05",
+      "lessons": [
+        {
+          "moduleId": "sc-authentication-access",
+          "lessonId": "sc-authentication-mfa-passwords",
+          "sectionIds": ["sc-independent-mfa-factors", "sc-passwordless-phishing", "sc-worked-auth-recovery"],
+          "checkpointIds": ["sc-auth-check-factors", "sc-auth-check-phishing"],
+          "evidence": "Teaches knowledge, possession and biometric categories, registration versus enforcement, and why two passwords or two screens do not define MFA. The worked student sign-in explains passkey possession and local verification, and original questions assess factor independence and phishing-resistant versus phishable proofs."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-06",
+      "lessons": [
+        {
+          "moduleId": "sc-authentication-access",
+          "lessonId": "sc-authentication-mfa-passwords",
+          "sectionIds": ["sc-password-protection-recovery", "sc-sspr-boundaries", "sc-worked-auth-recovery"],
+          "checkpointIds": ["sc-auth-check-protection", "sc-auth-check-writeback", "sc-auth-check-method"],
+          "evidence": "Separates weak-password evaluation, malicious guessing and eligible recovery, including cloud-change, cloud-reset and writeback entitlement differences. Radu's two-proof ordinary-user application checks registration and policy before reset, while the teaching scopes administrator exceptions, current method support and future phone retirement."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-07",
+      "lessons": [
+        {
+          "moduleId": "sc-authentication-access",
+          "lessonId": "sc-conditional-access-and-roles",
+          "sectionIds": ["sc-ca-signals-decision", "sc-ca-session-and-limits", "sc-defaults-and-entitlement", "sc-worked-ca-score-request"],
+          "checkpointIds": ["sc-access-check-both", "sc-access-check-session", "sc-access-check-defaults"],
+          "evidence": "Teaches signals, blocking or conditional grants, authentication strength and session controls separately from app authorization. Ana's worked score-editor requests compare compliant and noncompliant devices under an explicit both-controls policy, and checks distinguish session settings, baseline security defaults and licensed customization."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-08",
+      "lessons": [
+        {
+          "moduleId": "sc-authentication-access",
+          "lessonId": "sc-conditional-access-and-roles",
+          "sectionIds": ["sc-directory-versus-resource-roles", "sc-worked-role-scope"],
+          "checkpointIds": ["sc-access-check-role-systems"],
+          "evidence": "Distinguishes Entra directory roles from Azure principal-role-scope assignments, management versus data access and inherited permissions. The worked technician design selects directory maintenance authority and resource-group Reader separately, while the checkpoint rejects automatic Azure ownership or roles granted merely by successful MFA."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-09",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-governance",
+          "lessonId": "sc-access-lifecycle-reviews-pim",
+          "sectionIds": ["sc-governance-purpose-lifecycle", "sc-entitlement-access-packages", "sc-worked-governance-term"],
+          "checkpointIds": ["sc-gov-check-mover", "sc-gov-check-package"],
+          "evidence": "Explains identity and access lifecycles, trustworthy joiner-mover-leaver signals, provisioning and governed access packages. Radu's complete project application covers approval, a bounded handover, review and expiry without deleting his continuing student identity, assessed by mover and package-selection questions."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-10",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-governance",
+          "lessonId": "sc-access-lifecycle-reviews-pim",
+          "sectionIds": ["sc-access-review-cycle", "sc-worked-governance-term", "sc-worked-pim-maintenance"],
+          "checkpointIds": ["sc-gov-check-apply"],
+          "evidence": "Describes review scope, responsible reviewers, recurrence, recommendations and evidence, then distinguishes decisions from completed and applied changes. The project handover denies obsolete access and verifies removal through correct assignment paths; the prediction and checkpoint expose unapplied decisions and surviving separate grants."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-11",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-governance",
+          "lessonId": "sc-access-lifecycle-reviews-pim",
+          "sectionIds": ["sc-pim-eligible-active", "sc-worked-pim-maintenance"],
+          "checkpointIds": ["sc-gov-check-pim", "sc-gov-check-expiry"],
+          "evidence": "Separates eligible and active assignments, permanent versus time-bound duration, configured approval, MFA, justification and audit. Ana's one-hour VM-maintenance activation preserves its original role and scope; checkpoints reject pending privilege, automatic permanent Owner and the erasure of unrelated permanent grants."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-i-12",
+      "lessons": [
+        {
+          "moduleId": "sc-identity-governance",
+          "lessonId": "sc-identity-risk-and-protection",
+          "sectionIds": ["sc-protection-risk-types", "sc-risk-detection-policy-response", "sc-risk-investigate-reports", "sc-worked-risk-school", "sc-risk-product-boundaries", "sc-risk-current-boundaries"],
+          "checkpointIds": ["sc-risk-check-event-account", "sc-risk-check-remediation", "sc-risk-check-separate-policies", "sc-risk-check-product"],
+          "evidence": "Teaches sign-in versus user risk, reports, detection timing, separate risk policies and password-based versus passwordless remediation with prerequisites. The school's two-alert application investigates a suspicious request and leaked credentials independently, distinguishing governance and network controls, qualified licensing and the future legacy-policy retirement."
+        }
+      ]
+    }
+  ]
+}
