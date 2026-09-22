@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, mkdtemp, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertStorageHeadroom, cleanMediaObjectPath, crc32c, storageLimits, validateCleanFile, validateStaticFavicon, verifyRemoteMedia } from "../tools/publish/storage-clean.js";
+import { assertStorageHeadroom, cleanMediaObjectPath, crc32c, storageLimits, storageOperationClasses, StorageReservations, validateCleanFile, validateStaticFavicon, verifyRemoteMedia, type StorageUsage } from "../tools/publish/storage-clean.js";
+import { pacificQuotaDay } from "../tools/publish/quota.js";
 
 test("Hosting favicon must be referenced, unchanged and not a source symlink", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "az104-favicon-"));
@@ -45,6 +46,55 @@ test("Storage headroom includes observed project usage and unreleased reservatio
   for (const key of Object.keys(zero) as Array<keyof typeof zero>) {
     assert.throws(() => assertStorageHeadroom(zero, zero, { ...zero, [key]: storageLimits[key] + 1 }), /quota pause/);
     assert.throws(() => assertStorageHeadroom(zero, zero, { ...zero, [key]: -1 }), /quota pause/);
+  }
+});
+
+test("known Storage reads do not consume the write allowance and unknown metrics stay conservative", () => {
+  const classes = storageOperationClasses([
+    { labels: { method: "WriteObject" }, value: 784, endTime: "2026-09-22T00:00:00Z" },
+    { labels: { method: "ListObjects" }, value: 159, endTime: "2026-09-22T00:00:00Z" },
+    { labels: { method: "GetObjectMetadata" }, value: 784, endTime: "2026-09-22T00:00:00Z" },
+    { labels: { method: "UnknownOperation" }, value: 60, endTime: "2026-09-22T00:00:00Z" },
+  ]);
+  assert.deepEqual(classes, { classARequests: 1003, classBRequests: 844 });
+  const zero = { requests: 0, transferBytes: 0, storedBytes: 0 };
+  const observed = { ...zero, requests: 1787, ...classes };
+  const legacy = { ...zero, requests: 2712 };
+  assert.doesNotThrow(() => assertStorageHeadroom(observed, legacy, { ...zero, classARequests: 80, classBRequests: 1000 }));
+  assert.throws(() => assertStorageHeadroom(observed, legacy, { ...zero, classARequests: 786 }), /quota pause/);
+  assert.throws(() => assertStorageHeadroom(observed, legacy, { ...zero, classBRequests: 45000 }), /quota pause/);
+  assert.throws(() => assertStorageHeadroom({ ...observed, classARequests: 0, classBRequests: 0 }, zero, zero), /do not cover/);
+  assert.throws(() => assertStorageHeadroom(observed, zero, { ...zero, classARequests: -1 }), /quota pause/);
+});
+
+test("classified reservations append to the existing journal without refunding or reclassifying old requests", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "storage-classes-"));
+  try {
+    const now = new Date().toISOString();
+    const month = pacificQuotaDay(new Date()).slice(0, 7);
+    await mkdir(join(workspace, ".data/rollout"), { recursive: true });
+    const previous = { requests: 2712, transferBytes: 2704023936, storedBytes: 53624931 };
+    await writeFile(join(workspace, ".data/rollout/storage-journal.json"), JSON.stringify({
+      schemaVersion: 1, months: { [month]: previous },
+    }));
+    const usage: StorageUsage = {
+      checkedAt: now, month, periodStart: now, requests: 1787,
+      classARequests: 1003, classBRequests: 844, transferBytes: 22355850,
+      storedBytes: 50778201, peakStoredBytes: 50778201, hostingStoredBytes: 0, hostingTransferBytes: 0, samples: {},
+    };
+    const budget = await StorageReservations.open(usage, workspace);
+    await budget.reserve({ classBRequests: 2, transferBytes: 100 });
+    await budget.reserve({ classARequests: 1, storedBytes: 50 });
+    const next = await StorageReservations.open(usage, workspace);
+    await next.reserve({ classBRequests: 3 });
+    const journal = JSON.parse(await readFile(join(workspace, ".data/rollout/storage-journal.json"), "utf8"));
+    assert.deepEqual(journal.months[month], {
+      ...previous, transferBytes: previous.transferBytes + 100, storedBytes: previous.storedBytes + 50,
+      classARequests: 1, classBRequests: 5,
+    });
+    await assert.rejects(next.reserve({ requests: 786 }), /quota pause/);
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
   }
 });
 

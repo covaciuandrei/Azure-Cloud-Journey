@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "examId": "sc900",
+  "approved": true,
+  "reviewer": "coordinator",
+  "reviewedAt": "2026-09-22",
+  "releaseId": "c_7a3c08a43174a514351bff9de140bc1d162d4293608530c61e39b5e29f1ad1ab",
+  "sha256": "ce9c9ce080188eb5b4126ece41d2ce0729e53d9a44bbd9296f38f7608d05dfc0",
+  "note": "The owner authorized finishing and hosting SC-900. All twelve original modules, twenty-six lessons and 112 checkpoints were independently reviewed and bound to exact module, curriculum, objective and coverage digests. The announced October 21, 2026 outline remains explicitly dated as upcoming. This activates only the exact reviewed course bytes; bank publication, unavailable-discussion disclosure and cloud execution require their separate approvals."
+}

@@ -28,16 +28,24 @@ const expectedImages = 784;
 const expectedComments = 7994;
 const GiB = 1024 ** 3;
 
-// Count every Storage request against BOTH operation classes, including failed attempts.
-// Leave headroom for delayed telemetry and other project activity. Reservations never refund.
-export const storageLimits = { requests: 4500, transferBytes: 90 * GiB, storedBytes: 4 * GiB };
-export interface Amounts { requests: number; transferBytes: number; storedBytes: number }
+// Legacy and unknown requests stay charged to both classes. Known operations
+// use their billing class, with headroom below the 5K/50K monthly allowances.
+export const storageLimits = {
+  requests: 4500, classARequests: 4500, classBRequests: 45000,
+  transferBytes: 90 * GiB, storedBytes: 4 * GiB,
+};
+export interface Amounts {
+  requests: number; transferBytes: number; storedBytes: number;
+  classARequests?: number; classBRequests?: number;
+}
 export interface MetricSample { labels: Record<string, string>; value: number; endTime: string }
 export interface StorageUsage {
   checkedAt: string;
   month: string;
   periodStart: string;
   requests: number;
+  classARequests?: number;
+  classBRequests?: number;
   transferBytes: number;
   storedBytes: number;
   peakStoredBytes: number;
@@ -148,7 +156,26 @@ function validAmount(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
 }
 export function assertStorageHeadroom(usage: Amounts, reserved: Amounts, next: Amounts): void {
-  for (const key of ["requests", "transferBytes", "storedBytes"] as const) {
+  for (const value of [usage, reserved, next]) {
+    if (!validAmount(value.requests) ||
+        ![value.classARequests ?? 0, value.classBRequests ?? 0].every(validAmount)) {
+      throw new Error("Storage quota pause: invalid operation accounting.");
+    }
+  }
+  const classified = usage.classARequests !== undefined || usage.classBRequests !== undefined;
+  if (classified && (usage.classARequests === undefined || usage.classBRequests === undefined ||
+      usage.classARequests > usage.requests || usage.classBRequests > usage.requests ||
+      usage.classARequests + usage.classBRequests < usage.requests)) {
+    throw new Error("Storage quota pause: observed operation classes do not cover total requests.");
+  }
+  for (const key of ["classARequests", "classBRequests"] as const) {
+    const observed = classified ? usage[key]! : usage.requests;
+    const total = observed + reserved.requests + (reserved[key] ?? 0) + next.requests + (next[key] ?? 0);
+    if (!validAmount(total) || total > storageLimits[key]) {
+      throw new Error(`Storage quota pause: ${key} does not fit the conservative monthly limit.`);
+    }
+  }
+  for (const key of ["transferBytes", "storedBytes"] as const) {
     if (![usage[key], reserved[key], next[key]].every(validAmount) ||
         usage[key] + reserved[key] + next[key] > storageLimits[key]) {
       throw new Error(`Storage quota pause: ${key} does not fit the conservative monthly limit.`);
@@ -163,7 +190,8 @@ class Reservations {
       throw new Error("Invalid Storage reservation journal.");
     }
     for (const entry of Object.values(journal.months)) {
-      if (![entry.requests, entry.transferBytes, entry.storedBytes].every(validAmount)) {
+      if (![entry.requests, entry.transferBytes, entry.storedBytes,
+        entry.classARequests ?? 0, entry.classBRequests ?? 0].every(validAmount)) {
         throw new Error("Invalid Storage reservation values.");
       }
     }
@@ -186,6 +214,10 @@ class Reservations {
       requests: before.requests + amount.requests,
       transferBytes: before.transferBytes + amount.transferBytes,
       storedBytes: before.storedBytes + amount.storedBytes,
+      ...((before.classARequests !== undefined || amount.classARequests !== undefined)
+        ? { classARequests: (before.classARequests ?? 0) + (amount.classARequests ?? 0) } : {}),
+      ...((before.classBRequests !== undefined || amount.classBRequests !== undefined)
+        ? { classBRequests: (before.classBRequests ?? 0) + (amount.classBRequests ?? 0) } : {}),
     };
     await persist(resolve(this.workspace, `${rollout}/storage-journal.json`), this.journal);
   }
@@ -272,6 +304,23 @@ async function metric(api: Api, type: string, start: string, end: string, gauge 
   if (result.some((sample) => !validAmount(Math.ceil(sample.value)))) throw new Error(`Invalid usage metric: ${type}`);
   return result;
 }
+export function storageOperationClasses(samples: MetricSample[]) {
+  let classARequests = 0;
+  let classBRequests = 0;
+  for (const sample of samples) {
+    if (!Number.isFinite(sample.value) || sample.value < 0) throw new Error("Invalid Storage operation metric.");
+    const method = sample.labels.method;
+    if (method === "WriteObject" || method === "ListObjects") classARequests += sample.value;
+    else if (method === "GetObjectMetadata" || method === "ReadObject" || method === "GetObject") {
+      classBRequests += sample.value;
+    } else {
+      classARequests += sample.value;
+      classBRequests += sample.value;
+    }
+  }
+  return { classARequests: Math.ceil(classARequests), classBRequests: Math.ceil(classBRequests) };
+}
+
 export async function inspectStorageUsage(): Promise<StorageUsage> {
   const now = new Date();
   const month = pacificQuotaDay(now).slice(0, 7);
@@ -290,7 +339,8 @@ export async function inspectStorageUsage(): Promise<StorageUsage> {
   const sum = (key: string) => Math.ceil((samples[key] ?? []).reduce((value, sample) => value + sample.value, 0));
   const usage: StorageUsage = {
     checkedAt: now.toISOString(), month, periodStart, samples,
-    requests: sum("requests"), transferBytes: sum("transferBytes"), storedBytes: sum("storedBytes"),
+    requests: sum("requests"), ...storageOperationClasses(samples.requests ?? []),
+    transferBytes: sum("transferBytes"), storedBytes: sum("storedBytes"),
     peakStoredBytes: sum("storedBytes"), hostingStoredBytes: sum("hostingStoredBytes"),
     hostingTransferBytes: sum("hostingTransferBytes"),
   };

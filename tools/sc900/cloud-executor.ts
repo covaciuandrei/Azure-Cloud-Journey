@@ -153,7 +153,7 @@ export async function executeSc900CloudPlan(rawPlan: unknown, rawApproval: unkno
     }
   };
   const getObject = async (object: CloudObject) => {
-    await storageBudget({ requests: 2, transferBytes: object.byteLength + 2 * 1024 * 1024 });
+    await storageBudget({ classBRequests: 2, transferBytes: object.byteLength + 2 * 1024 * 1024 });
     return adapter.getObject(object);
   };
   const stageRoot = sc900CloudStageRoot(plan);
@@ -200,7 +200,7 @@ export async function executeSc900CloudPlan(rawPlan: unknown, rawApproval: unkno
         else {
           const bytes = await readCloudFile(workspace, object.source, object.byteLength);
           if (byteSha256(bytes) !== object.sha256 || bytes.length !== object.byteLength) throw new Error("Original image changed after cloud planning.");
-          await storageBudget({ requests: 1, transferBytes: bytes.length + 65536, storedBytes: bytes.length });
+          await storageBudget({ classARequests: 1, transferBytes: bytes.length + 65536, storedBytes: bytes.length });
           await adapter.createObject(object, bytes, quotas!.privacy.uniformBucketLevelAccess);
           checkPrivateObject(await getObject(object), object, quotas!.privacy);
         }
