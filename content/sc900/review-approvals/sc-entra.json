@@ -1,0 +1,17 @@
+[
+  {
+    "id": "sc-entra-identities",
+    "digest": "0d3c40749f292cdb5254aba91fdfc5add13ce23c4e95abb1712da4de44d17719",
+    "note": "Independent reviewer checked both complete lessons, all eight keys and distractors, directory/tenant boundaries, users/devices/workloads, app objects versus local service principals, managed identities and hybrid sign-in choices. No substantive correction was needed. Object presence, authentication, authorization and connectivity are not conflated."
+  },
+  {
+    "id": "sc-authentication-access",
+    "digest": "28a6bf898ba7a0aa26bd321f9555dd44460e86f45c5d43ca62bd398935399eed",
+    "note": "Independent full review verified all nine keys, current method support, MFA factors, password controls, SSPR licensing and administrator exceptions, Conditional Access and role systems. Parent reviewed the focused corrections distinguishing reset proofs from independent MFA categories and password reset from universal token/session revocation. Dated phone-method retirement remains future and population-scoped."
+  },
+  {
+    "id": "sc-identity-governance",
+    "digest": "073dea04f240803a02db893a05cea7b35cca1c7a274ab1fc703c8d63aa0e275e",
+    "note": "Independent reviewer checked all nine keys, lifecycle and package decisions, applied access reviews, PIM activation and risk detection/remediation. Parent reviewed the exact corrections for downstream session timing, automatic risk-remediation controls, secure password change versus forgotten-password recovery, and real-time enforcement versus retrospective alerts. All objective and checkpoint identities remain stable."
+  }
+]

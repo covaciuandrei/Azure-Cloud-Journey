@@ -1,0 +1,17 @@
+[
+  {
+    "id": "sc-trust-compliance",
+    "digest": "b1e3e90161b81d0a3825feeacffd376c4b08a2337b70d576e4c530ce235cfc16",
+    "note": "Independent reviewer checked both full lessons, all eight keys and explanations, current privacy teaching, assurance-report limitations, scoped assessments, responsibility and score arithmetic against first-party sources. Coordinator reviewed the correction distinguishing compliance score from Microsoft Secure Score. Neither score promises certification, legal compliance or immunity from incidents."
+  },
+  {
+    "id": "sc-information-lifecycle",
+    "digest": "6fc5305d38e9f92a4d1151754c8e210b1125c9f8ea85d9af708c64b6ecf6c321",
+    "note": "Independent reviewer checked all three lessons and fourteen keys, classification and explorer naming, label scope, DLP prerequisites, record restrictions and ordinary retention precedence. Coordinator reviewed the complete correction of Purview year durations to 365 days across teaching, worked examples, scored choices, explanations and the paper lab. Leap-day arithmetic is explicit, exceptional Priority Cleanup is excluded and eligibility is not immediate deletion."
+  },
+  {
+    "id": "sc-insider-discovery-audit",
+    "digest": "35d4e0087c7d26c1fa0dd5a36a54700a615665d28776a203bbaaac616c34d1d6",
+    "note": "Independent reviewer checked both full lessons and all nine keys and option explanations against current first-party insider-risk, eDiscovery and Audit documentation. Privacy safeguards, indicator uncertainty, triage, current versus retired experiences, feature-specific entitlement, retention and separate case/hold lifecycles remain qualified. Source review does not claim tenant execution, legal advice or universal licensing rights."
+  }
+]

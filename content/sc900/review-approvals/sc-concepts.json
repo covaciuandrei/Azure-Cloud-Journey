@@ -1,0 +1,12 @@
+[
+  {
+    "id": "sc-security-foundations",
+    "digest": "b7b980b26f9830736e037e34336604ab45f26607d01a69b959ffb3c7053b40e9",
+    "note": "Independent reviewer read all teaching, examples, nine scored checks, every option, diagrams, glossary and paper lab against current first-party sources. Shared responsibility, defense in depth, Zero Trust, encryption and hashing boundaries and GRC reasoning are substantively mapped. No correction was needed. The October 21, 2026 outline remains explicitly announced and future at review time."
+  },
+  {
+    "id": "sc-identity-foundations",
+    "digest": "a2252ca2cf3a2ea03e9d48cd7dcc003208c4c17bf3e99d2449ac6a162d0291f0",
+    "note": "Independent full review verified all nine keys and option explanations, directory and protocol distinctions, provider versus issuer, authentication versus authorization, B2B local representation, federation versus synchronization and token/session-specific SSO limits. All six mapped identity-foundation objectives have substantive worked applications and relevant checks; no ungrounded instant-revocation promise remains."
+  }
+]
