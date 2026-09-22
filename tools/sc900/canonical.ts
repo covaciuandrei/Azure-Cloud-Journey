@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { SC900_EXAM_ID, Sc900CaptureLedgerSchema, type Sc900CaptureLedger } from "../../src/domain/sc900Capture.js";
+import { SC900_EXAM_ID, type Sc900CaptureLedger } from "../../src/domain/sc900Capture.js";
+import {
+  Sc900PublicationCaptureLedgerSchema, Sc900QuestionsOnlyAuthorizationSchema, Sc900ScopedCaptureLedgerSchema,
+  type Sc900PublicationCaptureLedger, type Sc900QuestionsOnlyAuthorization, type Sc900ScopedCaptureLedger,
+} from "../../src/domain/sc900Scope.js";
 import type { Sc900Question } from "../../src/domain/sc900Bank.js";
 
 export function canonicalJson(value: unknown): string {
@@ -35,10 +39,36 @@ export function sc900QuestionId(question: Pick<Sc900Question, "kind" | "prompt" 
   return `q_${sc900Hash("question", sc900QuestionIdentity(question))}`;
 }
 
-export function sc900SourceRevision(ledger: Sc900CaptureLedger): string {
-  return sc900Hash("source", Sc900CaptureLedgerSchema.parse(ledger));
+export function sc900SourceRevision(ledger: Sc900PublicationCaptureLedger): string {
+  return sc900Hash("source", Sc900PublicationCaptureLedgerSchema.parse(ledger));
 }
 
 export function sc900OptionId(content: unknown): string {
   return `opt_${sc900Hash("option", content)}`;
+}
+
+export function sc900RawPageInventoryDigest(pages: Sc900CaptureLedger["pages"]): string {
+  return sc900Hash("raw-page-inventory", [...pages].sort((a, b) => a.pageNumber - b.pageNumber));
+}
+export function sc900AssetInventoryDigest(assets: Sc900CaptureLedger["assets"]): string {
+  return sc900Hash("capture-asset-inventory", [...assets].sort((a, b) => a.id.localeCompare(b.id)));
+}
+export function sc900AuthorizationDigest(receipt: Sc900QuestionsOnlyAuthorization): string {
+  return sc900Hash("questions-only-authorization", Sc900QuestionsOnlyAuthorizationSchema.parse(receipt));
+}
+export function assertSc900ScopedAuthorization(
+  input: Sc900ScopedCaptureLedger, receiptInput: Sc900QuestionsOnlyAuthorization,
+): void {
+  const ledger = Sc900ScopedCaptureLedgerSchema.parse(input);
+  const receipt = Sc900QuestionsOnlyAuthorizationSchema.parse(receiptInput);
+  if (ledger.authorizationDigest !== sc900AuthorizationDigest(receipt) ||
+      ledger.sourceScopeReceiptSha256 !== receipt.sourceScopeReceiptSha256 ||
+      ledger.rawPageInventoryDigest !== receipt.rawPageInventoryDigest ||
+      ledger.assetInventoryDigest !== receipt.assetInventoryDigest ||
+      ledger.rawPageInventoryDigest !== sc900RawPageInventoryDigest(ledger.pages) ||
+      ledger.assetInventoryDigest !== sc900AssetInventoryDigest(ledger.assets) ||
+      ledger.reported.questions !== receipt.questions || ledger.reported.pages !== receipt.pages ||
+      ledger.assets.length !== receipt.images) {
+    throw new Error("Owner authorization does not bind the exact SC900 questions, source scope, raw pages and original assets.");
+  }
 }
