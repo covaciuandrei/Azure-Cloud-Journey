@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-infrastructure-protection",
+  "title": "Protect the school application at the right boundary",
+  "summary": "Separate traffic floods, dangerous web requests, unwanted connections, remote administration and access to sensitive material. Each problem needs a control that can actually see and change it.",
+  "priority": "core",
+  "priorityReason": "The announced SC-900 security-solutions outline names all seven services and concepts taught here. Product selection follows the threat and the control boundary, not a list of similar security names.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/security/fundamentals/network-overview",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe Azure DDoS Protection",
+    "Describe Azure Firewall",
+    "Describe Azure Web Application Firewall",
+    "Describe network segmentation with virtual networks",
+    "Describe network security groups",
+    "Describe Azure Bastion",
+    "Describe Azure Key Vault"
+  ],
+  "lessons": [
+    {
+      "id": "sc-segmentation-firewalls-ddos",
+      "title": "A flood, a request and a connection are different problems",
+      "summary": "Follow a teacher's request through the school application and decide which network control can stop which kind of trouble.",
+      "objectives": [
+        "Distinguish network-layer DDoS mitigation from web-request inspection.",
+        "Explain why subnet separation needs an explicit traffic policy.",
+        "Describe an NSG decision using a connection's five identifying values.",
+        "Choose Azure Firewall network and application rules without assuming every SKU decrypts HTTPS.",
+        "Combine controls without claiming that any one control makes an application safe."
+      ],
+      "sections": [
+        {
+          "id": "school-traffic-story",
+          "title": "Start with something worth protecting",
+          "blocks": [
+            {"type": "paragraph", "text": "Our fictional school runs a homework application in Azure. Teachers upload worksheets, students submit answers, and a database records which class owns each document. Assume the web server and database run on virtual machines, or VMs, software-based computers hosted in Azure. The web server accepts requests from browsers. The database should accept requests from the application, not directly from every student computer. An administrator occasionally repairs the server. These are different conversations with different permissions. We will draw the conversations on paper rather than create resources or send hostile traffic. All addresses, users and events in this module are teaching assumptions, not observations of a real school."},
+            {"type": "paragraph", "text": "Imagine three bad afternoons. First, huge numbers of network packets make the public entry point unavailable. Second, one ordinary-looking web connection contains a request designed to confuse the application's database query. Third, an infected test machine tries to connect directly to the database. The first problem is volume and availability, the second is the meaning of a web request, and the third is an unwanted network conversation. Buying a product called a firewall does not answer all three questions. Ask what information the control examines and where the relevant traffic actually passes."},
+            {"type": "callout", "tone": "remember", "title": "Outline date is not today's exam date", "text": "Reviewed September 22, 2026. The English study guide publishes objectives effective October 21, 2026, which is still a future date. These lessons map that announced outline while teaching currently documented services. Confirm the applicable guide for your exam date; this module does not establish a verified earlier English outline."}
+          ]
+        },
+        {
+          "id": "segments-need-policy",
+          "title": "Separate rooms still need doors with rules",
+          "blocks": [
+            {"type": "paragraph", "text": "An Azure virtual network, usually shortened to VNet, is a private network space for supported Azure resources. A subnet divides its address space into smaller groups. Put application machines in one subnet and database machines in another to make responsibilities and traffic policy easier to describe. This is network segmentation: grouping resources so that communication can be deliberately limited and inspected. It reduces the opportunity for an attacker who controls one system to reach every other system. It does not replace permissions inside the database or the application."},
+            {"type": "paragraph", "text": "A critical detail is that Azure normally provides routes between subnets in the same VNet. A route answers where a packet can go; a security rule answers whether a particular conversation is permitted. Creating a subnet named private-database does not automatically deny the application subnet, the test subnet or the internet. Internet reachability also depends on public endpoints, routing and other configuration. Conversely, separate VNets are not connected merely because they belong to the same school. Deliberately configured connectivity, such as peering, can join them, after which access controls still matter."},
+            {"type": "paragraph", "text": "For our design, write down an allowed relationship before choosing a product: the application may open the database service's required port; test machines may not; database administrators use an approved management path. This gives the school a policy it can explain to a replacement administrator. Segment by purpose and sensitivity rather than drawing as many boxes as possible. Too many unexplained exceptions become hard to maintain. A diagram with separate subnets is evidence of organization, but the associated rules and observed new-connection behavior are evidence of enforcement."}
+          ]
+        },
+        {
+          "id": "nsg-connection-filter",
+          "title": "NSGs decide whether a network conversation is allowed",
+          "blocks": [
+            {"type": "paragraph", "text": "A network security group, or NSG, is a collection of allow and deny rules associated with a subnet or network interface. It evaluates a five-tuple: source address, source port, destination address, destination port and protocol. A teacher's browser might use a temporary source port to reach a server's HTTPS destination port 443 over TCP. A database connection has different endpoints and a different destination port. Rules also have a direction and priority. Smaller priority numbers are evaluated first, and the first matching rule decides within that NSG. This is not inspection of the teacher's worksheet text."},
+            {"type": "paragraph", "text": "Suppose the application needs TCP destination port 1433 on a database. A narrow allow for the application is only half the intended policy if other machines can still match the default virtual-network allow. An appropriate later custom deny for other sources must be reached before that broad default, if the requirement is that only the application can use this port. The exact rule design depends on other traffic that must remain available. You do not need to memorize an administration script here. Understand why adding one allow is not equivalent to denying everyone else."},
+            {"type": "paragraph", "text": "NSGs are stateful. Reply traffic belonging to an allowed connection does not require a separate reverse allow rule. This does not let the database initiate any unrelated new conversation. Existing connections can also remain active after a rule change, so a meaningful policy check uses a genuinely new connection. If both subnet and interface NSGs apply, a required deny cannot be canceled by an allow in the other group. Even when network permission is correct, the database can reject a password or role. Connectivity, authentication and authorization are separate decisions."}
+          ]
+        },
+        {
+          "id": "ddos-and-waf-layers",
+          "title": "Too many packets is not the same as a harmful web request",
+          "blocks": [
+            {"type": "paragraph", "text": "Distributed denial of service, or DDoS, means many sources attempt to exhaust a service's capacity so legitimate users cannot use it. Azure DDoS Protection provides enhanced mitigation at network layers 3 and 4, the layers concerned with network addressing and transport conversations. It monitors traffic patterns and can mitigate detected attacks against protected public resources. Our school needs this kind of protection when a public application's availability is threatened by network floods. It does not check whether the teacher is authorized to read a particular pupil's marks."},
+            {"type": "paragraph", "text": "Distinguish Azure's default infrastructure protection from the enhanced paid DDoS offerings. DDoS Network Protection uses a protection plan associated with VNets; DDoS IP Protection applies the pay-per-protected-IP model. Supported resource and public-IP conditions still apply. The offerings share core mitigation engineering but are not identical commercial packages. For example, the overview assigns rapid response assistance to Network Protection and identifies differences in cost protection and WAF discounts. Do not infer that purchasing the smaller scope buys every support benefit, or that a VNet setting inspects every cloud service the school uses."},
+            {"type": "paragraph", "text": "A web application firewall, or WAF, examines HTTP and HTTPS web requests at layer 7, the application layer. Azure WAF can protect a web entry point through services such as Application Gateway or Front Door, with capabilities depending on the hosting service and tier. It can recognize patterns associated with SQL injection, where input attempts to alter a database instruction, and cross-site scripting, where input attempts to make a browser run unwanted script. You can understand the risk without writing either attack. A small request can be dangerous even when the network is not overloaded."},
+            {"type": "paragraph", "text": "WAF policies need suitable rules and operating modes. For Application Gateway WAF, detection mode monitors matches without blocking requests; enable the relevant diagnostic logging to retain that evidence. Prevention mode can block detected attacks. A false positive is a legitimate request classified as suspicious, perhaps a computing teacher uploading an example containing unusual characters. Investigate the specific match rather than disabling protection for the whole site. WAF is an additional protective layer, not permission to stop fixing unsafe application code. It also does not replace layer 3 and 4 DDoS protection. Application-layer traffic controls can help with web floods, but that does not turn the two services into interchangeable products."}
+          ]
+        },
+        {
+          "id": "firewall-and-tls",
+          "title": "Central inspection is a different job",
+          "blocks": [
+            {"type": "paragraph", "text": "Azure Firewall is a managed network security service for centralized filtering of traffic routed through it. Network rules use information such as addresses, ports and protocols. Application rules can permit supported traffic to particular fully qualified domain names, meaning complete host names rather than raw addresses. For example, the application may need an approved update service but not arbitrary internet destinations. A central policy can be easier to maintain than many unrelated host rules. However, deploying a firewall does not magically reroute every connection in every VNet; the network design must put the intended traffic on its path."},
+            {"type": "paragraph", "text": "Azure Firewall comes in Basic, Standard and Premium SKUs, meaning purchasable feature levels. Basic already supports network filtering and application FQDN filtering. Standard adds capabilities such as network-rule FQDN filtering and broader threat-intelligence enforcement. Premium adds intrusion detection and prevention, full URL filtering and TLS inspection. TLS is the encryption commonly protecting HTTPS. Reading a destination name is not the same as reading encrypted request contents. Do not describe Standard as decrypting HTTPS payloads simply because it supports application rules."},
+            {"type": "paragraph", "text": "Premium TLS inspection requires configuration and certificate trust. It terminates a connection, inspects the decrypted traffic and creates another encrypted connection. Current documentation describes outbound and east-west inspection, with east-west meaning traffic between internal environments. It directs the inbound web reverse-proxy scenario to Application Gateway with WAF. The school must also consider privacy and application compatibility before decrypting traffic. Thus Premium inspection is not identical to putting a WAF in front of a web application, and neither feature is automatically active merely because someone purchased the named service."}
+          ]
+        },
+        {
+          "id": "traffic-boundary-map",
+          "title": "Read this as relationships, not a wiring recipe",
+          "blocks": [
+            {"type": "diagram", "title": "Different controls see different parts of the school traffic", "description": "The top path represents public web access. The lower relationship represents deliberately routed outbound traffic. DDoS protection is associated protection for eligible public resources, not a proxy appliance that administrators insert into this packet path.", "nodes": [
+              {"id": "browser", "label": "Teacher browser", "detail": "Legitimate HTTPS request", "column": 0, "row": 0},
+              {"id": "web-entry", "label": "Web entry and WAF", "detail": "Request inspection; eligible public IP has DDoS protection", "column": 1, "row": 0},
+              {"id": "app-subnet", "label": "Application subnet", "detail": "Application machines and associated NSG", "column": 2, "row": 0},
+              {"id": "db-subnet", "label": "Database subnet", "detail": "NSG permits only intended database flows", "column": 2, "row": 1},
+              {"id": "central-firewall", "label": "Azure Firewall", "detail": "Central policy for traffic routed through it", "column": 1, "row": 1},
+              {"id": "update-site", "label": "Approved service", "detail": "Allowed application dependency", "column": 0, "row": 1}
+            ], "edges": [
+              {"from": "browser", "to": "web-entry", "label": "Web request"},
+              {"from": "web-entry", "to": "app-subnet", "label": "Allowed request"},
+              {"from": "app-subnet", "to": "db-subnet", "label": "Restricted database connection"},
+              {"from": "app-subnet", "to": "central-firewall", "label": "Designed outbound route"},
+              {"from": "central-firewall", "to": "update-site", "label": "Policy-permitted traffic"}
+            ]},
+            {"type": "paragraph", "text": "The diagram deliberately leaves out deployment details such as address translation and return routes. Its purpose is to locate decisions, not to provide a production topology. A real network engineer would verify those details before deployment. Notice that the database is not directly exposed as a student-facing web endpoint. Also notice that the outbound firewall does not sit in the teacher's identity sign-in process. Each arrow describes a need that can be permitted narrowly, monitored and reviewed when the school's application changes."},
+            {"type": "paragraph", "text": "Also name the evidence expected from each control. DDoS attack metrics can describe mitigation activity at a protected endpoint. Enabled WAF diagnostics can identify a matching web rule and whether a request was detected or blocked. Firewall logs can show a network or application policy decision for traffic on that path. None of these records alone proves that a teacher had permission to read the resulting document. That answer comes from the application's identity and access evidence. When investigating a failed homework upload, keep the request time and destination so the responsible team can relate the relevant records without copying private worksheet contents into every log."}
+          ]
+        },
+        {
+          "id": "work-the-school-design",
+          "title": "Worked application: five problems, five justified choices",
+          "blocks": [
+            {"type": "example", "title": "Write a protection plan without touching Azure", "scenario": "The school reports a packet flood, suspicious worksheet upload requests, test machines reaching the database, and application servers contacting unapproved sites. Assume eligible public resources, supported WAF hosting, an existing VNet and approval to design, but not deploy, controls.", "steps": [
+              {"action": "Identify the flooded public endpoint and choose the appropriate enhanced DDoS protection scope.", "why": "The availability problem involves layers 3 and 4. A rule about worksheet text cannot absorb a network flood, and pricing and support benefits differ between IP and Network Protection."},
+              {"action": "Place web-request inspection at the supported WAF entry point and plan a reviewed prevention policy.", "why": "The suspicious input is inside a web request. The school needs content-aware web protection while checking legitimate uploads for false positives."},
+              {"action": "Separate application, test and database responsibilities into understandable network segments.", "why": "Segmentation makes the intended communication policy explicit, but the default routes between same-VNet subnets mean drawing these groups is not enough."},
+              {"action": "Specify an NSG allow for the application's database conversation and a subsequent deny for other sources before the broad default allow.", "why": "Five-tuple filtering must enforce the actual requirement on new connections. The explicit deny closes the gap that an allow by itself would leave."},
+              {"action": "Route the intended outbound traffic through Azure Firewall and permit only required destinations with appropriate rule types.", "why": "Central network and application policies address outbound reachability. If decrypted payload inspection is justified, Premium and its trust configuration must be considered rather than assumed."}
+            ], "result": "The design now names the threat, enforcement point and remaining limitation for each control. It still needs application permissions, secure code, monitoring and a reviewed deployment plan. No attack traffic or cloud resources were created."},
+            {"type": "prediction", "id": "predict-subnet-isolation", "prompt": "The database moves to another subnet in the same VNet, but its rules and the ordinary VNet routing remain unchanged. Must the test machine now be blocked?", "answer": "No. Subnet separation alone does not create a deny policy.", "explanation": "Azure normally routes between those subnets. The effective network controls must enforce the restriction, and application authorization must still protect the data."},
+            {"type": "callout", "tone": "exam", "title": "Choose by what must be inspected", "text": "Think layers 3 and 4 flood mitigation for Azure DDoS Protection, layer 7 web requests for WAF, five-tuple connection filtering for NSGs, and centralized routed network/application policy for Azure Firewall. Segmentation organizes boundaries; it does not automatically enforce a deny between them."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-network-flood", "kind": "single", "prompt": "An eligible public school endpoint is overwhelmed by a layer 3 and 4 packet flood. Which service most directly addresses that threat?", "choices": [
+          {"id": "ddos", "text": "Azure DDoS Protection", "explanation": "Correct. Enhanced network-layer mitigation addresses the described availability attack on a protected resource."},
+          {"id": "waf", "text": "A WAF policy inspecting worksheet upload content", "explanation": "Incorrect. The scenario is a network-layer flood, not necessarily an HTTP content attack. WAF is a complementary application-layer control."},
+          {"id": "single-ip-rule", "text": "An NSG rule blocking one observed source IP instead of enhanced flood mitigation", "explanation": "Incorrect. A distributed flood can involve many sources. One connection-filter rule is not a substitute for the described network-layer mitigation capability."}
+        ], "correctIds": ["ddos"], "explanation": "Select the control whose inspection and mitigation boundary matches the stated attack, while retaining other layers for different threats."},
+        {"id": "check-firewall-tls", "kind": "single", "prompt": "The school's Azure Firewall Standard policy filters HTTPS destination names. Can the team claim it also inspects decrypted HTTPS payloads?", "choices": [
+          {"id": "always", "text": "Yes, every application rule automatically decrypts TLS", "explanation": "Incorrect. Application FQDN filtering does not imply TLS payload inspection."},
+          {"id": "premium", "text": "No; TLS inspection is a configured Premium capability with trust requirements", "explanation": "Correct. SKU, supported traffic direction and certificate configuration matter."},
+          {"id": "subnet", "text": "Yes, provided the destination is in another subnet", "explanation": "Incorrect. A subnet boundary cannot add a missing SKU feature or establish certificate trust."}
+        ], "correctIds": ["premium"], "explanation": "Firewall application rules and WAF inspection are also not identical just because both understand some application-layer information."},
+        {"id": "check-web-request", "kind": "single", "prompt": "A small HTTP upload appears to contain an injection attempt. Which control directly inspects that web request for common attack patterns?", "choices": [
+          {"id": "nsg", "text": "An NSG rule permitting TCP port 443", "explanation": "Incorrect. That permits a network conversation; it does not inspect the upload's application meaning."},
+          {"id": "ddos", "text": "DDoS IP Protection by itself", "explanation": "Incorrect. Its network-layer flood mitigation does not replace web-request inspection."},
+          {"id": "waf", "text": "An appropriately configured WAF policy at the web entry point", "explanation": "Correct. WAF is the web-focused control, with mode and rule configuration determining its response."}
+        ], "correctIds": ["waf"], "explanation": "Blocking known request patterns complements, but never replaces, fixing unsafe application code."},
+        {"id": "check-segmentation", "kind": "single", "prompt": "Application and database machines now occupy separate subnets in one VNet. What must still be established?", "choices": [
+          {"id": "deny-assumed", "text": "Nothing: separate subnet names automatically deny communication", "explanation": "Incorrect. Normal same-VNet routing and default security rules can still permit it."},
+          {"id": "policy", "text": "An enforced traffic policy allowing the required application flow and restricting other flows", "explanation": "Correct. Segmentation supplies useful boundaries, while associated controls implement permission."},
+          {"id": "passwordless-network", "text": "Remove database authorization because private addresses prove trust", "explanation": "Incorrect. Network placement does not establish a user's or application's data permissions."}
+        ], "correctIds": ["policy"], "explanation": "Routes and security rules answer different questions. Private connectivity is not automatic authorization."},
+        {"id": "check-nsg-default", "kind": "single", "prompt": "Only the application should use database TCP 1433. A narrow allow is added, but other machines still match the default virtual-network allow. What is missing?", "choices": [
+          {"id": "web-rule", "text": "A WAF worksheet-content rule instead of a network restriction", "explanation": "Incorrect. This is a direct database connection, not a web upload."},
+          {"id": "repeat-allow", "text": "A second identical allow for the application", "explanation": "Incorrect. Repeating an allow does not change what happens to unmatched sources."},
+          {"id": "deny-others", "text": "A suitable deny for other sources, after the narrow allow but before the broad default", "explanation": "Correct. First-match evaluation must stop unwanted flows before the default allow, without blocking the intended application connection."}
+        ], "correctIds": ["deny-others"], "explanation": "Reason through the complete rule list, including defaults, rather than interpreting an allow as an exclusive permission."}
+      ],
+      "takeaways": [
+        "Match the control to the threat and the traffic it can inspect.",
+        "A subnet boundary is not an automatic deny boundary.",
+        "NSGs use connection information and first-match rules, not web-content analysis.",
+        "DDoS protection and WAF protect different layers and can complement one another.",
+        "Azure Firewall only controls traffic on its path; Premium TLS inspection needs explicit configuration."
+      ],
+      "sourceIds": ["network-overview", "virtual-network", "nsg-overview", "ddos-overview", "waf-overview", "waf-modes", "firewall-skus", "firewall-premium", "sc-guide"]
+    },
+    {
+      "id": "sc-safe-admin-and-key-vault",
+      "title": "Let administrators work without exposing the keys",
+      "summary": "Use Bastion for a management path and Key Vault for controlled sensitive material, while keeping network access and identity permission separate.",
+      "objectives": [
+        "Explain what Azure Bastion changes about RDP and SSH access.",
+        "Distinguish keys, secrets and certificates in Azure Key Vault.",
+        "Separate vault network reachability from authentication and authorization.",
+        "Explain why retrieving a secret does not imply exporting every private key."
+      ],
+      "sections": [
+        {
+          "id": "administration-with-bastion",
+          "title": "An administrator needs a narrow entrance",
+          "blocks": [
+            {"type": "paragraph", "text": "The school technician, Mara, needs to maintain the application VM. Remote Desktop Protocol, or RDP, provides a Windows remote desktop; Secure Shell, or SSH, provides a secure remote command session commonly used for Linux. Publishing a VM's management port to the internet increases the number of outsiders able to attempt a connection. Even a strong password does not make broad exposure desirable. The design question is how Mara can reach the machine without giving every internet address the same network opportunity."},
+            {"type": "paragraph", "text": "Azure Bastion is a managed service for connecting to VMs using RDP or SSH over their private IP addresses. In a common browser-based arrangement, Mara connects to Bastion over HTTPS and Bastion connects to the target VM privately. The target VM does not need its own public IP for that Bastion connection. This reduces direct exposure of its management endpoint and avoids the school maintaining its own internet-facing jump server for that role. Particular client options, private-only deployments and other features depend on Bastion SKU and configuration; a browser is an example, not the only possible client."},
+            {"type": "paragraph", "text": "Bastion is not the application traffic firewall. Student uploads do not become safe because the technician used Bastion yesterday. It does not replace the VM's operating-system authentication, patching, permissions or relevant network rules. Mara still needs the appropriate access to the Azure resources and a supported authorized VM sign-in method. The network must allow the required Bastion-to-VM connection. If that path is denied, assigning Mara another application role will not create connectivity. If the path works but her VM credentials fail, removing the NSG is not an appropriate identity fix."}
+          ]
+        },
+        {
+          "id": "three-vault-objects",
+          "title": "A secret, a key and a certificate do different work",
+          "blocks": [
+            {"type": "paragraph", "text": "The homework app calls a fictional document-conversion service through an application programming interface, or API, a defined way for programs to communicate. If that service requires a password-like API credential, embedding it in application source code risks publishing it whenever the code is shared. Azure Key Vault gives the school a centrally managed place to store and control access to sensitive objects. A secret is a value the authorized application may need to retrieve and use, such as that API credential. Moving it into a vault improves storage and access control, but an application that prints the retrieved value into a log can still expose it."},
+            {"type": "paragraph", "text": "A cryptographic key is material used by an algorithm for operations such as signing, encryption or decryption. Rather than downloading a private key and implementing every operation locally, an application can request permitted cryptographic operations from Key Vault. The service performs the operation using the protected key and returns the result. Which operations are possible depends on the key type and permissions. This is why a signing service can use a private key without handing its plaintext value to every application instance. Do not confuse a cryptographic key object with a password-like string casually called an API key; the latter is commonly stored as a secret."},
+            {"type": "paragraph", "text": "A certificate links public-key information to an identity, such as the homework website's name, within a trust system. Key Vault certificate management helps handle certificates and their lifecycle. A Key Vault certificate has associated key and secret objects as well as public certificate metadata. Depending on certificate policy, an exportable software-backed certificate's private key may be included when the certificate is retrieved through its secret representation. A non-exportable certificate does not include that private key, and HSM-backed certificate keys are non-exportable. Therefore neither 'all private keys can be downloaded' nor 'nothing associated with a certificate can ever be exported' is a reliable rule."}
+          ]
+        },
+        {
+          "id": "vault-access-decisions",
+          "title": "Reaching the vault and being allowed to use it are separate",
+          "blocks": [
+            {"type": "paragraph", "text": "Treat vault access as several questions. Can the caller reach the data endpoint through the configured network boundary? Can Microsoft Entra ID authenticate the caller's identity? Does the applicable data-plane authorization model permit this particular operation on this object? A private endpoint changes the network path; it does not grant the app permission to retrieve a secret. A valid access token establishes an authenticated identity; it does not automatically authorize every vault operation. The vault can correctly reject a signed-in administrator who lacks permission to read secret values."},
+            {"type": "paragraph", "text": "Azure separates management-plane actions, such as managing the vault resource, from data-plane actions, such as retrieving a secret or using a key. Data-plane authorization can use Azure role-based access control or the vault access-policy model, depending on configuration. Do not treat the ability to view a vault's name in the portal as proof that you can read its contents. For new designs follow Microsoft's current RBAC guidance and choose the smallest suitable permissions. This fundamentals lesson does not require assigning roles or changing an existing vault's authorization model."},
+            {"type": "paragraph", "text": "A managed identity gives a supported Azure application an identity without storing another long-lived password in its code. The identity still requires an appropriate vault permission and a working network path. This avoids the circular problem of storing the vault password beside the secret it is supposed to protect. Prefer direct identity-based access to a downstream service when supported; a vault is useful when sensitive material genuinely must be managed. It is not a reason to replace all modern identity-based connections with shared passwords."}
+          ]
+        },
+        {
+          "id": "lifecycle-and-boundaries",
+          "title": "Safe storage still needs safe use",
+          "blocks": [
+            {"type": "paragraph", "text": "Suppose the document-conversion credential expires at the end of the month. Rotation means replacing the credential and coordinating the consumers that use it. A new secret version does not guarantee that an application with a cached old value immediately switches. The school should know who owns the external credential, which app reads it, how the app selects a version and how to verify the replacement without exposing it. These are operational responsibilities even when Microsoft manages the vault service. Availability and recovery planning matter because a protected secret that nobody can use can stop the application."},
+            {"type": "paragraph", "text": "Logging and least privilege help the school answer who used a vault and whether that use was expected. Avoid logging secret values while preserving relevant audit information. An administrator who only needs to maintain the VM should not automatically receive permission to export a certificate or retrieve every service credential. Likewise, granting an app permission to sign does not mean it should be allowed to delete the signing key. Network controls limit where a request comes from, and identity permissions limit what its caller may do. Combining them reduces risk without pretending that either alone solves every misuse."},
+            {"type": "paragraph", "text": "Key Vault Standard and Premium differ in supported protection features, including Premium support for HSM-protected key types. A hardware security module, or HSM, is specialized hardware designed to protect cryptographic operations and key material. Azure Managed HSM is a separate resource type, not simply another name for every Key Vault. We do not need its deployment details here. The important distinction is that storage, permitted operation and export behavior depend on the actual object and configuration, not on the word key appearing in a service name."}
+          ]
+        },
+        {
+          "id": "work-admin-and-vault",
+          "title": "Worked application: repair the app without handing out everything",
+          "blocks": [
+            {"type": "example", "title": "Separate Mara's maintenance access from the application's credential access", "scenario": "Mara must inspect the homework VM. The application must retrieve one document-conversion credential and use a non-exportable signing key. Assume a supported Bastion deployment, an application managed identity and an existing vault. This is a paper permission design only.", "steps": [
+              {"action": "Give Mara an approved Bastion management path and the appropriate VM sign-in permission, without exposing the VM's management port publicly.", "why": "Bastion addresses the remote connection path. Mara still authenticates and receives only the operating-system rights needed for maintenance."},
+              {"action": "Permit the application's identity to retrieve the required secret, not all identities that can reach the VNet.", "why": "The document-conversion credential is a value the app must use. Network proximity is not proof of authorization to read it."},
+              {"action": "Authorize the app's required signing operation on the protected key rather than planning to download its private material.", "why": "Using a cryptographic operation differs from reading a secret. A non-exportable key is useful precisely because the operation can happen without ordinary private-key retrieval."},
+              {"action": "Check the vault network boundary separately from these identity permissions and plan how credential rotation reaches the app.", "why": "Correct roles cannot repair a blocked network path. A working first retrieval cannot prove that next month's rotated credential will be consumed correctly."}
+            ], "result": "Mara can be authorized for maintenance without becoming the owner of every application secret. The app's secret use and key operation have separate justifications. Bastion does not inspect student uploads, and Key Vault does not replace the external service's own permission system."},
+            {"type": "prediction", "id": "predict-private-vault-access", "prompt": "The app reaches a vault through a private endpoint, but its managed identity has no secret-read permission. Will the network path make the read succeed?", "answer": "No. Reachability does not supply data-plane authorization.", "explanation": "The identity must be authenticated and authorized for the requested operation. Granting the necessary permission would still not permit an unrelated key export or every other vault operation."}
+          ]
+        },
+        {
+          "id": "choose-the-right-boundary",
+          "title": "Keep the control's promise narrow",
+          "blocks": [
+            {"type": "paragraph", "text": "When troubleshooting a fictional failure, state the failed boundary before proposing a change. 'Mara cannot reach the VM management service' suggests checking the approved management path. 'The app receives an authorization failure reading a secret' suggests examining its identity and data permission. 'A certificate is retrievable but its private key is absent' may be the intended result of a non-exportable policy, not data loss. This habit prevents a common dangerous shortcut: removing unrelated protections until an operation happens to work."},
+            {"type": "callout", "tone": "exam", "title": "Management path is not universal protection", "text": "Bastion provides supported RDP/SSH connectivity to private VM addresses; it does not filter every application flow. Key Vault manages secrets, cryptographic keys and certificates; their retrieval, operation and export semantics differ. Authentication, authorization and network access are separate requirements."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-bastion-purpose", "kind": "single", "prompt": "Mara needs an approved remote desktop connection without a public IP on the target VM. Which statement describes Bastion accurately?", "choices": [
+          {"id": "management-path", "text": "It can provide the management path to the VM's private address, while VM access permissions still apply", "explanation": "Correct. Bastion reduces direct management exposure without removing authentication and authorization."},
+          {"id": "all-traffic", "text": "It filters all student uploads and database queries automatically", "explanation": "Incorrect. Bastion is not a general traffic firewall or WAF."},
+          {"id": "identity-free", "text": "It lets any signed-in Azure user become the VM administrator", "explanation": "Incorrect. Azure access and the target VM's supported authentication and authorization remain relevant."}
+        ], "correctIds": ["management-path"], "explanation": "Select Bastion for the administration connectivity requirement, not as a replacement for application security."},
+        {"id": "check-key-secret", "kind": "single", "prompt": "The app must retrieve a conversion-service password and sign a document using a non-exportable key. Which design fits?", "choices": [
+          {"id": "export-all", "text": "Store both and download every private key as plaintext whenever a secret can be read", "explanation": "Incorrect. Secret-read permission does not imply private-key export, and a non-exportable key is not retrieved that way."},
+          {"id": "separate-operations", "text": "Retrieve the credential as an authorized secret operation and request the authorized signing operation separately", "explanation": "Correct. The two objects serve different purposes and have distinct permissions and behavior."},
+          {"id": "certificate-password", "text": "Replace every password with a public certificate name and skip authorization", "explanation": "Incorrect. A certificate name is not a valid substitute for a service's required authentication, and authorization is still necessary."}
+        ], "correctIds": ["separate-operations"], "explanation": "Ask whether the app needs a sensitive value or the result of a cryptographic operation."},
+        {"id": "check-vault-boundaries", "kind": "multiple", "prompt": "Choose two correct statements about the school's vault access.", "choices": [
+          {"id": "private-grants", "text": "A private endpoint grants permission to retrieve every secret", "explanation": "Incorrect. A private endpoint supplies a network path, not object permissions."},
+          {"id": "managed-permission", "text": "The app's managed identity still needs permission for its vault operation", "explanation": "Correct. Removing stored identity credentials does not remove the authorization requirement."},
+          {"id": "network-separate", "text": "A correctly authorized identity can still be blocked by the vault network boundary", "explanation": "Correct. The network path and identity decision are independent requirements."},
+          {"id": "resource-read", "text": "Seeing the vault resource in the portal proves that all secret values are readable", "explanation": "Incorrect. Resource visibility and data-plane read operations are different permissions."}
+        ], "correctIds": ["managed-permission", "network-separate"], "explanation": "Use least privilege at both the network and identity boundaries instead of treating one as a substitute for the other."},
+        {"id": "check-certificate-export", "kind": "single", "prompt": "A certificate is retrieved through its associated secret. Which statement avoids an unsafe universal assumption?", "choices": [
+          {"id": "policy-matters", "text": "Private-key inclusion depends on exportability policy and key type; a non-exportable certificate does not include it", "explanation": "Correct. Exportable software-backed certificate behavior differs from non-exportable and HSM-backed certificate keys."},
+          {"id": "always-private", "text": "Every retrieved certificate must contain its private key", "explanation": "Incorrect. Public certificate information can exist without exportable private key material."},
+          {"id": "never-private", "text": "No Key Vault certificate retrieval can ever include a private key", "explanation": "Incorrect. An appropriately authorized retrieval of an exportable certificate's secret representation can include its private key."}
+        ], "correctIds": ["policy-matters"], "explanation": "Key Vault has several object types and permission boundaries. Avoid replacing the documented distinction with a slogan."}
+      ],
+      "takeaways": [
+        "Bastion reduces direct VM management exposure but does not secure every traffic path.",
+        "Keys, secrets and certificates are related but not interchangeable vault objects.",
+        "A managed identity needs both permitted connectivity and appropriate data-plane authorization.",
+        "An authorized secret read is not universal permission to export private keys.",
+        "Rotation, logging and least privilege remain the school's responsibilities."
+      ],
+      "sourceIds": ["bastion-overview", "vault-overview", "vault-security", "key-operations", "vault-certificates"]
+    }
+  ],
+  "glossary": [
+    {"term": "VNet", "definition": "An Azure private network space whose subnets help organize resources and traffic policy."},
+    {"term": "Five-tuple", "definition": "Source address, source port, destination address, destination port and protocol identifying a network conversation."},
+    {"term": "DDoS", "definition": "Distributed denial of service, an attempt from many sources to exhaust availability."},
+    {"term": "WAF", "definition": "A web application firewall that inspects web requests for configured attack patterns and policy violations."},
+    {"term": "TLS inspection", "definition": "Configured decryption, inspection and re-encryption of supported TLS traffic, requiring appropriate trust and product capabilities."},
+    {"term": "Bastion", "definition": "Azure's managed service for supported RDP and SSH connections to VMs using private addresses."},
+    {"term": "Data plane", "definition": "Operations using a resource's contents, such as retrieving a secret or requesting a key operation, rather than managing the resource itself."},
+    {"term": "Managed identity", "definition": "An Azure-managed workload identity that avoids storing a separate long-lived identity password in application code."},
+    {"term": "Non-exportable key", "definition": "A key whose protected private material is not made available through ordinary private-key export, although authorized cryptographic operations can use it."}
+  ],
+  "sources": [
+    {"id": "network-overview", "url": "https://learn.microsoft.com/en-us/azure/security/fundamentals/network-overview", "title": "Azure network security overview", "supports": "Context for layered infrastructure security and distinct network control responsibilities."},
+    {"id": "virtual-network", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-overview", "title": "What is Azure Virtual Network?", "supports": "VNet and subnet organization, connectivity and segmentation context."},
+    {"id": "nsg-overview", "url": "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview", "title": "Network security groups", "supports": "Five-tuple rules, priorities, default virtual-network allows and statefulness."},
+    {"id": "ddos-overview", "url": "https://learn.microsoft.com/en-us/azure/ddos-protection/ddos-protection-overview", "title": "What is Azure DDoS Protection?", "supports": "Layer 3 and 4 scope, Network and IP Protection distinctions, monitoring and complementary WAF protection."},
+    {"id": "waf-overview", "url": "https://learn.microsoft.com/en-us/azure/web-application-firewall/overview", "title": "What is Azure Web Application Firewall?", "supports": "Web request protection against common exploits and hosting-service-specific capabilities."},
+    {"id": "waf-modes", "url": "https://learn.microsoft.com/en-us/azure/web-application-firewall/ag/ag-overview", "title": "Azure WAF on Application Gateway", "supports": "Detection versus prevention, enabled diagnostic logging, request inspection and policy-specific behavior."},
+    {"id": "firewall-skus", "url": "https://learn.microsoft.com/en-us/azure/firewall/features-by-sku", "title": "Azure Firewall features by SKU", "supports": "Basic, Standard and Premium boundaries; network and application filtering; Premium-only TLS inspection."},
+    {"id": "firewall-premium", "url": "https://learn.microsoft.com/en-us/azure/firewall/premium-features", "title": "Azure Firewall Premium features implementation guide", "supports": "TLS trust configuration, outbound and east-west inspection and distinction from inbound Application Gateway WAF."},
+    {"id": "bastion-overview", "url": "https://learn.microsoft.com/en-us/azure/bastion/bastion-overview", "title": "What is Azure Bastion?", "supports": "Private target VM addresses, RDP/SSH management connectivity and SKU-dependent client capabilities."},
+    {"id": "vault-overview", "url": "https://learn.microsoft.com/en-us/azure/key-vault/general/overview", "title": "About Azure Key Vault", "supports": "Secrets, cryptographic keys and certificates, protection tiers and managed sensitive material."},
+    {"id": "vault-security", "url": "https://learn.microsoft.com/en-us/azure/key-vault/general/security-features", "title": "Azure Key Vault security features", "supports": "Authentication, separate management and data planes, authorization models and network controls."},
+    {"id": "key-operations", "url": "https://learn.microsoft.com/en-us/azure/key-vault/keys/about-keys-details", "title": "Key types, algorithms, and operations", "supports": "Key operations versus retrieving secret values; ordinary key retrieval does not release private material."},
+    {"id": "vault-certificates", "url": "https://learn.microsoft.com/en-us/azure/key-vault/certificates/about-certificates", "title": "About Azure Key Vault certificates", "supports": "Associated key and secret objects, exportable certificate policy and non-exportable HSM-backed certificate keys."},
+    {"id": "sc-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "The announced October 21, 2026 outline, still future at the September 22, 2026 review."}
+  ],
+  "lab": {
+    "title": "Optional paper lab: mark the boundary before naming the product",
+    "purpose": "Explain the school's five traffic problems and two sensitive-material operations without opening an Azure subscription.",
+    "prerequisites": ["Paper or a local drawing application", "This module and fictional resource names only"],
+    "costWarning": "The paper activity has no Azure cost. Do not deploy Bastion, Firewall, DDoS plans, WAF or a vault for this exercise. Real services may charge for provisioned capacity, protected scope, processing and operations even when little student traffic exists; review current regional and SKU pricing before any separately authorized deployment.",
+    "steps": [
+      "Draw the public web entry, application subnet, test subnet and database subnet.",
+      "Mark the application-to-database conversation as allowed and the test-to-database conversation as denied.",
+      "Write which fields an NSG would examine and why a default virtual-network allow matters.",
+      "Place DDoS and WAF responsibilities beside the public entry without drawing DDoS as a proxy VM.",
+      "Add an intended outbound Firewall path and note that TLS inspection requires Premium and configuration.",
+      "Draw Mara's Bastion management path separately from student web traffic.",
+      "Create paper cards for a secret read, a signing operation and a non-exportable certificate retrieval; list the network and identity requirements for each."
+    ],
+    "expectedResults": ["Each proposed control has a specific threat, enforcement point and limitation.", "The drawing never treats subnet placement as automatic denial or private connectivity as secret-read permission.", "The key-operation card does not imply universal private-key export."],
+    "cleanup": ["Discard fictional notes when finished or keep them locally without real credentials.", "No Azure resources, identities, secrets or traffic were created, so no cloud cleanup is required."]
+  }
+}

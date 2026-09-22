@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-sentinel-operations",
+  "title": "Turn security signals into an investigation and a controlled response",
+  "summary": "Follow a suspicious school sign-in from collected evidence through analytics, incidents, hunting and authorized automation in Microsoft Sentinel.",
+  "priority": "core",
+  "priorityReason": "The announced SC-900 outline explicitly requires SIEM, SOAR and Sentinel detection and mitigation. The essential skill is understanding how evidence and response connect without assuming collection or automation happens by itself.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/sentinel/overview",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Define SIEM and SOAR",
+    "Describe Sentinel threat detection and mitigation"
+  ],
+  "lessons": [
+    {
+      "id": "sc-siem-data-detection-incidents",
+      "title": "Collecting events is only the beginning",
+      "summary": "Understand the path from data source to detection to incident, and why a dashboard cannot show activity that was never collected.",
+      "objectives": [
+        "Define SIEM and explain why it brings different security data sources together.",
+        "Distinguish ingestion, analytics, alerts and incidents.",
+        "Use entities and timelines to investigate without assuming correlation proves causation.",
+        "Describe the current Sentinel portal transition with an explicit date."
+      ],
+      "sections": [
+        {
+          "id": "why-siem",
+          "title": "Several small clues can describe one larger problem",
+          "blocks": [
+            {"type": "paragraph", "text": "At the fictional school, a teacher receives an unexpected sign-in notification. The application records a burst of document downloads, and a network device records unusual outbound traffic. Each system sees only its part of the story. A security information and event management system, or SIEM, collects and analyzes security information from different sources so an analyst can investigate relationships. Microsoft Sentinel provides cloud-native SIEM capabilities. The point is not to collect names of products; it is to bring relevant evidence together while preserving where it came from and what it actually says."},
+            {"type": "paragraph", "text": "An event is a recorded occurrence, such as a sign-in or a resource operation. A log is a record or collection of records produced by a system. Not every event is suspicious. Most school document downloads are ordinary lessons happening as intended. A detection looks for a meaningful pattern or condition in available evidence and may produce an alert. An incident groups related alerts and context for investigation. These distinctions matter because a million collected events are not a million attacks, and an empty incident list is not proof that every possible source is being monitored."},
+            {"type": "paragraph", "text": "Sentinel can use Microsoft and non-Microsoft sources across clouds and on-premises environments. For example, identity information may come from Microsoft Entra ID, resource activity from Azure and network events from another vendor's device. SIEM is not limited to one security product family's alerts. That broader collection role distinguishes it from the tightly integrated cross-product detection focus of Microsoft Defender XDR, although the two can work together. A shared portal does not erase their different capabilities, prerequisites or data boundaries."}
+          ]
+        },
+        {
+          "id": "ingestion-is-a-design",
+          "title": "A connector is a data path with prerequisites",
+          "blocks": [
+            {"type": "paragraph", "text": "Ingestion means bringing data into the service so it can be stored and analyzed. A data connector defines a supported way to receive a source's records, perhaps through an API, an agent, a diagnostic configuration or a standard logging protocol. Installing content from Sentinel's Content hub can supply connectors, rule templates and other useful material, but installing a solution is not proof that a connector is configured or sending data. Source permissions, licensing, selected log categories and collection health still determine what arrives."},
+            {"type": "paragraph", "text": "For the school, begin with an investigation need: can we connect the teacher's sign-in to access to sensitive worksheets? Select the relevant identity and application records, then confirm that identifiers and timestamps can be related. An entity is an identifiable thing in the evidence, such as an account, device, IP address or file. Two systems may record the same teacher differently. Normalization presents different source formats in a more consistent form, but it cannot create missing data or guarantee that two similar display names represent the same person."},
+            {"type": "paragraph", "text": "Data collection has privacy, retention and financial consequences. Do not send entire pupil documents to a security system merely because a connector exists. Collect the authorized information necessary for the security purpose and understand who may query it. Ingestion, retention, analytics choices and related services can affect costs; some data and entitlements have exceptions. Avoid the universal claim that every connector is free or that every ingested byte has the same price. Our examples are paper records and require neither an Azure subscription nor real student information."}
+          ]
+        },
+        {
+          "id": "analytics-and-incidents",
+          "title": "A rule asks a question of the available evidence",
+          "blocks": [
+            {"type": "paragraph", "text": "Analytics rules can detect patterns in collected data. A scheduled rule, for example, evaluates a query over a selected time window on a schedule. A template offers a starting point, not a guarantee that it matches the school's environment. The required data must exist, the rule must be enabled and the query logic must fit the source. Thresholds, time windows and entity mapping affect both missed detections and false positives. A classroom-wide download during a planned lesson should not be treated identically to an unexplained overnight download by a single account."},
+            {"type": "paragraph", "text": "An alert states that a detection condition was met. An incident gives analysts a place to investigate related alerts, entities and evidence. Depending on the rule and integration, alerts can be grouped or correlated rather than creating a separate incident for every record. An analyst then examines what happened first, which entities connect the clues and what else might explain them. A common IP address is not automatically a single attacker: a school or mobile provider may share an external address among many people. Correlation is a reason to investigate a relationship, not proof of its cause."},
+            {"type": "paragraph", "text": "A workbook is a visual report for exploring collected information. It can help show trends or explain why a detection became noisy, but displaying a chart is not the same as enabling a detection rule. Similarly, changing an incident's status is case management, not automatically changing the affected system. A resolved incident should have an explanation and evidence of whatever response was required. Without that distinction, an attractive dashboard can make the school feel protected while its data collection or response process remains incomplete."}
+          ]
+        },
+        {
+          "id": "sentinel-evidence-map",
+          "title": "Locate the handoffs",
+          "blocks": [
+            {"type": "diagram", "title": "From a school event to an accountable decision", "description": "Data collection and detection precede investigation. An incident can trigger configured automation, but no arrow grants response permission by itself.", "nodes": [
+              {"id": "sources", "label": "Source systems", "detail": "Identity, app and network records", "column": 0, "row": 0},
+              {"id": "collection", "label": "Connectors and data", "detail": "Authorized ingestion and retention", "column": 1, "row": 0},
+              {"id": "analytics", "label": "Analytics", "detail": "Evaluate configured detection logic", "column": 2, "row": 0},
+              {"id": "incident", "label": "Incident", "detail": "Related alerts and entity context", "column": 2, "row": 1},
+              {"id": "decision", "label": "Investigation", "detail": "Validate evidence and scope", "column": 1, "row": 1},
+              {"id": "response", "label": "Controlled response", "detail": "Authorized actions and verification", "column": 0, "row": 1}
+            ], "edges": [
+              {"from": "sources", "to": "collection", "label": "Send selected records"},
+              {"from": "collection", "to": "analytics", "label": "Provide queryable evidence"},
+              {"from": "analytics", "to": "incident", "label": "Generate and relate alerts"},
+              {"from": "incident", "to": "decision", "label": "Triage"},
+              {"from": "decision", "to": "response", "label": "Act if justified"}
+            ]},
+            {"type": "paragraph", "text": "Read each arrow as a dependency. An analytics query cannot discover last night's sign-in if the identity source stopped sending records yesterday. A response cannot disable an account if its configured identity lacks permission. Investigation also feeds backward: a false positive may justify carefully tuning a rule or collecting an additional relevant field. This is a learning loop, not a reason to weaken every detection until no alerts remain. The school should know who owns each handoff and how failures become visible."}
+          ]
+        },
+        {
+          "id": "work-detection-evidence",
+          "title": "Worked application: relate the teacher's sign-in to downloads",
+          "blocks": [
+            {"type": "example", "title": "Investigate a possible stolen teacher session", "scenario": "Fictional records show a teacher sign-in at 20:10, unusual document downloads at 20:14 and an outbound network event at 20:16. Assume the relevant records are authorized, collected and in comparable time zones. The school has not yet concluded that an attack occurred.", "steps": [
+              {"action": "Confirm connector health and locate the original records, preserving their source and time.", "why": "The SIEM's conclusions depend on reliable input. A missing record or mismatched time zone can distort the apparent sequence."},
+              {"action": "Apply suitable analytics logic to identify the unusual pattern and map the account and device entities.", "why": "Collected events become useful detections through defined conditions, not merely by existing in storage."},
+              {"action": "Review the resulting incident's related alerts and compare the activity with an approved evening teaching task.", "why": "An incident organizes the possible attack story, but a legitimate explanation must still be considered."},
+              {"action": "Record what is known, what is missing and whether a controlled response is justified.", "why": "Case status, evidence and response are different things. A useful conclusion states the confidence and scope rather than claiming certainty from one coincidence."}
+            ], "result": "The analyst has a traceable sequence and an explicit investigation decision. Sentinel has helped relate signals, not proven that every download was theft or that containment already happened."},
+            {"type": "prediction", "id": "predict-missing-data", "prompt": "A rule searches identity records, but its required connector is not sending any. Does enabling the rule create those missing sign-in records?", "answer": "No. Detection logic cannot replace the missing data path.", "explanation": "Confirm collection prerequisites and health. No matching alerts under those conditions cannot establish that the teacher's identity was safe."}
+          ]
+        },
+        {
+          "id": "sentinel-portal-date",
+          "title": "The portal location has changed, but keep the dates straight",
+          "blocks": [
+            {"type": "paragraph", "text": "As checked September 22, 2026, Microsoft Sentinel is generally available in the Microsoft Defender portal, including for customers without Defender XDR or an E5 license. This portal availability does not remove Sentinel's own service and billing requirements. Current Sentinel documentation says that after March 31, 2027, Sentinel will no longer be supported in the Azure portal and will be available only in the Defender portal. That is a future deadline at this review, not a claim that all Azure-portal access already ended in July 2026."},
+            {"type": "paragraph", "text": "The overview also describes earlier redirects for qualifying new customers onboarding their first workspace from July 2025, with distinctions for permissions and delegated users. Therefore two legitimate tenants can have different navigation experiences today. An old screenshot is not enough to infer a universal migration date. Follow current instructions for the tenant and workspace in question. For exam preparation, the separate October 21, 2026 objective outline is also future at this review; product-portal changes and exam-outline effective dates must not be collapsed into one event."},
+            {"type": "callout", "tone": "exam", "title": "Know the workflow, not an obsolete menu", "text": "SIEM brings security evidence together for detection and investigation. Ingestion is not detection, an alert is not a proven breach and an incident is not a completed response. Current Sentinel Azure-portal retirement guidance says after March 31, 2027."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-siem-purpose", "kind": "single", "prompt": "Why use Sentinel for the school's identity, application and third-party network records?", "choices": [
+          {"id": "unified-evidence", "text": "To collect and analyze related security evidence across different systems", "explanation": "Correct. This is the SIEM role, with collection and analytics configured for the required sources."},
+          {"id": "replace-sources", "text": "To make the original systems unnecessary and invent any missing events", "explanation": "Incorrect. Sentinel depends on source evidence and cannot create historical activity that was never collected."},
+          {"id": "password-store", "text": "To store teachers' passwords as a substitute for an identity provider", "explanation": "Incorrect. SIEM is not a replacement authentication directory or password vault."}
+        ], "correctIds": ["unified-evidence"], "explanation": "The value is cross-source evidence and analysis, not automatic knowledge of every event."},
+        {"id": "check-connector-rule", "kind": "single", "prompt": "A content solution is installed, but the required connector sends no data. A scheduled detection has no matches. What should be checked first?", "choices": [
+          {"id": "declare-safe", "text": "Declare the school safe because there are no alerts", "explanation": "Incorrect. Without the required source records, an empty detection result cannot establish that the activity did not occur."},
+          {"id": "collection", "text": "The source prerequisites, connector configuration and collection health", "explanation": "Correct. Analytics can only evaluate the evidence available to it."},
+          {"id": "close-case", "text": "Close every incident to restart the missing source", "explanation": "Incorrect. Changing case status does not restore the source connection, its permissions or the flow of missing records."}
+        ], "correctIds": ["collection"], "explanation": "Installing content, configuring collection and enabling useful detection are separate steps."},
+        {"id": "check-incident-meaning", "kind": "single", "prompt": "Several alerts share an account and appear in one incident. What does that justify?", "choices": [
+          {"id": "automatic-theft", "text": "State that all school documents were certainly stolen", "explanation": "Incorrect. Related signals do not establish that particular outcome."},
+          {"id": "ignore-sources", "text": "Ignore the individual records because grouping removes uncertainty", "explanation": "Incorrect. Source evidence and alternative explanations remain important."},
+          {"id": "investigate-sequence", "text": "Investigate the sequence, entity links and legitimate explanations", "explanation": "Correct. An incident organizes evidence for a reasoned investigation."}
+        ], "correctIds": ["investigate-sequence"], "explanation": "Correlation helps identify a possible story; it does not by itself prove causation or scope."},
+        {"id": "check-portal-timeline", "kind": "single", "prompt": "Which statement matches Sentinel documentation checked on September 22, 2026?", "choices": [
+          {"id": "current-deadline", "text": "Defender-portal availability is current; Azure-portal support ends after March 31, 2027", "explanation": "Correct. The deadline is still future at the review date, though some users already have redirects."},
+          {"id": "july-ended", "text": "Every tenant lost Azure-portal Sentinel access in July 2026", "explanation": "Incorrect. This conflicts with the current overview's extended deadline and tenant-specific transition details."},
+          {"id": "e5-mandatory", "text": "Using Sentinel in the Defender portal always requires an E5 license", "explanation": "Incorrect. The overview explicitly includes customers without E5 or Defender XDR, while Sentinel prerequisites and charges still apply."}
+        ], "correctIds": ["current-deadline"], "explanation": "Always separate the current availability, future retirement deadline and customer-specific onboarding experience."}
+      ],
+      "takeaways": ["SIEM brings different security sources into a common investigation.", "Collection, detection, alerting and incident management are different stages.", "Entity links and timelines guide an investigation but do not prove every hypothesis.", "Missing data can explain missing alerts.", "Portal transition dates must be read from current documentation and qualified by review date."],
+      "sourceIds": ["sentinel-overview", "data-connectors", "analytics-rules", "incident-investigation", "sentinel-pricing", "sc-guide"]
+    },
+    {
+      "id": "sc-soar-hunting-response",
+      "title": "Search deliberately, then automate only what is justified",
+      "summary": "Separate proactive hunting, automation rules and Logic Apps playbooks, and account for action permissions and the harm of a mistaken response.",
+      "objectives": [
+        "Define SOAR as coordinated, automated security response.",
+        "Distinguish an automation rule from a Logic Apps playbook.",
+        "Explain proactive hunting and its relationship to detection rules.",
+        "Design an authorized response with a controlled impact and visible failures."
+      ],
+      "sections": [
+        {
+          "id": "soar-and-human-judgment",
+          "title": "Fast response needs a process, not just a button",
+          "blocks": [
+            {"type": "paragraph", "text": "Security orchestration, automation and response, or SOAR, connects security work into repeatable actions. Orchestration means coordinating different systems, such as the incident queue, a ticketing system and an endpoint protection service. Automation means carrying out defined steps without someone repeating every click. Response means doing something useful about the suspected threat, from notifying an owner to containing a confirmed compromise. Sentinel provides capabilities for these workflows. SIEM answers what the evidence suggests; SOAR helps organize what happens next. A product can support both without making them the same concept."},
+            {"type": "paragraph", "text": "Suppose every school account anomaly requires someone to copy details into a ticket and notify the technician. Automating those low-impact steps can reduce delay and transcription mistakes. Disabling a teacher's account is more consequential: it can interrupt teaching and may affect access to several applications. A good response process distinguishes routine enrichment from destructive or disruptive actions. Human approval is not a failure of automation when the evidence is uncertain or the business impact is large. The goal is reliable, accountable response rather than the largest possible number of automatic actions."},
+            {"type": "paragraph", "text": "Automation also needs a clear stop condition. If the incident lacks a reliable account identifier, do not guess which teacher to disable based on a similar display name. If a downstream action fails, record the failure and notify an owner instead of marking containment complete. These are design principles for the fictional workflow, not instructions to run a live security operation. They explain why a security system's ability to call an API is not equivalent to permission or justification to use every available action."}
+          ]
+        },
+        {
+          "id": "rules-versus-playbooks",
+          "title": "The rule selects the situation; the playbook performs a workflow",
+          "blocks": [
+            {"type": "paragraph", "text": "A Sentinel automation rule defines conditions and actions for handling relevant incidents or alerts. It can perform supported incident-management tasks, such as assigning an owner or changing a status, and it can invoke a playbook. The rule is the place to express when a defined handling step should occur. This is different from an analytics rule, which evaluates evidence to detect suspicious activity. Confusing the two creates a common mistake: assuming that creating a response rule also creates the detection data and logic it depends on."},
+            {"type": "paragraph", "text": "A Sentinel playbook is a workflow built with Azure Logic Apps. It can coordinate several steps and connectors, such as retrieving context, creating a ticket, sending a notification and requesting a permitted response in another service. A playbook can run on demand or through configured automation. A template is a starting definition that must become a configured workflow with the right connections; it is not a ready-made permission to act on the school's systems. Required details depend on its trigger and the resources it uses."},
+            {"type": "paragraph", "text": "Imagine an automation rule that selects a high-priority incident involving the homework application, assigns it to Mara and invokes a notification playbook. The playbook formats the evidence and creates a ticket. Assignment is not the same as account containment, and sending a notification is not the same as isolating a laptop. Choose a name describing the action actually performed. A playbook called Fix Everything is misleading if its only step sends an email. Verify action results before updating the incident narrative."}
+          ]
+        },
+        {
+          "id": "permission-and-price",
+          "title": "There are several permission checks, not one magic role",
+          "blocks": [
+            {"type": "paragraph", "text": "Viewing an incident, attaching a playbook, invoking it and performing its downstream actions are separate permissions. Current Sentinel documentation distinguishes responder, contributor, playbook-operator and automation-contributor roles. For example, access to an incident alone is not permission to run a playbook. Sentinel's service identity also needs appropriate permission over the playbook resource scope to invoke it in the documented workflow. Do not memorize one broad administrator role as the solution to every failure. Identify which actor is attempting which operation on which resource."},
+            {"type": "paragraph", "text": "Even if Sentinel can start the Logic Apps workflow, the workflow's connection or identity must be authorized to perform its target action. An account-containment step needs the appropriate identity-service capability and permission; an endpoint action needs the appropriate endpoint service, onboarded device and authorization. A successful workflow trigger does not prove successful containment. Prefer narrowly scoped permissions, protect connections and inspect execution outcomes. A workflow with more access than its task needs can magnify a mistaken condition into a large outage."},
+            {"type": "paragraph", "text": "Playbooks can create additional Azure Logic Apps charges. The charging model depends on the workflow type and use, and associated services may have their own costs. A loop that repeatedly invokes enrichment or creates duplicate tickets is therefore both an operational and a financial problem. Separate Sentinel ingestion and retention considerations from workflow execution costs. Our safe exercise models one incident with paper steps only. It neither creates Logic Apps resources nor enables a paid trial, connector or automated action."}
+          ]
+        },
+        {
+          "id": "hunt-before-the-alert",
+          "title": "Hunting starts with a question, not necessarily an incident",
+          "blocks": [
+            {"type": "paragraph", "text": "Threat hunting is a proactive search for suspicious activity in available evidence, including behavior that has not triggered an alert. The school's analyst might ask whether any other teacher accounts downloaded many documents shortly after an unusual sign-in. A useful hypothesis names the behavior and the relevant data, rather than asking to find all hackers. Sentinel provides hunting tools and queries; queries commonly use Kusto Query Language, or KQL, a language for analyzing records. At fundamentals level, understand the question being asked instead of memorizing query syntax."},
+            {"type": "paragraph", "text": "A hunt may produce no supporting evidence, a legitimate explanation or a lead worth investigating. None of those outcomes justifies claiming that every possible threat was tested. The search is bounded by data sources, time range and the hypothesis. Useful findings can be recorded and developed into detection logic when the pattern is reliable enough for repeatable monitoring. Turning a hunting idea into an analytics rule requires checking noise, required data and entity mapping. A query result does not itself block an account or become a complete automated response."}
+          ]
+        },
+        {
+          "id": "work-hunt-and-response",
+          "title": "Worked application: enrich first, contain with authority",
+          "blocks": [
+            {"type": "example", "title": "Design a restrained school response workflow", "scenario": "The previous lesson's incident remains suspicious after the owner check. The analyst wants to see whether other accounts show the same pattern, notify Mara and propose containment of one affected account. No live records or actions are used.", "steps": [
+              {"action": "Write a hunting hypothesis and search the fictional identity and download records within a stated time window.", "why": "Hunting can reveal related activity beyond the existing incident, but its conclusion remains limited to the available evidence."},
+              {"action": "Design an automation rule that assigns relevant incidents and invokes an enrichment-and-notification playbook.", "why": "The rule selects the situation; the Logic Apps workflow coordinates the repeatable external steps."},
+              {"action": "Require a verified account identifier and a human decision before the proposed containment step.", "why": "The school wants speed without disabling the wrong teacher or treating a weak correlation as certainty."},
+              {"action": "Identify the Sentinel invocation permission and the workflow identity's separate target-action permission.", "why": "Permission to view the incident or start a workflow does not authorize every downstream change."},
+              {"action": "Record the action result, notify the owner on failure and check whether legitimate teaching access needs a recovery path.", "why": "A successful trigger is not proof of containment, and a successful containment action can still interrupt the school service."}
+            ], "result": "The design combines SIEM evidence with SOAR coordination, keeping proactive hunting, incident handling and high-impact actions distinct. It also names the extra Logic Apps cost boundary and does not run any real response."},
+            {"type": "prediction", "id": "predict-playbook-permission", "prompt": "Sentinel starts a playbook successfully, but its connection lacks permission to disable the account. Is the account contained?", "answer": "No. Starting the workflow does not authorize or complete its downstream action.", "explanation": "Inspect the failed step, record the lack of containment and route the issue to an authorized owner. Do not report a successful security outcome from a successful trigger alone."}
+          ]
+        },
+        {
+          "id": "response-distinction",
+          "title": "Measure the result that matters",
+          "blocks": [
+            {"type": "paragraph", "text": "A useful response record states the evidence considered, the affected entities, the action chosen, who authorized it and what the action actually achieved. If a notification was sent, say that. If a device was isolated, check the endpoint service's reported result and document the business impact. If no containment was justified, record the legitimate explanation rather than leaving a mysterious closed incident. Clear language protects both the students whose data is involved and the staff whose accounts might otherwise be blamed by an unexplained alert."},
+            {"type": "callout", "tone": "exam", "title": "Detection, handling and orchestration have different jobs", "text": "Analytics rules detect from evidence. Automation rules coordinate supported incident or alert handling and can invoke playbooks. Playbooks are Logic Apps workflows with separate action permissions and possible charges. Hunting is proactive investigation, not automatic mitigation."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-soar-definition", "kind": "single", "prompt": "A workflow enriches an incident, opens a ticket and requests an approved endpoint action. Which concept best describes this coordination?", "choices": [
+          {"id": "subnet", "text": "Network segmentation", "explanation": "Incorrect. Segmentation organizes network boundaries, not a multi-system response workflow."},
+          {"id": "soar", "text": "SOAR: security orchestration, automation and response", "explanation": "Correct. The workflow coordinates defined security actions across systems."},
+          {"id": "storage-only", "text": "Log retention alone", "explanation": "Incorrect. Keeping records is not the same as coordinating response steps."}
+        ], "correctIds": ["soar"], "explanation": "SIEM evidence can inform SOAR actions, but collection and response are not interchangeable concepts."},
+        {"id": "check-rule-playbook", "kind": "single", "prompt": "The school needs selected incidents assigned to Mara, followed by a ticket in an external system. Which distinction is correct?", "choices": [
+          {"id": "same-thing", "text": "An automation rule and a playbook are two names for the same object", "explanation": "Incorrect. The rule selects conditions and supported handling actions; the Logic Apps playbook coordinates its separately configured workflow steps."},
+          {"id": "analytics-disables", "text": "Every analytics rule directly disables accounts without a response workflow", "explanation": "Incorrect. Detection does not automatically establish that action or its authorization."},
+          {"id": "rule-workflow", "text": "An automation rule can select and handle the incident, then invoke a Logic Apps playbook for external steps", "explanation": "Correct. The rule's conditions and supported handling actions can coordinate with a multi-step playbook."}
+        ], "correctIds": ["rule-workflow"], "explanation": "Choose the component by whether the need is detecting, selecting incident handling or orchestrating workflow steps."},
+        {"id": "check-response-permission", "kind": "single", "prompt": "An analyst can read an incident and sees a containment playbook. What follows?", "choices": [
+          {"id": "all-authorized", "text": "The analyst and workflow automatically have all response permissions", "explanation": "Incorrect. Incident access, workflow invocation and downstream actions are separate."},
+          {"id": "check-actors", "text": "Check invocation permissions and the workflow connection's target-action authority", "explanation": "Correct. Each actor needs appropriate access for the operation it performs."},
+          {"id": "no-cost", "text": "The playbook is free to run because it appears beside the incident", "explanation": "Incorrect. Logic Apps and related services can create charges independently of its display location."}
+        ], "correctIds": ["check-actors"], "explanation": "Visible controls and successful triggers are not evidence of complete authorization or successful containment."},
+        {"id": "check-hunting", "kind": "single", "prompt": "No alert covers a suspected pattern, so the analyst searches available records using a stated hypothesis. What is happening?", "choices": [
+          {"id": "hunting", "text": "Proactive threat hunting, whose results may inform future detection", "explanation": "Correct. Hunting need not begin with an alert and may produce evidence for a tuned analytics rule."},
+          {"id": "automatic-block", "text": "Automatic blocking of every account returned by the search", "explanation": "Incorrect. Querying evidence does not itself authorize or execute containment."},
+          {"id": "universal-proof", "text": "A complete proof that all threats are absent if the search is empty", "explanation": "Incorrect. The result is limited by data coverage, time range and the chosen hypothesis."}
+        ], "correctIds": ["hunting"], "explanation": "A hunt asks a bounded question; response requires a separate justified decision."}
+      ],
+      "takeaways": ["SOAR coordinates repeatable security-response work across systems.", "Automation rules and Logic Apps playbooks are different components.", "Workflow invocation and downstream action permissions must both be correct.", "Hunting can uncover leads before alerts exist, but it is not automatic blocking.", "Verify actual response results and account for operational impact and costs."],
+      "sourceIds": ["sentinel-overview", "automation-rules", "playbooks", "hunting", "sentinel-pricing"]
+    }
+  ],
+  "glossary": [
+    {"term": "SIEM", "definition": "Security information and event management, bringing security evidence together for analysis and investigation."},
+    {"term": "SOAR", "definition": "Security orchestration, automation and response, coordinating repeatable security actions across systems."},
+    {"term": "Ingestion", "definition": "Receiving source records into the service for supported storage and analysis."},
+    {"term": "Entity", "definition": "An identifiable item in evidence, such as an account, device, IP address or file."},
+    {"term": "Analytics rule", "definition": "Configured logic that evaluates evidence to detect suspicious conditions."},
+    {"term": "Automation rule", "definition": "Conditions and supported actions coordinating Sentinel incident or alert handling, including playbook invocation."},
+    {"term": "Playbook", "definition": "A Logic Apps workflow performing configured investigation or response steps."},
+    {"term": "Threat hunting", "definition": "Proactively searching available evidence for a stated suspicious behavior, including before an alert exists."}
+  ],
+  "sources": [
+    {"id": "sentinel-overview", "url": "https://learn.microsoft.com/en-us/azure/sentinel/overview", "title": "What is Microsoft Sentinel SIEM?", "supports": "SIEM collection, analytics, hunting and SOAR capabilities; current Defender-portal availability and Azure-portal support ending after March 31, 2027."},
+    {"id": "data-connectors", "url": "https://learn.microsoft.com/en-us/azure/sentinel/connect-data-sources", "title": "Connect data sources to Microsoft Sentinel", "supports": "Data connector prerequisites and source collection rather than automatic ingestion from every environment."},
+    {"id": "analytics-rules", "url": "https://learn.microsoft.com/en-us/azure/sentinel/detect-threats-built-in", "title": "Detect threats with built-in analytics rules", "supports": "Rule templates, detection configuration, required data and alert generation."},
+    {"id": "incident-investigation", "url": "https://learn.microsoft.com/en-us/azure/sentinel/investigate-incidents", "title": "Navigate and investigate incidents in Microsoft Sentinel", "supports": "Incident investigation using related alerts, entities and context."},
+    {"id": "automation-rules", "url": "https://learn.microsoft.com/en-us/azure/sentinel/automate-incident-handling-with-automation-rules", "title": "Automate threat response with automation rules", "supports": "Conditions, incident handling actions and playbook coordination."},
+    {"id": "playbooks", "url": "https://learn.microsoft.com/en-us/azure/sentinel/automation/automate-responses-with-playbooks", "title": "Automate threat response with playbooks", "supports": "Logic Apps workflows, distinct operator and service permissions, configured connections and additional charges."},
+    {"id": "hunting", "url": "https://learn.microsoft.com/en-us/azure/sentinel/hunting", "title": "Threat hunting in Microsoft Sentinel", "supports": "Proactive investigation with queries and using findings to improve detection."},
+    {"id": "sentinel-pricing", "url": "https://azure.microsoft.com/en-us/pricing/details/microsoft-sentinel/", "title": "Microsoft Sentinel pricing", "supports": "Pricing depends on selected data and service usage; no universal free-ingestion claim."},
+    {"id": "sc-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "Announced October 21, 2026 SIEM, SOAR and Sentinel objectives, future at review."}
+  ],
+  "lab": {
+    "title": "Optional paper lab: one incident, two permission boundaries",
+    "purpose": "Practice evidence handling and restrained automation without ingesting data or invoking live actions.",
+    "prerequisites": ["Paper or an offline document", "Three fictional timestamped events and invented account identifiers"],
+    "costWarning": "No paid services are required. Do not create a Sentinel workspace, enable connectors, upload logs, deploy Logic Apps or run playbooks. Real ingestion, retention, analytics and workflow usage can incur separate charges; review current scope and pricing before any independently approved deployment.",
+    "steps": [
+      "Write fictional sign-in, document-download and network events with comparable timestamps.",
+      "Mark the source and entity identifiers needed to relate each event.",
+      "Write a detection condition and an innocent explanation that an analyst should check.",
+      "Create an incident card separating observed facts from hypotheses.",
+      "Draw an automation rule that assigns the incident and invokes a notification playbook.",
+      "List the Sentinel invocation permission separately from the workflow's target-action permission.",
+      "Add a failure branch that notifies an owner rather than reporting containment as complete.",
+      "Write a hunting question for similar activity outside the incident and state its data limitations."
+    ],
+    "expectedResults": ["The diagram distinguishes data collection, analytics and response.", "A successful trigger is not labeled as successful containment.", "The hunt has a hypothesis and scope rather than a universal no-threat conclusion."],
+    "cleanup": ["Retain only invented events, not real student data or security logs.", "No Azure resources or response actions were created, so no cloud cleanup is required."]
+  }
+}

@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-defender-cloud",
+  "title": "Improve cloud posture and notice attacks against workloads",
+  "summary": "Use the school's application to separate configuration weaknesses from suspicious activity, then connect recommendations and alerts to accountable decisions.",
+  "priority": "core",
+  "priorityReason": "Defender for Cloud, CSPM, security standards and enhanced workload protection are explicit objectives in the announced SC-900 outline. Understanding their different evidence is more useful than memorizing plan names.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/defender-for-cloud-introduction",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe Microsoft Defender for Cloud",
+    "Describe Cloud Security Posture Management",
+    "Describe how policies, standards and recommendations improve cloud security posture",
+    "Describe enhanced cloud workload protection security features"
+  ],
+  "lessons": [
+    {
+      "id": "sc-cloud-posture-and-recommendations",
+      "title": "A weak configuration is a risk even before an attack",
+      "summary": "Understand posture assessments, improvement recommendations and secure score without mistaking them for legal compliance or proof that no attack is possible.",
+      "objectives": [
+        "Describe Defender for Cloud as a service combining posture and workload protection capabilities.",
+        "Explain what CSPM evaluates and how foundational and paid capabilities differ.",
+        "Follow a standard through assessment, recommendation, ownership and verification.",
+        "Distinguish secure score from compliance score and a security guarantee."
+      ],
+      "sections": [
+        {
+          "id": "posture-before-an-incident",
+          "title": "The open window and the intruder are different evidence",
+          "blocks": [
+            {"type": "paragraph", "text": "The school's homework application has a public web entry, a database and a document store. Nobody has reported a break-in, but the administrator discovers an unnecessarily broad management rule. That is a weakness worth fixing even without an attack. Think of finding an unlocked classroom window during an inspection. It tells you how someone could enter, not that a thief has already entered. Security posture describes the environment's current configuration, exposures and readiness to resist threats. Good posture work reduces avoidable opportunities before a security incident demands emergency attention."},
+            {"type": "paragraph", "text": "Microsoft Defender for Cloud helps organizations understand and protect cloud resources. Its current overview describes a cloud-native application protection platform, bringing together cloud security posture management, workload protection and development-security capabilities. You do not need to memorize that long platform label. The practical questions are whether the application is configured safely, whether its workloads show signs of attack and whether security problems can be found earlier in development. In this fundamentals module we focus on posture and workload protection, not on provisioning developer integrations or enabling every paid plan."},
+            {"type": "paragraph", "text": "A workload is a running service or collection of resources doing useful work. Examples include a virtual machine, or VM, a software-based computer hosting the homework app; its database; or a containerized document processor. Defender for Cloud is not merely antivirus for that VM. It can assess cloud configurations and offer protections tailored to different resource types. It also does not automatically secure every resource in every cloud account the school owns. Visibility and protection depend on connected environments, supported resources, enabled plans and the permissions or components required for those features."}
+          ]
+        },
+        {
+          "id": "cspm-and-priorities",
+          "title": "CSPM turns scattered settings into an improvement queue",
+          "blocks": [
+            {"type": "paragraph", "text": "Cloud Security Posture Management, or CSPM, continually evaluates the security state of cloud resources against relevant expectations and provides findings for improvement. Instead of checking each setting manually every week, the school can see recommendations about weaknesses across its connected environment. A useful recommendation connects a resource, the condition found and an action that could reduce risk. The administrator still needs to interpret it in context. A public website has different exposure requirements from a private database, so identical-looking network findings may have different business consequences."},
+            {"type": "paragraph", "text": "Defender for Cloud includes free Foundational CSPM capabilities, including basic posture assessment and recommendations. The paid Defender CSPM plan adds advanced capabilities, such as attack-path analysis and broader contextual prioritization. An attack path explains how several weaknesses could combine, for example a reachable machine with access to sensitive data. This helps the school avoid ranking tasks only by how easy they are to fix. Plan-specific recommendations and workload features can have separate prerequisites. Free foundational visibility does not mean all advanced posture tools, runtime alerts and scanners are free or enabled."},
+            {"type": "paragraph", "text": "Prioritize based on plausible harm, exposure and the importance of the affected resource. An exposed application connected to examination documents may deserve attention before an isolated training machine with a less consequential weakness. Also consider dependencies: removing a broad rule without identifying the application's legitimate connection can cause an outage. CSPM informs a decision rather than replacing it. A good improvement queue names an owner, a proposed change, the reason for its priority and how someone will verify that the change reduced risk without breaking the school service."}
+          ]
+        },
+        {
+          "id": "standards-assessments-actions",
+          "title": "A standard is a yardstick, not a repair robot",
+          "blocks": [
+            {"type": "paragraph", "text": "A security standard organizes desired controls into an understandable set of expectations. The Microsoft cloud security benchmark is one built-in example. A control might call for reducing unnecessary network exposure or protecting stored data. Assessments compare supported resource conditions with those expectations. Security policies and standards establish what the organization wants to evaluate; recommendations identify conditions that need attention. In Azure, Azure Policy is involved in many policy-based assessments, but current Defender for Cloud also has other assessment mechanisms. Do not assume every finding is implemented by one identical policy engine across all clouds."},
+            {"type": "paragraph", "text": "A failed assessment is not automatically a completed fix. Assigning a standard does not quietly rewrite all resources to satisfy it. Some recommendations offer guided remediation or an available fix action; other changes require an administrator, another team or a separately configured automation workflow. Policy effects also differ: an audit observes, while an explicitly configured enforcement or remediation mechanism can change behavior. The school should inspect the proposed action and its scope before authorizing it. A secure default is valuable, but unreviewed changes to a live database are not a sensible reading exercise."},
+            {"type": "paragraph", "text": "Some control requirements cannot be fully measured by a resource setting. Staff training, an incident-response exercise and an approved data-handling process need evidence outside an automated cloud assessment. A control can be not applicable, exempted for an approved reason or not fully assessed. Those states deserve explanation rather than being hidden to make a dashboard look better. When a legitimate exception exists, record who accepted the risk, why and when it should be revisited. An exemption changes how the finding is treated; it does not make the underlying exposure disappear."},
+            {"type": "diagram", "title": "From expectation to verified improvement", "description": "The assessment and recommendation do not themselves imply automatic remediation. An accountable decision connects the finding to a reviewed change and reassessment.", "nodes": [
+              {"id": "standard", "label": "Standard", "detail": "Desired security conditions", "column": 0, "row": 0},
+              {"id": "assessment", "label": "Assessment", "detail": "Compare supported resource evidence", "column": 1, "row": 0},
+              {"id": "recommendation", "label": "Recommendation", "detail": "Weakness and proposed improvement", "column": 2, "row": 0},
+              {"id": "owner", "label": "Accountable owner", "detail": "Review scope and operational impact", "column": 2, "row": 1},
+              {"id": "change", "label": "Approved change", "detail": "Implement, then verify", "column": 1, "row": 1}
+            ], "edges": [
+              {"from": "standard", "to": "assessment", "label": "Defines expectations"},
+              {"from": "assessment", "to": "recommendation", "label": "Identifies a gap"},
+              {"from": "recommendation", "to": "owner", "label": "Requires a decision"},
+              {"from": "owner", "to": "change", "label": "Authorizes an action"},
+              {"from": "change", "to": "assessment", "label": "Reassess actual state"}
+            ]}
+          ]
+        },
+        {
+          "id": "scores-have-scope",
+          "title": "A useful score is not a certificate of safety",
+          "blocks": [
+            {"type": "paragraph", "text": "Defender for Cloud secure score summarizes assessed security posture and helps track improvement. Read it together with the resources, recommendations and scoring experience in scope. Current documentation distinguishes the classic Secure Score in the Azure portal from the risk-based Cloud Secure Score in the Defender portal. They are different models with different calculations, so do not apply a remembered formula to every view. A higher score can indicate improvement in measured areas, but the score cannot prove that no attacker is present, that every resource is connected or that every relevant threat is measurable. The school can improve several configuration findings while a teacher's stolen account still needs urgent investigation."},
+            {"type": "paragraph", "text": "Do not equate Defender for Cloud secure score with Microsoft Purview Compliance Manager's compliance score. Compliance score concerns progress on compliance improvement actions in its own assessments. Neither score is a legal certification or a guarantee that all obligations are satisfied. Even similar percentages can have completely different denominators, evidence and responsibilities. Report what changed, which environment was assessed and what remains unmeasured. 'We fixed the database's exposure and confirmed the app still works' teaches more than 'we gained some points'."}
+          ]
+        },
+        {
+          "id": "work-posture-improvement",
+          "title": "Worked application: fix the risk, not just the number",
+          "blocks": [
+            {"type": "example", "title": "Turn a broad-access finding into a reviewable task", "scenario": "A fictional Defender for Cloud assessment flags unnecessary management exposure on the school's application VM. The school also has an isolated practice VM with a lower-impact finding. No runtime alert has been supplied.", "steps": [
+              {"action": "Identify the assessed resource, affected setting and relevant standard before deciding that an attack happened.", "why": "CSPM is showing a configuration weakness. It is useful preventive evidence, but not by itself a claim that an intruder used the open path."},
+              {"action": "Prioritize the application VM and identify its legitimate management path and owner.", "why": "Its exposure and connection to school documents make the potential impact greater than the isolated practice system's finding."},
+              {"action": "Have the owner review a narrower access design and authorize a controlled change outside this paper exercise.", "why": "Recommendations guide improvement; the standard's assignment did not already perform a safe remediation."},
+              {"action": "Plan a fresh connectivity check and reassessment, then record remaining exposure and any exception.", "why": "A completed task or improved score is not enough. The intended user must still work, the unwanted path must be restricted and the resource's assessed state must update."}
+            ], "result": "The school has a justified posture-improvement task with ownership and verification. It has not claimed that a recommendation proves compromise, that a higher score proves compliance, or that enabling CSPM buys every workload-protection plan."},
+            {"type": "prediction", "id": "predict-standard-remediation", "prompt": "A new security standard is assigned and its dashboard shows failed assessments. Have the affected resources necessarily been repaired?", "answer": "No. Assessment results identify gaps; repairs require applicable actions or explicitly configured remediation.", "explanation": "The school must distinguish the evaluation from an enforcement effect or authorized change. It should verify the actual resource state afterward."}
+          ]
+        },
+        {
+          "id": "posture-exam-boundary",
+          "title": "Ask what kind of evidence you have",
+          "blocks": [
+            {"type": "paragraph", "text": "Use three plain questions when reading a product scenario: what condition was observed, what capability produced the evidence and what action is justified next? A risky setting suggests posture improvement. Suspicious behavior suggests investigation. A compliance requirement suggests assessment against an obligation, including evidence that may sit outside technical settings. Real teams combine these activities, but combining them does not erase the differences. This module's objective mapping follows the announced October 21, 2026 outline, which remains future relative to the September 22 review."},
+            {"type": "callout", "tone": "exam", "title": "Posture is not runtime detection", "text": "CSPM assesses security posture and guides improvement. Workload protection adds workload-specific threat defenses. Standards and recommendations are not automatic remediation, and secure score is neither compliance score nor a guarantee of security."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-cloud-role", "kind": "single", "prompt": "The school wants both cloud configuration recommendations and appropriate threat protection for running resources. Which description fits Defender for Cloud?", "choices": [
+          {"id": "cloud-platform", "text": "A cloud security platform combining posture capabilities with separately scoped workload protections", "explanation": "Correct. It addresses both kinds of need, subject to supported resources, connections and enabled plans."},
+          {"id": "antivirus-only", "text": "Only an antivirus program installed on teacher laptops", "explanation": "Incorrect. Defender for Cloud covers cloud posture and several workload types, not just laptop malware."},
+          {"id": "automatic-all", "text": "A free switch that protects every cloud account without onboarding", "explanation": "Incorrect. Coverage and pricing depend on connection, feature and plan requirements."}
+        ], "correctIds": ["cloud-platform"], "explanation": "The platform combines capabilities, but its name does not imply universal deployment or entitlement."},
+        {"id": "check-cspm-evidence", "kind": "single", "prompt": "A CSPM assessment finds a risky network setting, with no activity alert. What does that establish?", "choices": [
+          {"id": "confirmed-intruder", "text": "An attacker definitely used the setting", "explanation": "Incorrect. Configuration evidence is not proof of exploitation."},
+          {"id": "posture-gap", "text": "A posture gap that should be prioritized and reviewed", "explanation": "Correct. It can reveal avoidable risk before an attack occurs."},
+          {"id": "irrelevant", "text": "Nothing useful until a real incident happens", "explanation": "Incorrect. Reducing weaknesses before exploitation is a main reason for posture management."}
+        ], "correctIds": ["posture-gap"], "explanation": "Preventive evidence is valuable without being misrepresented as runtime detection."},
+        {"id": "check-standard-action", "kind": "single", "prompt": "A standard produces a recommendation to restrict the application's management access. Which next step is justified?", "choices": [
+          {"id": "assume-fixed", "text": "Assume the standard already repaired every affected resource", "explanation": "Incorrect. Assessment and recommendation do not establish remediation."},
+          {"id": "hide-finding", "text": "Hide the recommendation without reviewing the exposure", "explanation": "Incorrect. Hiding evidence does not reduce risk or establish an approved exception."},
+          {"id": "review-change", "text": "Review the finding, assign an owner and verify an authorized change", "explanation": "Correct. This connects a standard's expectation to a safe and accountable improvement."}
+        ], "correctIds": ["review-change"], "explanation": "The action must address the resource condition while preserving the application's required access."},
+        {"id": "check-secure-score", "kind": "single", "prompt": "The school successfully remediates assessed recommendations and its Defender for Cloud secure score increases with the assessed scope unchanged. Which conclusion is safe?", "choices": [
+          {"id": "measured-improvement", "text": "Measured posture improved within the score's scope; other risks still need attention", "explanation": "Correct. The scope and underlying findings determine what the score supports."},
+          {"id": "legal-certification", "text": "The school is now legally certified compliant", "explanation": "Incorrect. Secure score is not a legal certification or Compliance Manager's compliance score."},
+          {"id": "no-attack", "text": "There cannot be an active attack against any school identity", "explanation": "Incorrect. A posture summary cannot exclude all attacks or cover unconnected environments."}
+        ], "correctIds": ["measured-improvement"], "explanation": "Describe the actual improvement and remaining evidence gaps instead of using the percentage as a guarantee."}
+      ],
+      "takeaways": ["Defender for Cloud combines cloud posture and workload-focused capabilities.", "CSPM identifies weaknesses before they necessarily become incidents.", "Standards organize expectations; assessments and recommendations guide work.", "Advanced CSPM and workload plans have distinct prerequisites and costs.", "Secure score summarizes measured posture, not legal compliance or complete safety."],
+      "sourceIds": ["cloud-overview", "cspm-overview", "security-policy", "cloud-secure-score", "compliance-score", "sc-guide"]
+    },
+    {
+      "id": "sc-workload-protection-and-alerts",
+      "title": "When a workload behaves suspiciously, investigate the evidence",
+      "summary": "Choose workload-specific protection, understand real alert examples and preserve the difference between a detection, a diagnosis and a response.",
+      "objectives": [
+        "Describe enhanced protections for servers, storage, databases and containers.",
+        "Interpret a security alert without treating it as either a guaranteed breach or automatic remediation.",
+        "Explain the prerequisites and limits of multicloud workload coverage.",
+        "Plan a proportionate response with owners, permissions and cost awareness."
+      ],
+      "sections": [
+        {
+          "id": "workload-plans",
+          "title": "Protect the thing doing the work",
+          "blocks": [
+            {"type": "paragraph", "text": "The school fixes the broad management setting, but its document store and database still process activity every day. Workload protection addresses threats against those running services. Defender for Cloud provides plans tailored to resource types because a suspicious database login, a harmful storage operation and malicious server behavior do not produce identical evidence. This is the practical meaning of a cloud workload protection platform. It complements posture assessment: closing a known exposure reduces opportunities, while runtime defenses help detect activity that still becomes suspicious."},
+            {"type": "paragraph", "text": "Defender for Servers can provide server threat protection and integrate Defender for Endpoint capabilities, with additional features depending on the server plan and configuration. Defender for Storage addresses storage-specific threats and offers features such as malware scanning where supported and configured. Database protections look for relevant database threats. Defender for Containers combines hardening, vulnerability assessment and runtime protection for supported container environments. Learn the problem each plan addresses rather than memorizing an ever-growing catalog. Enabling one plan does not automatically enable all the others or every optional feature."},
+            {"type": "paragraph", "text": "Enhanced features can include vulnerability assessment, just-in-time management access and file-integrity monitoring in the appropriate server offering. Vulnerability assessment identifies weaknesses; just-in-time access narrows the period during which approved management access is available; file-integrity monitoring detects relevant changes to monitored files. These capabilities do different work. None means that every vulnerability is automatically patched or that an approved connection cannot be misused. The exact platform support and plan entitlement should be checked before a real deployment, not inferred from a screenshot in an older course."}
+          ]
+        },
+        {
+          "id": "read-actual-alerts",
+          "title": "An alert is a reasoned suspicion with context",
+          "blocks": [
+            {"type": "paragraph", "text": "A security alert reports activity that a detection considers suspicious, with information such as the affected resource, timing, severity and investigation guidance. Microsoft's documented Key Vault alerts include unusual access from a suspicious external IP, identified in the reference as KV_UnusualAccessSuspiciousIP. The reference explicitly allows that anomalous activity may be legitimate and recommends investigation. This is a real documented detection family, not an invented promise that every secret read will produce an alert. Its existence also does not mean the school has enabled the necessary protection."},
+            {"type": "paragraph", "text": "The database alert reference also describes unusual access patterns, including logins by a principal not seen in the previous 60 days. A principal is the identity making the request. A returning contractor or a new maintenance arrangement may explain the change, while a stolen account may make it harmful. The analyst needs the resource, identity, time and surrounding actions before deciding. A severity label helps prioritize the queue but does not replace evidence. A medium-severity anomaly involving examination documents can deserve prompt attention because of the data's importance."},
+            {"type": "paragraph", "text": "An alert may represent attempted access rather than successful data theft. Check whether the operation was denied or allowed and whether subsequent actions support a wider compromise. Multiple related alerts may be correlated into an incident, a container for investigating a possible attack. Do not manufacture certainty by describing an alert as proof that every document was stolen. Equally, do not dismiss a suspicious event merely because the system had a good posture score. Preventive controls and activity evidence answer different questions."}
+          ]
+        },
+        {
+          "id": "multicloud-coverage",
+          "title": "One view does not mean identical coverage everywhere",
+          "blocks": [
+            {"type": "paragraph", "text": "Defender for Cloud supports connected Azure, Amazon Web Services and Google Cloud environments, with hybrid support for appropriate resources. This helps a school or larger organization avoid maintaining completely separate views of its cloud risks. However, supported resource types and protection features differ by provider, plan and deployment method. A server protection capability available for a connected machine does not imply that every storage or database service in another cloud has the same feature. Use the current multicloud support matrix to answer the specific workload question."},
+            {"type": "paragraph", "text": "Connections, permissions and data collection are part of the boundary. If the school has not connected a cloud account, Defender for Cloud cannot assess its resources just because the account belongs to the same organization. Some capabilities use agents or sensors; some use agentless collection through authorized provider integration. Agentless does not mean permissionless, free of data processing or identical to continuous activity monitoring. Check collection health and supported scope before interpreting a lack of findings as good news. Missing evidence can mean missing coverage, not missing threats."}
+          ]
+        },
+        {
+          "id": "work-alert-triage",
+          "title": "Worked application: investigate before widening the response",
+          "blocks": [
+            {"type": "example", "title": "A suspicious vault-access alert beside a database anomaly", "scenario": "On paper, assume the relevant protections are enabled and the school receives a Key Vault unusual-access alert plus a database login anomaly. Both mention the document-conversion application's identity within a short period. These are fictional events using documented alert concepts.", "steps": [
+              {"action": "Record the resources, identity, timestamps and whether the operations succeeded.", "why": "A shared identity and time window suggest a relationship, but attempted access and successful retrieval have different consequences."},
+              {"action": "Ask the application owner whether an approved maintenance change explains the new access pattern.", "why": "The references allow legitimate explanations. Comparing change records with observed evidence avoids assuming every anomaly is an attacker."},
+              {"action": "Look for supporting activity and check that both environments are actually connected and covered.", "why": "The absence of another alert is meaningful only within healthy, enabled coverage. Related events may clarify whether the identity was abused."},
+              {"action": "Escalate a justified containment proposal to an authorized responder and record expected service impact.", "why": "Disabling the app identity could stop homework processing. An alert is not itself permission to take every possible response action."},
+              {"action": "After an approved response, verify resource access and continue the underlying posture-improvement work.", "why": "Containment of suspicious activity and long-term correction of weaknesses are separate responsibilities."}
+            ], "result": "The school has a defensible investigation sequence instead of a claim that all documents were stolen or all resources were automatically repaired. No live incident was opened and no identity was changed."},
+            {"type": "prediction", "id": "predict-unconnected-cloud", "prompt": "The school's Azure resources have no new alerts. Does that show that an unconnected AWS account is safe?", "answer": "No. That account is outside the assumed connected evidence scope.", "explanation": "Multicloud support requires appropriate onboarding and supported protections. A clean view of one environment cannot prove the state of another."}
+          ]
+        },
+        {
+          "id": "response-and-cost",
+          "title": "Detection has an operational and financial owner",
+          "blocks": [
+            {"type": "paragraph", "text": "An operational response needs ownership, authorization and a record of what changed. A recommendation can become a planned change; an alert can become an investigation and, if justified, a containment action. Integrations may send alerts to Microsoft Sentinel or other systems and can support automation, but those workflows must be configured and authorized. Neither an alert appearing nor a plan being enabled proves that someone blocked the threat. Verify the action result, including failures, and preserve enough evidence to explain the decision afterward."},
+            {"type": "paragraph", "text": "Free Foundational CSPM does not make enhanced workload protection free. Paid plans, optional scanning, data collection and related services can create charges according to their own meters. Costs depend on resource scope and enabled features, not simply the number of alerts an analyst sees. Before real changes, inventory the resources, identify which plan and optional features address the need and review current pricing. Our lab is deliberately paper-only, so it does not enable trials, turn on scanning or incur protection charges."}
+          ]
+        },
+        {
+          "id": "cloud-portal-and-exam",
+          "title": "Keep product capabilities separate from the current menu",
+          "blocks": [
+            {"type": "paragraph", "text": "As reviewed September 22, 2026, the Defender for Cloud introduction says that capabilities are expanding into the Microsoft Defender portal, with additional capabilities arriving over time. Documentation uses portal-specific views to distinguish the experiences. That is not a promise that every Azure-portal feature has already moved or that all tenants display the same menu. The stable learning target is the evidence and decision: assess posture, detect suspicious workload activity, investigate and respond with the right authority. Check the relevant portal tab when following current documentation."},
+            {"type": "callout", "tone": "exam", "title": "Plan, scope, evidence, response", "text": "Enhanced workload protection depends on the relevant enabled plan and supported environment. Alerts identify suspected threats, not guaranteed compromise or completed remediation. Multicloud support is real but not uniform or automatic across every account and resource type."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-workload-plan", "kind": "single", "prompt": "The school has foundational posture recommendations and now wants supported storage-specific threat protection. What should it assess?", "choices": [
+          {"id": "score-only", "text": "Only the secure score percentage, because it enables all protections", "explanation": "Incorrect. A score does not enable workload plans or establish coverage."},
+          {"id": "storage-scope", "text": "The relevant storage protection plan, supported resources, optional features and costs", "explanation": "Correct. Workload-specific protection has explicit scope and prerequisites."},
+          {"id": "all-free", "text": "Nothing, because foundational CSPM already includes every runtime feature at no cost", "explanation": "Incorrect. Free foundational posture and enhanced workload protections are different offerings."}
+        ], "correctIds": ["storage-scope"], "explanation": "Choose protection by workload and feature requirements instead of assuming one enabled capability covers everything."},
+        {"id": "check-alert-meaning", "kind": "single", "prompt": "A documented unusual Key Vault access alert appears for the school's app identity. What is the justified first interpretation?", "choices": [
+          {"id": "investigate", "text": "Suspicious activity needs investigation using the identity, resource, time and operation result", "explanation": "Correct. The detection may reflect legitimate activity or an attack; evidence must resolve it."},
+          {"id": "all-stolen", "text": "Every vault secret has definitely been stolen", "explanation": "Incorrect. An access anomaly can involve attempted or legitimate activity and does not prove this outcome."},
+          {"id": "fixed", "text": "Defender for Cloud already repaired all related access settings", "explanation": "Incorrect. Alert generation is not proof of remediation or containment."}
+        ], "correctIds": ["investigate"], "explanation": "Keep the observed signal separate from the conclusion and the action."},
+        {"id": "check-multicloud", "kind": "single", "prompt": "One connected cloud provider has a supported workload feature. What can be concluded about another provider?", "choices": [
+          {"id": "identical", "text": "Every service in the other provider receives the identical feature automatically", "explanation": "Incorrect. Support and deployment requirements differ by workload and provider."},
+          {"id": "impossible", "text": "Defender for Cloud can never protect resources outside Azure", "explanation": "Incorrect. It supports connected multicloud and hybrid scenarios."},
+          {"id": "matrix", "text": "Check the other provider's resource support, connection and plan requirements", "explanation": "Correct. The current support matrix and onboarding details define the actual coverage."}
+        ], "correctIds": ["matrix"], "explanation": "Neither universal coverage nor Azure-only coverage correctly describes the documented service."},
+        {"id": "check-proportionate-response", "kind": "single", "prompt": "Disabling the suspicious application's identity would stop document processing for every class. What should the responder do?", "choices": [
+          {"id": "ignore", "text": "Ignore the alert because disruption is possible", "explanation": "Incorrect. Operational impact does not remove the need to investigate and contain a justified threat."},
+          {"id": "scope-authorize", "text": "Evaluate evidence and impact, use authorized containment and verify its result", "explanation": "Correct. Response should be proportionate, accountable and checked for both security effect and service impact."},
+          {"id": "disable-all", "text": "Disable every school identity solely because an alert exists", "explanation": "Incorrect. This broad action is not justified by the supplied evidence and has a large avoidable impact."}
+        ], "correctIds": ["scope-authorize"], "explanation": "Useful protection requires operational judgment as well as a detection capability."}
+      ],
+      "takeaways": ["Workload protection is tailored to resource types and enabled plans.", "Alerts are evidence to investigate, not automatic proof of a breach.", "Configuration findings and activity detections complement one another.", "Multicloud coverage depends on connected, supported environments.", "Response permissions, service impact and costs must be planned explicitly."],
+      "sourceIds": ["cloud-overview", "cloud-alerts", "vault-alerts", "sql-alerts", "multicloud-matrix", "cloud-pricing"]
+    }
+  ],
+  "glossary": [
+    {"term": "Security posture", "definition": "The configuration, exposure and preparedness of an environment to resist security threats."},
+    {"term": "CSPM", "definition": "Cloud Security Posture Management, assessment and improvement of cloud resource security conditions."},
+    {"term": "Workload protection", "definition": "Defenses tailored to the threats and evidence of a running resource type, such as a server or database."},
+    {"term": "Assessment", "definition": "An evaluation of available evidence against a control's expected condition."},
+    {"term": "Recommendation", "definition": "A finding and proposed improvement that still needs appropriate review and action."},
+    {"term": "Secure score", "definition": "A scoped summary of assessed security posture, not a compliance certificate or a guarantee of safety."},
+    {"term": "Alert", "definition": "A detection's report of suspicious activity that needs appropriate investigation."},
+    {"term": "Attack path", "definition": "A possible sequence of connected weaknesses that could let an attacker reach a valuable resource."}
+  ],
+  "sources": [
+    {"id": "cloud-overview", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/defender-for-cloud-introduction", "title": "What is Microsoft Defender for Cloud?", "supports": "CSPM, development security and workload protection; plan distinctions; gradual expansion into the Defender portal."},
+    {"id": "cspm-overview", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/concept-cloud-security-posture-management", "title": "What is Cloud Security Posture Management?", "supports": "Foundational and Defender CSPM capabilities, assessments and contextual prioritization."},
+    {"id": "security-policy", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/security-policy-concept", "title": "Security policies, standards, and recommendations", "supports": "Relationships between security expectations, assessments and recommendations rather than automatic remediation."},
+    {"id": "cloud-secure-score", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/secure-score-security-controls", "title": "Secure score in Defender for Cloud", "supports": "Posture summary and portal-specific scoring context, not compliance certification."},
+    {"id": "compliance-score", "url": "https://learn.microsoft.com/en-us/purview/compliance-manager-scoring", "title": "Compliance Manager scoring", "supports": "Compliance score tracks improvement actions and must not be interpreted as a guarantee of compliance; distinct from Defender for Cloud secure score."},
+    {"id": "cloud-alerts", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/alerts-overview", "title": "Security alerts and incidents in Defender for Cloud", "supports": "Workload threat detection, alert investigation and incident correlation."},
+    {"id": "vault-alerts", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/alerts-azure-key-vault", "title": "Alerts for Azure Key Vault", "supports": "Documented unusual access from a suspicious external IP and the need to investigate legitimate explanations."},
+    {"id": "sql-alerts", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/alerts-sql-database-and-azure-synapse-analytics", "title": "Alerts for SQL Database and Azure Synapse Analytics", "supports": "Database access anomalies, including a principal not seen in 60 days, without assuming definite compromise."},
+    {"id": "multicloud-matrix", "url": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/multicloud-support-matrix", "title": "Multicloud workload protection support matrix", "supports": "Provider-specific resource, feature and protection boundaries."},
+    {"id": "cloud-pricing", "url": "https://azure.microsoft.com/en-us/pricing/details/defender-for-cloud/", "title": "Microsoft Defender for Cloud pricing", "supports": "Plan and feature pricing must be reviewed for the proposed resource scope; paper labs enable nothing."},
+    {"id": "sc-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "Objective coverage is for the announced October 21, 2026 outline, future at review."}
+  ],
+  "lab": {
+    "title": "Optional paper lab: posture finding or activity alert?",
+    "purpose": "Practice making evidence-based decisions without enabling protection plans or accessing a live environment.",
+    "prerequisites": ["Paper or an offline document", "Fictional school resource names and the scenarios in this module"],
+    "costWarning": "This paper exercise has no cloud cost. Do not enable paid CSPM, workload-protection trials, malware scanning or log exports. Real costs depend on resource scope, selected plans, optional features and related services; verify current pricing before separately approved use.",
+    "steps": [
+      "Create one card for an overly broad management rule and another for unusual vault access.",
+      "Label each card as posture evidence or suspicious activity, and explain why.",
+      "For the posture card, name a relevant expectation, recommendation, accountable owner and verification step.",
+      "For the alert card, list the identity, resource, time and operation result needed before a conclusion.",
+      "Add an unconnected external-cloud account and explain why the current dashboard cannot prove its safety.",
+      "Write a containment proposal with its possible impact on teachers and document processing."
+    ],
+    "expectedResults": ["The posture card does not claim an attacker was present.", "The alert card does not claim an automatic repair or universal data theft.", "Both cards identify missing evidence and an accountable next decision."],
+    "cleanup": ["Keep only fictional notes; include no real alert payloads or credentials.", "No resources, scans or protection plans were started, so no Azure cleanup is needed."]
+  }
+}

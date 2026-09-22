@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-defender-xdr",
+  "title": "Follow an attack across email, devices, identities and apps",
+  "summary": "Understand the Microsoft Defender services by the evidence each contributes, then investigate a connected school attack story without confusing XDR with SIEM or a portal with universal protection.",
+  "priority": "core",
+  "priorityReason": "The announced SC-900 outline names Defender XDR, its contributing security services, vulnerability management, Microsoft Threat Intelligence and the Defender portal. Current source and preview boundaries are essential because names and experiences are changing.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/defender-xdr/microsoft-365-defender",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe Microsoft Defender XDR services",
+    "Describe Microsoft Defender for Office 365",
+    "Describe Microsoft Defender for Endpoint",
+    "Describe Microsoft Defender for Cloud Apps",
+    "Describe Microsoft Defender for Identity",
+    "Describe Microsoft Defender Vulnerability Management",
+    "Describe Microsoft Threat Intelligence",
+    "Describe the Microsoft Defender portal"
+  ],
+  "lessons": [
+    {
+      "id": "sc-xdr-email-endpoint-identity",
+      "title": "One attack can leave clues in several places",
+      "summary": "Follow a suspicious teaching-resource message onto a device and toward identity misuse, explaining the distinct protection at each stage.",
+      "objectives": [
+        "Describe XDR as cross-product detection, investigation and response.",
+        "Explain Office 365 protection for email, links and attachments.",
+        "Describe Endpoint prevention, EDR and device-risk evidence.",
+        "Explain Defender for Identity's on-premises foundations and current cloud/hybrid scope."
+      ],
+      "sections": [
+        {
+          "id": "xdr-connected-story",
+          "title": "Start with the teacher, not the acronym",
+          "blocks": [
+            {"type": "paragraph", "text": "A teacher at the fictional school receives a message offering a new revision worksheet. The message contains a link and an attached document. Later, her school laptop shows suspicious process activity, and an identity used by the homework application behaves unusually. These events may belong to one attack, or there may be an innocent explanation for some of them. The investigation needs to connect evidence across systems without guessing. We will use invented events only, not open suspicious files, simulate phishing or inspect anyone's real mailbox."},
+            {"type": "paragraph", "text": "Extended detection and response, or XDR, brings related security signals and response capabilities together across several protection areas. Microsoft Defender XDR correlates signals from licensed and provisioned Microsoft security services, including email, endpoints, identities and cloud applications. A signal is a piece of observed security-relevant information. Correlation connects signals that appear related so the team can investigate an attack as a whole rather than handling each product alert in isolation. Integration improves context, but it cannot supply signals from an unconfigured service or an endpoint that was never onboarded."},
+            {"type": "paragraph", "text": "The product also supports coordinated response and automatic attack disruption for supported, sufficiently confident scenarios. This does not mean every alert instantly triggers every available containment action. Configuration, licensing, evidence and service prerequisites matter. Compare XDR with Sentinel's SIEM role: Sentinel brings a broad range of security sources into collection and analytics, while Defender XDR focuses on integrated cross-product detection and response. They can complement each other in the Defender portal. They are not merely two names for one product, and using one does not automatically provision all capabilities of the other."}
+          ]
+        },
+        {
+          "id": "office-email-protection",
+          "title": "The message and its contents need their own defenses",
+          "blocks": [
+            {"type": "paragraph", "text": "Microsoft Defender for Office 365 protects supported email and collaboration experiences against threats such as phishing and malicious content. Phishing tries to persuade someone to reveal information or take an unsafe action by pretending to be trustworthy. In the school story, an attacker could imitate a textbook publisher or colleague. Anti-phishing policies help detect suspicious characteristics, but staff still need a way to report unexpected requests. Protection depends on applicable licensing and policy coverage; the existence of a school email address does not establish that every advanced feature is enabled."},
+            {"type": "paragraph", "text": "Safe Links helps protect users from malicious URLs in supported messages, documents and collaboration experiences. An important idea is checking a link when it is selected, because a destination can become harmful after the message originally arrived. The exact behavior depends on policy and supported applications. Do not teach that every link on every device is rewritten or inspected by the same mechanism. If the teacher copies a link into an unsupported context, the school must understand what protection still applies rather than assuming the product name follows the text everywhere."},
+            {"type": "paragraph", "text": "Safe Attachments analyzes attachments for malicious behavior, including threats that ordinary known-malware checks might not identify. The service can examine content in an isolated analysis environment instead of asking the teacher to open it experimentally. Delivery and handling depend on the configured policy. Safe Links and Safe Attachments solve related but different problems: one focuses on risky destinations and clicks, the other on potentially harmful attached content. Neither grants a teacher access to a confidential document, patches the laptop's software or guarantees that every future attack will be recognized."},
+            {"type": "paragraph", "text": "Plans differ. Investigation and automated response capabilities available in Defender for Office 365 Plan 2 should not be promised merely because Plan 1 protection is present. Current service documentation also includes entitlement changes effective July 1, 2026, so memorized older bundle lists may be wrong. For this course, learn the capability and check the current plan table before purchasing or configuring anything. We do not require a trial or send test phishing messages to demonstrate the distinction between a dangerous link and a dangerous attachment."}
+          ]
+        },
+        {
+          "id": "endpoint-edr-risk",
+          "title": "The laptop has a story beyond whether antivirus found a file",
+          "blocks": [
+            {"type": "paragraph", "text": "Microsoft Defender for Endpoint helps prevent, detect, investigate and respond to threats on supported endpoints. An endpoint is a device or system where activity happens, such as the teacher's laptop. Antivirus-style prevention is only part of the picture. Endpoint detection and response, or EDR, collects and analyzes behavior so investigators can understand activity such as a document opening an unexpected process or a device communicating with suspicious infrastructure. This matters when an attack uses legitimate tools or when prevention did not stop the initial action."},
+            {"type": "paragraph", "text": "An investigator can use device evidence and a timeline to see which process ran, what account was involved and what happened afterward. Supported response actions can include isolating a device to restrict its network communication while investigation continues. Availability depends on platform, plan, onboarding and permissions; not every feature behaves identically on every operating system. A successful antivirus scan does not prove that a stolen session was revoked or that a compromised identity cannot access cloud documents from another device. Match response to the actual scope of the incident."},
+            {"type": "paragraph", "text": "Current device inventory documentation distinguishes risk level from exposure level. Device risk reflects threat evidence such as active alerts, their severity and unresolved alert history. Exposure reflects vulnerability posture and pending security recommendations. A laptop may have an unpatched application with no current attack alert, or it may have suspicious active behavior despite being well patched. Do not treat these fields as a pupil's behavior score. They guide technical investigation. Integrations can use device risk in access decisions when configured, but viewing a high-risk label does not by itself prove that access was blocked."},
+            {"type": "paragraph", "text": "One current workflow change deserves a date: the Action center documentation says that from September 1, 2026, Endpoint automated investigation and response no longer runs as a separate investigation experience or supports manual triggering in the old form. Its detection and response capabilities are incorporated into the default antivirus protection stack. This does not retire Endpoint EDR or the need to investigate device evidence. The same notice explicitly leaves Defender for Office 365 automated investigation and response available. Avoid applying one workload's change to the entire Defender family."}
+          ]
+        },
+        {
+          "id": "identity-signals-current",
+          "title": "Identity attacks leave clues beyond the laptop",
+          "blocks": [
+            {"type": "paragraph", "text": "The school also has an on-premises Active Directory environment for some lab computers. Active Directory domain controllers provide identity services for that environment. Defender for Identity has a strong foundation in observing relevant identity infrastructure signals, including authentication behavior and suspicious movement toward more privileged accounts. Sensors and collected events help detect patterns such as unusual directory discovery or credential misuse. The useful question is whether an identity is being abused and how an attacker may move between systems, not whether a worksheet file contains a virus."},
+            {"type": "paragraph", "text": "Do not freeze the product at its older on-premises-only description. As reviewed September 22, 2026, the current Defender for Identity overview explicitly covers on-premises, cloud and hybrid identity signals, including Microsoft Entra ID and connected external identity providers. Its June 2026 release notes list Entra-related detections, such as suspicious service-principal sign-in after a credential addition. A service principal is an application's identity in a directory. This shows why the homework app's identity can be relevant even though it is not a person typing a password."},
+            {"type": "paragraph", "text": "The newer scope does not mean every identity provider, tenant or cloud feature is automatically monitored. Required sensors, connectors, permissions, licensing and rollout still apply. The release notes mark several newer identity capabilities as preview, including some non-human identity inventory features; other capabilities have later general-availability announcements. Treat the feature-specific current status as authoritative rather than labeling the entire product preview or assuming every new feature is universally available. Defender for Identity also does not replace Entra authentication, Conditional Access or Entra ID Protection, though the services can exchange useful context."}
+          ]
+        },
+        {
+          "id": "work-email-device-identity",
+          "title": "Worked application: assign evidence to the right service",
+          "blocks": [
+            {"type": "example", "title": "Follow the revision worksheet without opening it", "scenario": "Assume the school has appropriately licensed and configured email protection, an onboarded teacher laptop and connected identity protection. Fictional alerts mention the message, a process on that laptop and unusual identity activity.", "steps": [
+              {"action": "Review email and collaboration evidence through Defender for Office 365, separating the link verdict from the attachment analysis.", "why": "The two features inspect different aspects of the delivery attempt. A benign attachment verdict does not establish that its separate link is safe."},
+              {"action": "Inspect Defender for Endpoint's device timeline and relevant alerts rather than relying only on an antivirus result.", "why": "EDR can show behavior after delivery and help determine whether the device executed suspicious activity."},
+              {"action": "Review Defender for Identity evidence from the configured identity sources, including relevant cloud signals when supported.", "why": "Credential or application-identity misuse can extend beyond the original laptop and beyond an on-premises directory."},
+              {"action": "Use the correlated Defender XDR incident to compare identities, devices and times before selecting response actions.", "why": "Cross-product context helps identify the attack's scope, while missing telemetry and legitimate explanations must remain visible."}
+            ], "result": "The school can explain how email, endpoint and identity protections contribute different evidence to one investigation. It has not assumed that all services are enabled, that every alert is proven or that SIEM and XDR are interchangeable."},
+            {"type": "prediction", "id": "predict-isolation-identity", "prompt": "The teacher's laptop is isolated successfully, but a stolen cloud session may be used elsewhere. Is the entire identity threat necessarily contained?", "answer": "No. Device isolation addresses the device's supported network behavior, not every cloud session or identity permission.", "explanation": "Investigate and respond to the identity evidence separately with appropriate authorization. One successful control cannot prove that all parts of a cross-product attack ended."}
+          ]
+        },
+        {
+          "id": "xdr-boundary-summary",
+          "title": "Use names as labels for responsibilities",
+          "blocks": [
+            {"type": "callout", "tone": "exam", "title": "Find the signal's home, then connect it", "text": "Office 365 protects supported email and collaboration content; Endpoint adds device prevention and EDR; Identity detects abuse across its configured identity sources. XDR correlates and coordinates across provisioned services. SIEM has a broader data-collection and analytics role, and sharing a portal does not make the products identical."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-xdr-correlation", "kind": "single", "prompt": "Why connect the school's email, device and identity alerts in Defender XDR?", "choices": [
+          {"id": "all-provisioned", "text": "Because a portal sign-in automatically licenses every contributing service", "explanation": "Incorrect. Signals depend on the products actually licensed and provisioned."},
+          {"id": "cross-product", "text": "To investigate a related attack across product boundaries and coordinate justified response", "explanation": "Correct. The cross-product layer adds context that separate alerts can hide."},
+          {"id": "same-siem", "text": "Because XDR and Sentinel SIEM are exactly the same product", "explanation": "Incorrect. They have different, complementary roles even when integrated in one portal."}
+        ], "correctIds": ["cross-product"], "explanation": "Correlation improves the attack story; it does not erase product scope or evidence requirements."},
+        {"id": "check-links-attachments", "kind": "single", "prompt": "A message's URL becomes malicious after delivery, while its attachment needs behavioral analysis. Which pairing fits?", "choices": [
+          {"id": "correct-pair", "text": "Safe Links for supported link checks; Safe Attachments for attachment analysis", "explanation": "Correct. The features address different content risks under applicable policies."},
+          {"id": "reverse-pair", "text": "Safe Attachments for all URL clicks; Safe Links for running every attachment", "explanation": "Incorrect. This reverses the two features' primary responsibilities."},
+          {"id": "nsg-both", "text": "An NSG allowing HTTPS guarantees both items are safe", "explanation": "Incorrect. Network connection permission is not content analysis."}
+        ], "correctIds": ["correct-pair"], "explanation": "A verdict about one part of a message should not be treated as proof about every other part."},
+        {"id": "check-endpoint-risk", "kind": "single", "prompt": "A laptop has suspicious process alerts despite recent patching. What should the analyst use?", "choices": [
+          {"id": "patched-safe", "text": "Only the patch date, because it rules out active compromise", "explanation": "Incorrect. Reduced vulnerability exposure does not exclude suspicious active behavior."},
+          {"id": "score-equivalence", "text": "The assumption that device risk and exposure are identical fields", "explanation": "Incorrect. Risk is tied to threat evidence; exposure concerns vulnerability posture."},
+          {"id": "edr-evidence", "text": "Endpoint EDR evidence, the device timeline and the active-risk context", "explanation": "Correct. Behavioral evidence can explain what happened beyond a simple malware scan or patch record."}
+        ], "correctIds": ["edr-evidence"], "explanation": "Assess active threats and underlying weaknesses as related but different questions."},
+        {"id": "check-identity-scope", "kind": "single", "prompt": "Which description of Defender for Identity matches the September 22, 2026 review?", "choices": [
+          {"id": "onprem-only", "text": "It can only ever use on-premises Active Directory signals", "explanation": "Incorrect. Current product documentation includes cloud and hybrid signals and newer Entra detections."},
+          {"id": "configured-scope", "text": "It has on-premises identity foundations and current cloud/hybrid capabilities, subject to feature prerequisites and rollout", "explanation": "Correct. This preserves the established role without ignoring current expansion or preview limits."},
+          {"id": "all-cloud-free", "text": "Every cloud identity provider is automatically protected without a connector or license", "explanation": "Incorrect. Supported sources, setup and entitlement still define coverage."}
+        ], "correctIds": ["configured-scope"], "explanation": "Use current feature-specific documentation, not an old blanket statement or an equally misleading universal promise."},
+        {"id": "check-response-scope", "kind": "single", "prompt": "Endpoint isolation succeeds, but evidence suggests the teacher's cloud session is being used from another device. What follows?", "choices": [
+          {"id": "identity-review", "text": "Investigate and authorize an appropriate identity response as well", "explanation": "Correct. The device action does not establish that all sessions and identity access are contained."},
+          {"id": "close-all", "text": "Close the entire incident because one action succeeded", "explanation": "Incorrect. The remaining identity evidence still needs resolution."},
+          {"id": "disable-school", "text": "Disable every school account without checking scope", "explanation": "Incorrect. That expands impact far beyond the evidence and lacks a justified boundary."}
+        ], "correctIds": ["identity-review"], "explanation": "Cross-product incidents require checking each affected boundary rather than treating a single action as universal remediation."}
+      ],
+      "takeaways": ["XDR relates security signals across configured services.", "Safe Links and Safe Attachments have different content-protection roles.", "Endpoint EDR explains device behavior beyond antivirus detection.", "Device risk and vulnerability exposure are not the same measurement.", "Defender for Identity now has cloud/hybrid scope, but specific features retain setup and preview boundaries."],
+      "sourceIds": ["xdr-overview", "office-features", "endpoint-overview", "device-risk", "identity-overview", "identity-updates", "action-center"]
+    },
+    {
+      "id": "sc-cloud-apps-vulnerabilities-intelligence",
+      "title": "Understand the app, reduce the weakness and add threat context",
+      "summary": "Distinguish SaaS visibility and session controls, vulnerability-management work and current Microsoft Threat Intelligence experiences.",
+      "objectives": [
+        "Describe Defender for Cloud Apps discovery, connected-app visibility and session controls.",
+        "Explain vulnerability discovery, prioritization and remediation tracking beyond antivirus.",
+        "Use threat intelligence as investigation context rather than proof of compromise.",
+        "Interpret current threat-intelligence naming, retirement dates and preview boundaries."
+      ],
+      "sections": [
+        {
+          "id": "cloud-apps-visibility",
+          "title": "The documents may have left the school's own application",
+          "blocks": [
+            {"type": "paragraph", "text": "A teacher uploads revision documents to a convenient online sharing service. Software as a service, or SaaS, means the provider operates an application that the school uses over the network. The school's IT team may not have approved every service teachers choose. This creates a visibility problem: which apps are used, what data is shared and what access do connected applications have? Microsoft Defender for Cloud Apps helps discover cloud-app use and provides security visibility, data controls and threat protection for supported connected applications."},
+            {"type": "paragraph", "text": "Discovery can use appropriate traffic information to identify app use and risk characteristics. App connectors use supported service APIs to give deeper visibility into activities, files or settings, depending on the app and granted permissions. These are different information paths. Seeing a domain in traffic does not mean the product has permission to inspect all documents in that SaaS tenant. A risk assessment of an app is not a legal judgment about every user of it. The school must decide which apps are approved and which handling rules apply to examination documents."},
+            {"type": "paragraph", "text": "Defender for Cloud Apps is not the same product as Defender for Cloud. The first focuses on SaaS application security and related access activity; the second covers cloud-resource posture and workload protection. Their evidence can contribute to a broader investigation, but similar names do not make their configuration interchangeable. Buying cloud server protection does not automatically provide every SaaS session control, and discovering an unsanctioned sharing service does not automatically delete every document stored there."}
+          ]
+        },
+        {
+          "id": "session-controls",
+          "title": "Allow a useful session without allowing every action",
+          "blocks": [
+            {"type": "paragraph", "text": "Sometimes the school wants a teacher to view a document from an unmanaged computer but not download it there. Conditional Access app control can apply supported access and session policies through Defender for Cloud Apps. A session policy controls activity during a supported browser session, such as blocking a sensitive file download. This is more precise than treating all access as either fully allowed or fully blocked. The required identity integration, app support, licensing and policy routing must be configured; a document's presence in SaaS does not automatically put it under the policy."},
+            {"type": "paragraph", "text": "Current documentation describes reverse-proxy protection for supported browser sessions and an in-browser Microsoft Edge experience, whose detailed documentation includes preview qualification. Do not teach that every browser must always show the same rewritten address. More importantly, session controls are not universal controls over native applications or every protocol. The documentation specifically distinguishes browser sessions from unsupported client experiences, including Teams desktop session controls. If the school permits an alternative client outside the protected path, that can defeat the intended download restriction. The design must account for the allowed clients, not just one successful browser demonstration."},
+            {"type": "paragraph", "text": "The control also has a human boundary. Allowing someone to see a document cannot guarantee that they never reproduce its information in another way. Session restrictions reduce supported technical routes for data movement; they do not replace classification, responsible handling or an appropriate authorization decision. The teacher still needs permission to view the document. The product should not be described as granting universal access simply so it can inspect the session."}
+          ]
+        },
+        {
+          "id": "vulnerability-management",
+          "title": "A weakness deserves attention before malware is found",
+          "blocks": [
+            {"type": "paragraph", "text": "Microsoft Defender Vulnerability Management helps discover assets, assess vulnerabilities and configuration weaknesses, prioritize them using risk context and track remediation. An asset is something the school depends on, such as a laptop or its installed software. A vulnerability is a weakness that could be exploited; malware is harmful software or behavior that may exploit it. A clean antivirus result does not mean an outdated browser or unsafe setting has disappeared. Vulnerability management is preventive improvement work as well as useful context during an incident."},
+            {"type": "paragraph", "text": "Suppose ten teacher laptops have an old document reader, but two handle particularly sensitive examination material and the weakness is being actively exploited elsewhere. Prioritization should consider exposure, asset importance and threat context, not just count affected devices. A recommendation can lead to a remediation task for the IT team or an appropriate mitigation while a patch is tested. Creating a task is not the same as installing the update. The team must verify the resulting software or configuration state and track exceptions with owners."},
+            {"type": "paragraph", "text": "Capabilities vary by offering and platform. Do not assume that every advanced assessment is included in every endpoint license. The current overview also has separate existing-customer and preview-customer navigation descriptions, including integration into Exposure management for the stated preview experience. That is a user-interface scope distinction, not evidence that vulnerability management itself is only a preview product. Learn the cycle of discovery, assessment, priority, action and verification; consult current plan and platform details before a real scan or deployment."}
+          ]
+        },
+        {
+          "id": "threat-intelligence-current",
+          "title": "Intelligence explains why a clue may matter",
+          "blocks": [
+            {"type": "paragraph", "text": "Threat intelligence adds researched context about attackers, techniques, infrastructure and vulnerabilities. An indicator of compromise, or IOC, is an observable clue associated with malicious activity, such as a known suspicious domain or file hash. A hash is a fingerprint calculated from data. Intelligence can help the analyst ask whether the link in the teacher's message is connected to a wider campaign, whether similar infrastructure has been seen before and whether an exposed weakness is currently being exploited. It is more informative than treating every unfamiliar address as equally dangerous."},
+            {"type": "paragraph", "text": "An indicator match still needs context. A shared hosting address can serve many customers; an old domain reputation may no longer describe its current owner. Consider the time, confidence, source and the school's actual activity. Global reporting about an attack does not prove that the school suffered it. Conversely, a new destination absent from intelligence is not guaranteed safe. Intelligence supports investigation, hunting and prioritization; it does not replace local evidence or authorize automatic blocking of every related address."},
+            {"type": "paragraph", "text": "Naming and dates matter here. The SC-900 guide reviewed September 22, 2026 uses Microsoft Threat Intelligence in the outline effective October 21, 2026. That wording belongs to the announced future outline, not proof that every current exam has already changed. Current product documentation describes Microsoft Threat Intelligence integrated into the Defender portal, including Intelligence explorer and threat analytics. The product page marks entity enrichments on IP, domain, URL and file pages as Preview. Threat analytics provides expert reports and relevant exposure or activity context when the required data is available."},
+            {"type": "paragraph", "text": "For retirement, use the latest exact first-party dates rather than repeating a remembered July 2026 deadline. The July 23, 2026 Partner Center announcement states that the standalone Microsoft Defender Threat Intelligence SKU reaches end of life on August 1, 2026. The current XDR product page gives August 1, 2026 for retirement of the legacy standalone portal and Intel Explorer experience. That date is already past at our review. The integrated Intelligence explorer described in the Defender portal is a different experience from the legacy standalone one; similar names do not mean threat intelligence disappeared."},
+            {"type": "paragraph", "text": "There is also a scope difference between the sources. The partner announcement describes capabilities available through the Defender portal for Microsoft Defender or Sentinel customers at no extra cost. The product page specifically describes publicly available intelligence, including entity enrichments, for Defender XDR customers at no extra cost and includes prerelease caveats. We do not expand either statement into a promise that every advanced feature, Copilot capability or tenant configuration is free and available. Verify entitlement and rollout for the required experience. This lesson checks published documentation, not the state of a particular customer's portal."}
+          ]
+        },
+        {
+          "id": "work-app-vulnerability-intel",
+          "title": "Worked application: three related questions, three distinct tools",
+          "blocks": [
+            {"type": "example", "title": "A shared document, an old reader and a suspicious domain", "scenario": "The school's paper incident includes an unmanaged browser downloading a sensitive document, an outdated reader on a school laptop and a domain associated with the unexpected message. Assume suitable licenses and supported integrations for the proposed capabilities.", "steps": [
+              {"action": "Use Cloud Apps visibility to identify the SaaS activity, then design a supported browser-session restriction for the sensitive download.", "why": "Understanding app use and controlling an in-session action are related but different capabilities. Native-client alternatives must also be considered."},
+              {"action": "Use Vulnerability Management to assess the reader weakness, prioritize the affected laptop and assign a verified remediation task.", "why": "A weakness remains even if antivirus found no malware. Remediation needs an accountable owner and confirmation of the resulting state."},
+              {"action": "Consult current integrated Microsoft Threat Intelligence to understand the domain and any relevant campaign or exploit context.", "why": "Researched context can strengthen prioritization and investigation, but a reputation match must be compared with the school's own records."},
+              {"action": "Record the date, confidence, supported feature scope and what each action still cannot prove.", "why": "A session restriction, a patch task and a global intelligence report are not interchangeable evidence of complete containment."}
+            ], "result": "The analyst has separate explanations for SaaS control, vulnerability reduction and threat context. The plan does not rely on the retired standalone intelligence offering or claim universal availability of preview features."},
+            {"type": "prediction", "id": "predict-browser-native", "prompt": "A supported browser session blocks downloads, but an allowed native client is outside that session-control scope. Has the school proven that all download paths are blocked?", "answer": "No. A browser-session result does not establish coverage of the alternative client.", "explanation": "The access design must restrict unsupported paths appropriately or acknowledge the remaining gap. Do not extrapolate one supported-client result to every application."}
+          ]
+        },
+        {
+          "id": "app-intel-exam-distinction",
+          "title": "Separate the decision you are making",
+          "blocks": [
+            {"type": "callout", "tone": "exam", "title": "Visibility, weakness and intelligence are different evidence", "text": "Cloud Apps addresses supported SaaS visibility and controls. Vulnerability Management prioritizes weaknesses and tracks fixes, not merely malware scans. Microsoft Threat Intelligence adds researched context. Current retirement documentation specifies August 1, 2026 for the legacy standalone offering; the October 21 exam-outline wording remains future at this review."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-cloud-app-session", "kind": "single", "prompt": "The school permits viewing a sensitive SaaS document in a supported browser but wants to prevent downloading it to an unmanaged device. Which capability fits?", "choices": [
+          {"id": "server-plan", "text": "Defender for Cloud server protection automatically applies the SaaS session policy", "explanation": "Incorrect. Defender for Cloud and Defender for Cloud Apps have different responsibilities and configuration."},
+          {"id": "session-policy", "text": "A properly configured Defender for Cloud Apps session policy, with alternative clients considered", "explanation": "Correct. Supported in-session controls can restrict the action, but unsupported paths need their own access decision."},
+          {"id": "domain-discovery", "text": "Merely discovering the app's domain guarantees every download is blocked", "explanation": "Incorrect. Discovery is visibility, not proof of enforcement or deep app access."}
+        ], "correctIds": ["session-policy"], "explanation": "Choose a control that can enforce the required action in the supported session and state its boundaries."},
+        {"id": "check-vulnerability-work", "kind": "single", "prompt": "Antivirus reports no malware, but several school laptops use a vulnerable document reader. Which work remains?", "choices": [
+          {"id": "assess-remediate", "text": "Assess and prioritize the weakness, assign remediation and verify the updated state", "explanation": "Correct. Vulnerability Management addresses weaknesses even without an active malware detection."},
+          {"id": "none", "text": "None, because a clean scan proves every vulnerability is fixed", "explanation": "Incorrect. Malware detection and vulnerability assessment answer different questions."},
+          {"id": "ticket-fixed", "text": "Create a ticket and immediately report that the patch is installed", "explanation": "Incorrect. Task creation is not implementation or verification."}
+        ], "correctIds": ["assess-remediate"], "explanation": "The remediation cycle ends with evidence of the changed resource state, not merely a scan verdict or task."},
+        {"id": "check-intelligence-context", "kind": "single", "prompt": "Threat intelligence associates a domain with an attack campaign. The school's logs contain a connection to it. What is justified?", "choices": [
+          {"id": "certain-theft", "text": "Declare that all documents were stolen by the named actor", "explanation": "Incorrect. A connection and reputation context do not establish actor identity or that outcome."},
+          {"id": "ignore-context", "text": "Ignore the intelligence because only local logs can ever be useful", "explanation": "Incorrect. Researched context can inform investigation and prioritization."},
+          {"id": "correlate-context", "text": "Investigate the match's timing, confidence and related local activity", "explanation": "Correct. Combine intelligence with evidence while considering shared infrastructure and changing reputation."}
+        ], "correctIds": ["correlate-context"], "explanation": "Intelligence is valuable context, neither certainty nor a substitute for investigation."},
+        {"id": "check-intelligence-date", "kind": "single", "prompt": "Which statement accurately reflects the documents reviewed on September 22, 2026?", "choices": [
+          {"id": "current-scoped", "text": "Current sources specify August 1, 2026 for legacy standalone retirement; integrated Defender-portal intelligence remains, with feature-specific caveats", "explanation": "Correct. The July 23 announcement and current product page provide the exact date, while the integrated experience continues."},
+          {"id": "all-ended", "text": "Threat intelligence as a capability ended everywhere in July 2026", "explanation": "Incorrect. That confuses older timing assumptions and a standalone retirement with continued integrated capabilities."},
+          {"id": "exam-already", "text": "The October 21, 2026 exam outline is already effective on September 22", "explanation": "Incorrect. Its effective date is still future, even though current product documentation already uses the newer wording."}
+        ], "correctIds": ["current-scoped"], "explanation": "Keep product naming, standalone retirement, integrated feature availability and exam-outline dates separate."}
+      ],
+      "takeaways": ["Cloud Apps visibility does not automatically enforce every SaaS action.", "Session controls need supported apps, clients, identity integration and policy.", "Vulnerability Management is a risk-reduction workflow, not just antivirus.", "Threat intelligence strengthens context but does not prove a breach by itself.", "Use the current integrated intelligence experience and qualify dates, entitlements and previews."],
+      "sourceIds": ["cloud-apps-overview", "session-control", "vulnerability-overview", "threat-intelligence", "july-retirement", "threat-analytics", "sc-guide"]
+    },
+    {
+      "id": "sc-defender-portal-investigation",
+      "title": "Build one incident story without losing the boundaries",
+      "summary": "Use the Defender portal's unified investigation experience to connect evidence, choose a proportionate response and verify what actually changed.",
+      "objectives": [
+        "Describe the Defender portal as a unified security investigation experience.",
+        "Use incident entities, evidence and timelines to distinguish facts from hypotheses.",
+        "Explain why response actions require scope, authority and result verification.",
+        "Distinguish shared navigation from identical products, licensing and coverage."
+      ],
+      "sections": [
+        {
+          "id": "portal-workspace",
+          "title": "A shared workbench, not a magic protection switch",
+          "blocks": [
+            {"type": "paragraph", "text": "The Microsoft Defender portal provides a unified place for security teams to review incidents, investigate entities and manage supported response work. In our school story, Mara should not have to invent a separate explanation for the email alert, the device alert and the identity alert when they belong to one suspected attack. The portal helps present the connected evidence and the actions taken. It is an investigation workspace over underlying services, not a product that automatically grants every license or installs every sensor when someone signs in."},
+            {"type": "paragraph", "text": "What Mara can see and do depends on the organization's provisioned services, data, roles and feature availability. A missing pane may reflect permissions or an unconfigured product rather than proof that the corresponding threat cannot exist. Conversely, the presence of a menu does not establish that its data collection is healthy. Current documentation increasingly places Sentinel and additional cloud-security capabilities in this common experience. Their own data, cost and operational boundaries remain relevant. Do not mistake a navigation change for a merger of every protection and billing model."},
+            {"type": "paragraph", "text": "Start an investigation by reading the incident summary and affected assets, then inspect the related alerts and evidence. An asset may be a mailbox, identity, device or application. An entity page brings information about one such item into focus, while an incident relates items across a possible attack. Display names alone can be ambiguous, so confirm stable identifiers and tenant context. This matters at a school where a teacher may have both a normal teaching account and a separate privileged maintenance account."}
+          ]
+        },
+        {
+          "id": "timeline-and-evidence",
+          "title": "A timeline is a hypothesis you can test",
+          "blocks": [
+            {"type": "paragraph", "text": "An incident timeline helps place alerts and observed activities in order. At 09:05 the message arrived; at 09:09 a link was selected; at 09:12 the laptop showed suspicious activity; at 09:18 the application identity accessed documents unexpectedly. These invented times make a plausible chain, but time order alone is not causation. Verify whether the device, account and application really connect. A scheduled school backup or a technician's approved repair could explain one event. The analyst should preserve both supporting evidence and facts that weaken the first theory."},
+            {"type": "paragraph", "text": "Use the incident's linked evidence to inspect individual alerts and relevant entity or device timelines. The unified view helps organize the investigation, but it is not a claim that every underlying event appears in one complete universal timeline. Collection delays, retention, permissions and missing services can leave gaps. Write 'no evidence in the available records' when that is what you know, not 'this never happened.' This wording is particularly important when a student's or teacher's actions might otherwise be misinterpreted as deliberate wrongdoing."},
+            {"type": "paragraph", "text": "A useful investigation separates observed facts, interpretations and decisions. 'The account downloaded these files' is an observation if the audit evidence supports it. 'An attacker controlled the account' is an interpretation requiring further evidence. 'Temporarily restrict the account under the response procedure' is a decision with operational consequences. Keeping these categories separate makes review easier and supports correcting the story when new evidence arrives. An automated summary or correlated incident still benefits from this discipline; convenient presentation is not a substitute for source evidence."},
+            {"type": "diagram", "title": "The school incident connects evidence, not assumptions", "description": "The incident workspace relates contributing signals. Each relationship must be checked against identifiers, times and source evidence before a response is justified.", "nodes": [
+              {"id": "email-signal", "label": "Email evidence", "detail": "Message, link and attachment context", "column": 0, "row": 0},
+              {"id": "incident-view", "label": "Unified incident", "detail": "Related alerts, entities and timeline", "column": 1, "row": 1},
+              {"id": "endpoint-signal", "label": "Device evidence", "detail": "Processes and device activity", "column": 2, "row": 0},
+              {"id": "identity-signal", "label": "Identity evidence", "detail": "Configured on-premises/cloud signals", "column": 0, "row": 2},
+              {"id": "app-signal", "label": "App evidence", "detail": "Supported SaaS activity and controls", "column": 2, "row": 2}
+            ], "edges": [
+              {"from": "email-signal", "to": "incident-view", "label": "Contributes context"},
+              {"from": "endpoint-signal", "to": "incident-view", "label": "Contributes behavior"},
+              {"from": "identity-signal", "to": "incident-view", "label": "Contributes access evidence"},
+              {"from": "app-signal", "to": "incident-view", "label": "Contributes app activity"}
+            ]}
+          ]
+        },
+        {
+          "id": "response-blast-radius",
+          "title": "Contain the threat without confusing disruption with success",
+          "blocks": [
+            {"type": "paragraph", "text": "Blast radius means the range of systems or people affected by an event or action. An attacker stealing a widely privileged service identity can have a large blast radius. A responder disabling that identity can also interrupt every class that depends on the homework app. This does not mean the responder should avoid containment when it is necessary. It means the response must match the evidence and include an understood impact, an authorized owner and a recovery plan. Fast action can be proportionate rather than indiscriminate."},
+            {"type": "paragraph", "text": "Possible supported response actions differ by workload: isolating a device, acting on a malicious message, restricting an identity or applying a cloud-app control are not one universal operation. Some automated responses can run under configured protection, while others require approval or a manually authorized action. Review the relevant action history and outcome. Pending, failed and completed are different states. A queued action on an offline device is not evidence that its network is already isolated, and closing the incident does not force a failed action to succeed."},
+            {"type": "paragraph", "text": "After containment, remediation addresses the underlying problem, such as a vulnerable reader, unsafe credential handling or an overprivileged app identity. Recovery restores legitimate service safely. These steps can overlap, but none should be silently skipped because the incident view looks quieter. The school must also handle any data exposure through its established privacy and incident procedures. Our lesson does not decide legal notification duties or accuse an individual; it teaches how technical evidence informs an accountable investigation."}
+          ]
+        },
+        {
+          "id": "work-unified-investigation",
+          "title": "Worked application: a decision record for the school",
+          "blocks": [
+            {"type": "example", "title": "Use the portal to connect and verify, not just to close", "scenario": "Mara reviews a fictional correlated incident involving the teacher's mailbox, laptop and an application identity. A document-download event may be legitimate maintenance. The endpoint action queue shows an isolation request as pending.", "steps": [
+              {"action": "Read the incident timeline and open the contributing email, endpoint and identity evidence, confirming identifiers.", "why": "The unified portal connects the story, but shared names and nearby timestamps alone are not proof that all events have one cause."},
+              {"action": "Record the pending device-isolation action as pending and investigate the application identity independently.", "why": "The response has not completed, and even completed laptop isolation would not automatically contain cloud access from elsewhere."},
+              {"action": "Compare the document access with maintenance records and propose only the response scope justified by the remaining evidence.", "why": "Disabling a shared application identity can stop the school service. The decision needs both threat context and an operational owner."},
+              {"action": "Have an authorized responder act, check the relevant action outcomes and record any failure or remaining gap.", "why": "A clicked button or closed case is not the required security result. Verification must address the actual affected system."},
+              {"action": "Assign follow-up vulnerability or permission work and document the legitimate recovery path.", "why": "Containment limits the immediate threat, while remediation and recovery reduce recurrence and restore teaching."}
+            ], "result": "The incident record distinguishes facts, uncertainty, pending actions and verified results. It uses the shared portal without assuming universal licensing, complete telemetry or identical XDR and SIEM capabilities."},
+            {"type": "prediction", "id": "predict-pending-action", "prompt": "The incident status is resolved, but a required containment action still says failed. Does the incident status prove the resource is protected?", "answer": "No. Case status cannot substitute for a successful, verified action.", "explanation": "The owner must address the failure or document a justified alternative. The investigation record should not report containment merely because someone changed its status."}
+          ]
+        },
+        {
+          "id": "portal-and-exam-boundaries",
+          "title": "A stable method survives changing navigation",
+          "blocks": [
+            {"type": "paragraph", "text": "The exact menu can change as services converge in the Defender portal, and feature rollout can differ between tenants. The investigation method remains useful: identify the affected entities, establish a time-ordered account from evidence, consider alternatives, choose an authorized response and verify its outcome. Use the appropriate product documentation for current navigation and entitlement rather than memorizing an old screenshot. The source material reviewed for this module also contains shorter older descriptions of Identity's scope; the dedicated current Identity overview and release notes provide the more specific cloud/hybrid qualification used here."},
+            {"type": "callout", "tone": "exam", "title": "Unified does not mean unlimited", "text": "The Defender portal unifies supported investigation and response experiences, including correlated incident context. It does not grant every license, ingest every source or make SIEM and XDR identical. Response blast radius, permissions, action outcomes and remaining uncertainty still matter."}
+          ]
+        }
+      ],
+      "checkpoints": [
+        {"id": "check-portal-purpose", "kind": "single", "prompt": "What is the main benefit of the Defender portal in the school's cross-product incident?", "choices": [
+          {"id": "automatic-entitlement", "text": "It grants every Defender and Sentinel license to anyone who signs in", "explanation": "Incorrect. Licensing, provisioning and permissions remain separate prerequisites."},
+          {"id": "unified-investigation", "text": "It brings related incidents, alerts, entities and response context into a unified investigation experience", "explanation": "Correct. Analysts can follow a connected story while checking the underlying evidence and scope."},
+          {"id": "universal-telemetry", "text": "It proves that every device and cloud account is sending complete data", "explanation": "Incorrect. Collection health and coverage must be checked for the actual services."}
+        ], "correctIds": ["unified-investigation"], "explanation": "A shared workspace helps analysis but does not erase the dependencies of its contributing products."},
+        {"id": "check-timeline-reasoning", "kind": "single", "prompt": "Email, device and app events occur within fifteen minutes. What makes the incident story stronger?", "choices": [
+          {"id": "time-only", "text": "Assume nearby times prove the same attacker caused all events", "explanation": "Incorrect. Timing supports a hypothesis but does not establish identity or cause."},
+          {"id": "hide-alternative", "text": "Omit the maintenance record because it complicates the first explanation", "explanation": "Incorrect. Evidence against a hypothesis is part of a responsible investigation."},
+          {"id": "verify-links", "text": "Verify entity identifiers and source records, and compare plausible legitimate explanations", "explanation": "Correct. This tests the relationship rather than treating visual correlation as certainty."}
+        ], "correctIds": ["verify-links"], "explanation": "Distinguish the timeline's observations from the analyst's interpretation and chosen action."},
+        {"id": "check-action-outcome", "kind": "single", "prompt": "A device-isolation request is pending, and disabling the app identity could interrupt every class. What is appropriate?", "choices": [
+          {"id": "verify-and-scope", "text": "Track the pending result and make a separately authorized, evidence-based decision about the identity", "explanation": "Correct. The response must address actual outcomes and the potential blast radius of each action."},
+          {"id": "pending-success", "text": "Treat pending as completed and close the entire incident", "explanation": "Incorrect. A queued operation has not established containment."},
+          {"id": "maximum-disruption", "text": "Disable all identities because the largest disruption is always safest", "explanation": "Incorrect. Unnecessary broad impact is not a substitute for justified scope and authority."}
+        ], "correctIds": ["verify-and-scope"], "explanation": "Good response is measured by verified security effect and understood service impact, not by the number of buttons pressed."}
+      ],
+      "takeaways": ["The portal brings supported incident, entity and response context together.", "Verify the evidence behind a unified timeline and preserve alternative explanations.", "Response actions need appropriate authority and an understood scope of impact.", "Pending or failed actions must not be reported as completed containment.", "A shared portal does not make products, data boundaries or licenses identical."],
+      "sourceIds": ["xdr-overview", "defender-portal", "incident-investigation", "action-center", "identity-overview", "identity-updates"]
+    }
+  ],
+  "glossary": [
+    {"term": "XDR", "definition": "Extended detection and response, connecting security signals and coordinated response across protection areas."},
+    {"term": "EDR", "definition": "Endpoint detection and response, using device behavior and evidence to investigate and respond beyond simple malware prevention."},
+    {"term": "SaaS", "definition": "Software as a service, an application operated by its provider and used over a network."},
+    {"term": "Session control", "definition": "A policy restricting supported actions during a supported application session, not every possible client path."},
+    {"term": "Vulnerability", "definition": "A weakness that could be exploited, whether or not an active malware detection exists."},
+    {"term": "Threat intelligence", "definition": "Researched context about threats, techniques, infrastructure and weaknesses that informs investigation and prioritization."},
+    {"term": "IOC", "definition": "Indicator of compromise, an observable clue associated with malicious activity that still needs contextual investigation."},
+    {"term": "Correlation", "definition": "Connecting apparently related signals to support an investigation, without treating the relationship as automatic proof."},
+    {"term": "Blast radius", "definition": "The range of systems, data or people affected by an attack or a response action."},
+    {"term": "Service principal", "definition": "An application's identity in a directory, with its own permissions and possible security risks."}
+  ],
+  "sources": [
+    {"id": "xdr-overview", "url": "https://learn.microsoft.com/en-us/defender-xdr/microsoft-365-defender", "title": "What is Microsoft Defender XDR?", "supports": "Cross-product correlation, provisioned-service boundaries and coordinated response; dedicated current Identity sources qualify its shorter legacy Identity description."},
+    {"id": "office-features", "url": "https://learn.microsoft.com/en-us/office365/servicedescriptions/microsoft-defender-for-office-365-features", "title": "Microsoft Defender for Office 365 features", "supports": "Safe Links, Safe Attachments, anti-phishing, supported policy scope, Plan 2 distinctions and July 1, 2026 entitlement changes."},
+    {"id": "endpoint-overview", "url": "https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint", "title": "Microsoft Defender for Endpoint overview", "supports": "Prevention, EDR, investigation, response, platform differences and licensing boundaries."},
+    {"id": "device-risk", "url": "https://learn.microsoft.com/en-us/defender-endpoint/device-inventory-field-reference", "title": "Device inventory field reference", "supports": "Device risk from active alerts, severity and unresolved history versus vulnerability exposure."},
+    {"id": "identity-overview", "url": "https://learn.microsoft.com/en-us/defender-for-identity/what-is", "title": "Microsoft Defender for Identity overview", "supports": "Current on-premises, cloud and hybrid scope; sensors, connectors and identity-focused detections."},
+    {"id": "identity-updates", "url": "https://learn.microsoft.com/en-us/defender-for-identity/whats-new", "title": "What's new in Microsoft Defender for Identity", "supports": "2026 Entra detections and feature-specific general-availability, preview and gradual rollout qualifications."},
+    {"id": "cloud-apps-overview", "url": "https://learn.microsoft.com/en-us/defender-cloud-apps/what-is-defender-for-cloud-apps", "title": "What is Microsoft Defender for Cloud Apps?", "supports": "SaaS discovery, visibility, data controls and threat protection distinct from Defender for Cloud."},
+    {"id": "session-control", "url": "https://learn.microsoft.com/en-us/defender-cloud-apps/proxy-intro-aad", "title": "Conditional Access app control in Defender for Cloud Apps", "supports": "Supported browser session controls, reverse proxy and Edge in-browser distinctions, unsupported native-client paths and configuration prerequisites."},
+    {"id": "vulnerability-overview", "url": "https://learn.microsoft.com/en-us/defender-vulnerability-management/defender-vulnerability-management", "title": "What is Microsoft Defender Vulnerability Management?", "supports": "Asset discovery, risk-based assessment, remediation tracking and explicitly scoped preview navigation under Exposure management."},
+    {"id": "threat-intelligence", "url": "https://learn.microsoft.com/en-us/defender-xdr/defender-threat-intelligence", "title": "Microsoft Threat Intelligence in Microsoft Defender XDR", "supports": "Integrated Intelligence explorer and threat analytics, preview entity enrichments, August 1, 2026 legacy portal retirement and scoped no-extra-cost wording."},
+    {"id": "july-retirement", "url": "https://learn.microsoft.com/en-us/partner-center/announcements/2026-july", "title": "July 2026 Partner Center announcements", "supports": "July 23 announcement specifies August 1, 2026 standalone MDTI SKU end of life and describes the integrated customer offering."},
+    {"id": "threat-analytics", "url": "https://learn.microsoft.com/en-us/defender-xdr/threat-analytics", "title": "Threat analytics in Microsoft Defender XDR", "supports": "Expert threat reporting and relevant organizational activity and exposure context."},
+    {"id": "defender-portal", "url": "https://learn.microsoft.com/en-us/defender-xdr/microsoft-365-defender-portal", "title": "Microsoft Defender XDR in the Microsoft Defender portal", "supports": "Unified investigation and response experience with product, role and service prerequisites."},
+    {"id": "incident-investigation", "url": "https://learn.microsoft.com/en-us/defender-xdr/investigate-incidents", "title": "Investigate incidents in Microsoft Defender", "supports": "Incident stories, timelines, alerts, entities and evidence in cross-product investigations."},
+    {"id": "action-center", "url": "https://learn.microsoft.com/en-us/defender-xdr/m365d-action-center", "title": "The Action center", "supports": "Pending and completed actions, approvals and action history; September 1, 2026 Endpoint-specific AIR workflow change, explicitly not the Office 365 AIR experience."},
+    {"id": "sc-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "Microsoft Threat Intelligence wording in the announced October 21, 2026 outline, not yet effective at the September 22 review."}
+  ],
+  "lab": {
+    "title": "Optional paper lab: connect the evidence and limit the response",
+    "purpose": "Practice a cross-product investigation with explicit uncertainty, feature boundaries and action outcomes.",
+    "prerequisites": ["Paper or a local document", "Invented mailbox, laptop, application-identity and SaaS names", "The fictional school sequence in these lessons"],
+    "costWarning": "This paper activity requires no Microsoft 365, Defender, Sentinel or Azure subscription and creates no service charges. Do not start trials, onboard devices, connect apps, scan vulnerabilities, open suspicious content or invoke response actions. Real entitlements and costs vary by product, plan and feature; free public intelligence wording does not make every related security feature free.",
+    "steps": [
+      "Create separate cards for a message link, attachment analysis, device behavior and identity activity.",
+      "Place each card under the service that could contribute that evidence, noting required configuration.",
+      "Draw a possible timeline and write one legitimate explanation that must be checked.",
+      "Add a SaaS download, a vulnerable reader and a threat-intelligence match; explain why these are different evidence types.",
+      "Mark browser session controls as scoped to supported paths rather than every native client.",
+      "Write the current August 1, 2026 standalone intelligence retirement date and distinguish it from the future October 21 exam outline.",
+      "Propose one narrow containment action, its permission requirement and its possible impact on teaching.",
+      "Label the action pending, failed or completed, and write what evidence would justify changing that label.",
+      "Assign a separate remediation and recovery task instead of treating incident closure as the end of all work."
+    ],
+    "expectedResults": ["The incident story connects evidence without claiming certainty from timing alone.", "Each service has an understandable role and an explicit coverage limitation.", "Response records distinguish intended actions from verified results and account for blast radius."],
+    "cleanup": ["Keep only invented names and events; do not include real student documents, passwords or incident records.", "No cloud resources, scans, trials or live responses were created, so no cloud cleanup is needed."]
+  }
+}

@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "domainId": "sc-security",
+  "reviewedAt": "2026-09-22",
+  "objectives": [
+    {
+      "objectiveId": "sc-s-01",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-segmentation-firewalls-ddos",
+          "sectionIds": ["ddos-and-waf-layers", "work-the-school-design"],
+          "checkpointIds": ["check-network-flood"],
+          "evidence": "Explains layer 3 and 4 availability attacks, enhanced DDoS protection scopes and complementary WAF protection. The school design selects flood mitigation for an eligible public endpoint, and the scored checkpoint distinguishes that need from web-content inspection and a single-source connection rule."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-02",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-segmentation-firewalls-ddos",
+          "sectionIds": ["firewall-and-tls", "work-the-school-design"],
+          "checkpointIds": ["check-firewall-tls"],
+          "evidence": "Teaches routed centralized network and application filtering, Basic/Standard/Premium distinctions and configured Premium TLS inspection. The school example routes approved outbound traffic deliberately, while the checkpoint rejects treating Standard FQDN filtering as decrypted payload inspection."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-03",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-segmentation-firewalls-ddos",
+          "sectionIds": ["ddos-and-waf-layers", "work-the-school-design"],
+          "checkpointIds": ["check-web-request"],
+          "evidence": "Explains WAF inspection of application-layer web requests, common injection risks, policy modes and false positives. The worked design places request protection at the web entry point, and the checkpoint distinguishes harmful upload content from an NSG connection decision or network flood."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-04",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-segmentation-firewalls-ddos",
+          "sectionIds": ["segments-need-policy", "work-the-school-design"],
+          "checkpointIds": ["check-segmentation"],
+          "evidence": "Explains VNet and subnet organization, ordinary same-VNet routing and the need for explicit enforcement. The school example separates application, test and database responsibilities, while the prediction and graded checkpoint reject automatic denial based only on subnet separation."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-05",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-segmentation-firewalls-ddos",
+          "sectionIds": ["nsg-connection-filter", "work-the-school-design"],
+          "checkpointIds": ["check-nsg-default"],
+          "evidence": "Teaches five-tuple matching, direction, priority, statefulness and the default virtual-network allow. The worked application adds a specific allow and subsequent deny before the default, and the checkpoint requires identifying the missing restriction rather than duplicating an allow."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-06",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-safe-admin-and-key-vault",
+          "sectionIds": ["administration-with-bastion", "work-admin-and-vault"],
+          "checkpointIds": ["check-bastion-purpose"],
+          "evidence": "Explains Bastion's supported RDP/SSH path to private VM addresses, remaining VM permissions and SKU boundaries. Mara's worked maintenance design avoids direct public management exposure, and the checkpoint rejects universal traffic filtering and unrestricted administrator access."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-07",
+      "lessons": [
+        {
+          "moduleId": "sc-infrastructure-protection",
+          "lessonId": "sc-safe-admin-and-key-vault",
+          "sectionIds": ["three-vault-objects", "vault-access-decisions", "lifecycle-and-boundaries", "work-admin-and-vault"],
+          "checkpointIds": ["check-key-secret", "check-vault-boundaries", "check-certificate-export"],
+          "evidence": "Distinguishes secrets, key operations and certificate export policies, then separates network reachability from identity authorization. The worked app retrieves one credential and requests signing without exporting its protected key; graded checks assess object behavior, private endpoints and exportability."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-08",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-cloud",
+          "lessonId": "sc-cloud-posture-and-recommendations",
+          "sectionIds": ["posture-before-an-incident", "cspm-and-priorities", "work-posture-improvement"],
+          "checkpointIds": ["check-cloud-role"],
+          "evidence": "Introduces Defender for Cloud as a cloud security platform combining posture, development security and workload protection with explicit coverage boundaries. The school improvement example applies its posture role, and the checkpoint distinguishes the platform from antivirus-only or automatic universal protection."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-09",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-cloud",
+          "lessonId": "sc-cloud-posture-and-recommendations",
+          "sectionIds": ["cspm-and-priorities", "scores-have-scope", "work-posture-improvement"],
+          "checkpointIds": ["check-cspm-evidence", "check-secure-score"],
+          "evidence": "Explains ongoing posture assessment, free foundational versus advanced CSPM, contextual prioritization and secure-score limitations. The worked school example prioritizes an exposed application over an isolated practice machine, and checkpoints reject interpreting posture evidence as compromise or legal certification."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-10",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-cloud",
+          "lessonId": "sc-cloud-posture-and-recommendations",
+          "sectionIds": ["standards-assessments-actions", "work-posture-improvement"],
+          "checkpointIds": ["check-standard-action"],
+          "evidence": "Connects standards and policy expectations to assessments, recommendations, accountable changes and verification. The worked example requires an owner to review and verify management-access remediation, while the scored checkpoint rejects assuming a standard assignment already repaired the resources."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-11",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-cloud",
+          "lessonId": "sc-workload-protection-and-alerts",
+          "sectionIds": ["workload-plans", "read-actual-alerts", "multicloud-coverage", "work-alert-triage", "response-and-cost"],
+          "checkpointIds": ["check-workload-plan", "check-alert-meaning", "check-multicloud", "check-proportionate-response"],
+          "evidence": "Describes workload-specific server, storage, database and container protections, documented vault/database alerts and provider-specific coverage. The school triage example checks identities, operation outcomes and response impact, while graded checks assess plan prerequisites, detection uncertainty, multicloud scope and authorized containment."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-12",
+      "lessons": [
+        {
+          "moduleId": "sc-sentinel-operations",
+          "lessonId": "sc-siem-data-detection-incidents",
+          "sectionIds": ["why-siem", "ingestion-is-a-design", "work-detection-evidence"],
+          "checkpointIds": ["check-siem-purpose"],
+          "evidence": "Defines SIEM through collection and analysis of identity, application and third-party security records. The school example relates source events into an investigation, and the checkpoint assesses the cross-source evidence purpose instead of treating SIEM as a password store or missing-data generator."
+        },
+        {
+          "moduleId": "sc-sentinel-operations",
+          "lessonId": "sc-soar-hunting-response",
+          "sectionIds": ["soar-and-human-judgment", "rules-versus-playbooks", "work-hunt-and-response"],
+          "checkpointIds": ["check-soar-definition", "check-rule-playbook"],
+          "evidence": "Defines orchestration, automation and response using coordinated ticketing, enrichment and authorized containment. The worked design separates an automation rule from a Logic Apps playbook, and scored checks distinguish SOAR coordination from storage, segmentation and analytics detection."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-13",
+      "lessons": [
+        {
+          "moduleId": "sc-sentinel-operations",
+          "lessonId": "sc-siem-data-detection-incidents",
+          "sectionIds": ["ingestion-is-a-design", "analytics-and-incidents", "work-detection-evidence", "sentinel-portal-date"],
+          "checkpointIds": ["check-connector-rule", "check-incident-meaning", "check-portal-timeline"],
+          "evidence": "Teaches connector prerequisites, analytics, alert grouping, incident evidence and the current dated portal transition. The teacher sign-in example validates source health and entity relationships, while graded checks assess missing data, investigation uncertainty and the March 31, 2027 transition boundary."
+        },
+        {
+          "moduleId": "sc-sentinel-operations",
+          "lessonId": "sc-soar-hunting-response",
+          "sectionIds": ["permission-and-price", "hunt-before-the-alert", "work-hunt-and-response", "response-distinction"],
+          "checkpointIds": ["check-response-permission", "check-hunting"],
+          "evidence": "Explains proactive hunting, response orchestration, distinct invocation and target-action permissions and additional costs. The worked school response enriches before approved containment and records failures; checkpoints reject assuming a query blocks accounts or incident visibility grants every action."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-14",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-xdr-email-endpoint-identity",
+          "sectionIds": ["xdr-connected-story", "work-email-device-identity"],
+          "checkpointIds": ["check-xdr-correlation", "check-response-scope"],
+          "evidence": "Explains cross-product correlation and coordinated response across licensed, provisioned services, contrasting XDR with SIEM. The worksheet incident joins email, endpoint and identity evidence, and checkpoints assess the value of correlation and the limits of a single device response."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-15",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-xdr-email-endpoint-identity",
+          "sectionIds": ["office-email-protection", "work-email-device-identity"],
+          "checkpointIds": ["check-links-attachments"],
+          "evidence": "Teaches Office 365 anti-phishing, supported Safe Links checks, Safe Attachments analysis and plan/policy boundaries. The worked worksheet case separates a destination verdict from attachment behavior, and the checkpoint correctly pairs each risk with its distinct protection feature."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-16",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-xdr-email-endpoint-identity",
+          "sectionIds": ["endpoint-edr-risk", "work-email-device-identity"],
+          "checkpointIds": ["check-endpoint-risk", "check-response-scope"],
+          "evidence": "Describes Endpoint prevention, behavioral EDR, device timelines and supported response, distinguishing active device risk from vulnerability exposure. The worked investigation follows device behavior beyond antivirus, while checks assess suspicious activity despite patching and the limits of device isolation."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-17",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-cloud-apps-vulnerabilities-intelligence",
+          "sectionIds": ["cloud-apps-visibility", "session-controls", "work-app-vulnerability-intel"],
+          "checkpointIds": ["check-cloud-app-session"],
+          "evidence": "Explains SaaS discovery, connected-app visibility and supported browser session controls, distinct from Defender for Cloud. The school example designs a sensitive-download restriction with native-client boundaries, and the scored checkpoint rejects treating discovery or server protection as session enforcement."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-18",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-xdr-email-endpoint-identity",
+          "sectionIds": ["identity-signals-current", "work-email-device-identity"],
+          "checkpointIds": ["check-identity-scope"],
+          "evidence": "Teaches Defender for Identity's Active Directory signal foundations and current cloud/hybrid capabilities with documented 2026 Entra detections and preview limits. The worked incident investigates configured identity sources, and the checkpoint rejects both stale on-premises-only scope and automatic universal coverage."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-19",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-cloud-apps-vulnerabilities-intelligence",
+          "sectionIds": ["vulnerability-management", "work-app-vulnerability-intel"],
+          "checkpointIds": ["check-vulnerability-work"],
+          "evidence": "Explains asset discovery, vulnerability assessment, contextual prioritization and remediation verification beyond antivirus. The school example prioritizes an outdated document reader and assigns accountable correction, while the checkpoint distinguishes a clean malware scan or open ticket from an actually fixed weakness."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-20",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-cloud-apps-vulnerabilities-intelligence",
+          "sectionIds": ["threat-intelligence-current", "work-app-vulnerability-intel"],
+          "checkpointIds": ["check-intelligence-context", "check-intelligence-date"],
+          "evidence": "Explains threat intelligence, indicator confidence and local correlation, then qualifies integrated experiences, preview enrichments and exact August 1, 2026 standalone retirement against the future October 21 outline. The worked domain investigation and checkpoints assess both evidence interpretation and dated terminology."
+        }
+      ]
+    },
+    {
+      "objectiveId": "sc-s-21",
+      "lessons": [
+        {
+          "moduleId": "sc-defender-xdr",
+          "lessonId": "sc-defender-portal-investigation",
+          "sectionIds": ["portal-workspace", "timeline-and-evidence", "response-blast-radius", "work-unified-investigation"],
+          "checkpointIds": ["check-portal-purpose", "check-timeline-reasoning", "check-action-outcome"],
+          "evidence": "Teaches the portal's unified incident, entity, timeline and response experience without universal licensing or telemetry assumptions. Mara's worked investigation verifies links, pending actions and blast radius; scored checks assess portal purpose, causal uncertainty and evidence-based response outcomes."
+        }
+      ]
+    }
+  ]
+}
