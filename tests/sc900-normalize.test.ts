@@ -124,6 +124,20 @@ function png(red = 20): Buffer {
     chunk("IDAT", deflateSync(Buffer.from([0, red, 40, 60, 255]))), chunk("IEND", Buffer.alloc(0)),
   ]);
 }
+function jpeg(): Buffer {
+  return Buffer.from(
+    "/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAAaADAAQAAAABAAAAAQAAAAD/" +
+    "7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAAQABAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//" +
+    "EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/" +
+    "EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/" +
+    "bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQAAf/aAAwDAQACEQMRAD8A/I+iiivtD48//9k=",
+    "base64",
+  );
+}
+function mislabeledJpeg(url = promptUrl): RawAsset {
+  const bytes = jpeg();
+  return { url, contentType: "image/png", byteLength: bytes.length, base64: bytes.toString("base64") };
+}
 function asset(url: string, red = 20): RawAsset {
   const bytes = png(red);
   return { url, contentType: "image/png", byteLength: bytes.length, base64: bytes.toString("base64") };
@@ -436,11 +450,10 @@ test("original image bytes bind identity, URL provenance, MIME, lengths and deco
     assert.equal(record.byteLength, Buffer.from(record.base64, "base64").length);
     assert.equal(record.examId, "sc900");
   }
-  const variants = ["mime", "length", "base64", "corrupt", "dimensions", "missing", "source", "alt", "unloaded", "unsafe-src"] as const;
+  const variants = ["length", "base64", "corrupt", "dimensions", "missing", "source", "alt", "unloaded", "unsafe-src"] as const;
   for (const variation of variants) {
     const raw = structuredClone(fixture.raw);
     const assets = structuredClone(fixture.assets);
-    if (variation === "mime") assets[0]!.contentType = "image/jpeg";
     if (variation === "length") assets[0]!.byteLength++;
     if (variation === "base64") assets[0]!.base64 += " ";
     if (variation === "corrupt") {
@@ -459,6 +472,110 @@ test("original image bytes bind identity, URL provenance, MIME, lengths and deco
     assert.equal(blocked.draftOccurrences.length, 1, variation);
     assert.equal(blocked.draftDocuments.length, 0, variation);
     assert.ok(blocked.issues.some((issue) => issue.severity === "error"), variation);
+  }
+});
+
+test("valid JPEG declared PNG remains a byte-exact draft with both MIME values and fatal verification diagnostics", async () => {
+  const fixture = manual();
+  fixture.assets[0] = mislabeledJpeg();
+  const originalInput = input([fixture.raw], fixture.assets);
+  const before = structuredClone(fixture);
+  const result = normalizeSc900Captures([originalInput], { draft: true, expected: { pages: 1, occurrences: 1 } });
+  assertBlocked(result, "image-mime");
+  assert.equal(result.issues.length, 1);
+  assert.match(result.issues[0]!.message, /Declared image\/png disagrees with byte-detected image\/jpeg/);
+  assert.equal(result.counts.normalizedOccurrences, 1);
+  assert.equal(result.draftDocuments.length, 1);
+  assert.equal(result.draftAssets.length, 2);
+  const original = fixture.assets[0]!;
+  const id = byteSha256(jpeg());
+  const captured = result.draftAssets.find(asset => asset.id === id)!;
+  assert.ok(captured);
+  assert.equal(captured.base64, original.base64);
+  assert.equal(captured.byteLength, original.byteLength);
+  assert.equal(captured.contentType, "image/jpeg");
+  assert.deepEqual(captured.sourceResponses, [{
+    url: promptUrl, declaredContentType: "image/png", detectedContentType: "image/jpeg",
+  }]);
+  const media = doc(result).question.media.find(asset => asset.id === id)!;
+  assert.equal(media.contentType, "image/jpeg");
+  assert.equal(media.objectPath, `published/sc900/${result.draftReleaseId}/assets/${id}.jpg`);
+  assert.equal(doc(result).answers.provisional, true);
+  assert.deepEqual(fixture, before);
+  assert.equal(originalInput.content, input([fixture.raw], fixture.assets).content);
+  assert.throws(() => normalize([fixture.raw], fixture.assets), error =>
+    error instanceof Sc900NormalizationError &&
+    error.result.issues.some(issue => issue.code === "image-mime" && issue.severity === "error") &&
+    error.result.verifiedCaptureLedger === null);
+  await withWorkspace(async (workspace) => {
+    await persist(workspace, originalInput);
+    const saved = await normalizeSc900Directory({
+      workspaceRoot: workspace, draft: true, expected: { pages: 1, occurrences: 1 },
+    });
+    const path = resolve(workspace, ".data/sc900/normalized", saved.draftReleaseId, "assets", `${id}.jpg`);
+    assert.ok((await readFile(path)).equals(jpeg()));
+    assert.equal(byteSha256(await readFile(path)), captured.id);
+    assert.equal(await readFile(resolve(workspace, originalInput.path), "utf8"), originalInput.content);
+    const cli = spawnSync(process.execPath, ["--import", "tsx", resolve("tools/sc900/normalize.ts"),
+      "--draft", "--expected-pages", "1", "--expected-occurrences", "1"], { cwd: workspace, encoding: "utf8" });
+    assert.equal(cli.status, 2, cli.stderr);
+    assert.equal(JSON.parse(cli.stdout).verifiedCaptureLedger, false);
+  });
+});
+
+test("draft MIME evidence retains every original declaration when identical image bytes share URLs or occurrences", () => {
+  const secondUrl = "https://images.example.test/actual-jpeg.jpg";
+  const first = manual();
+  const second = manual(2);
+  second.raw.html = second.raw.html.replace(promptUrl, secondUrl);
+  second.raw.images[0] = image(secondUrl, "Question");
+  const mismatched = mislabeledJpeg();
+  const matched = { ...mislabeledJpeg(secondUrl), contentType: "image/jpeg" };
+  const result = normalize([first.raw, second.raw], [mismatched, matched, first.assets[1]!], true);
+  assertBlocked(result, "image-mime");
+  assert.equal(result.draftDocuments.length, 1);
+  assert.equal(doc(result).answers.originalAnswers.length, 2);
+  const captured = result.draftAssets.find(asset => asset.id === byteSha256(jpeg()))!;
+  assert.deepEqual(captured.sourceResponses, [
+    { url: secondUrl, declaredContentType: "image/jpeg", detectedContentType: "image/jpeg" },
+    { url: promptUrl, declaredContentType: "image/png", detectedContentType: "image/jpeg" },
+  ]);
+  assert.deepEqual(captured.sourceUrls, [secondUrl, promptUrl].sort());
+  assert.ok(result.draftOccurrences.every(occurrence => occurrence.assetIds.includes(captured.id)));
+  const reverseMismatch = manual();
+  reverseMismatch.assets[0]!.contentType = "image/jpeg";
+  const pngDraft = normalize([reverseMismatch.raw], reverseMismatch.assets, true);
+  assertBlocked(pngDraft, "image-mime");
+  const pngAsset = pngDraft.draftAssets.find(asset => asset.id === byteSha256(png()))!;
+  assert.equal(pngAsset.contentType, "image/png");
+  assert.deepEqual(pngAsset.sourceResponses, [{
+    url: promptUrl, declaredContentType: "image/jpeg", detectedContentType: "image/png",
+  }]);
+});
+
+test("draft MIME retention does not rescue corrupt JPEGs, unknown signatures, unsafe MIME or dimension mismatches", () => {
+  for (const variation of ["truncated", "bad-frame", "unknown-signature", "unsafe-mime", "dimensions"]) {
+    const fixture = manual();
+    fixture.assets[0] = mislabeledJpeg();
+    let bytes = jpeg();
+    if (variation === "truncated") bytes = bytes.subarray(0, bytes.length - 2);
+    if (variation === "bad-frame") {
+      bytes = Buffer.from(bytes);
+      const frame = bytes.indexOf(Buffer.from("ffc0", "hex"));
+      assert.ok(frame > 0);
+      bytes[frame + 5] = 0;
+      bytes[frame + 6] = 0;
+    }
+    if (variation === "unknown-signature") bytes = Buffer.from("<html>Not a raster image</html>");
+    if (variation === "unsafe-mime") fixture.assets[0]!.contentType = "image/svg+xml";
+    if (variation === "dimensions") fixture.raw.images[0]!.width = 2;
+    fixture.assets[0]!.base64 = bytes.toString("base64");
+    fixture.assets[0]!.byteLength = bytes.length;
+    const result = normalize([fixture.raw], fixture.assets, true);
+    assertBlocked(result, variation === "dimensions" ? "image-dimensions" : "invalid-image");
+    assert.equal(result.draftDocuments.length, 0, variation);
+    assert.equal(result.draftOccurrences.length, 1, variation);
+    assert.equal(result.draftAssets.length, 0, variation);
   }
 });
 

@@ -24,7 +24,7 @@ import {
   byteSha256, canonicalJson, sc900Hash, sc900OptionId, sc900QuestionId, sc900SourceRevision,
 } from "./canonical.js";
 
-const NORMALIZER_VERSION = "sc900-rendered-ui-1";
+const NORMALIZER_VERSION = "sc900-rendered-ui-2";
 const MAX_PAGE_BYTES = 32 * 1024 * 1024;
 const MAX_INPUT_BYTES = 256 * 1024 * 1024;
 const MAX_ASSET_BYTES = 16 * 1024 * 1024;
@@ -92,6 +92,11 @@ export interface Sc900DraftOccurrence {
 export interface Sc900DraftAsset extends Sc900CaptureAsset {
   examId: "sc900";
   sourceUrls: string[];
+  sourceResponses: {
+    url: string;
+    declaredContentType: string;
+    detectedContentType: Sc900CaptureAsset["contentType"];
+  }[];
   base64: string;
 }
 export interface Sc900NormalizationResult {
@@ -256,15 +261,28 @@ function parseQuestion(
     } catch (error) {
       throw new CaptureParseError("invalid-image", errorText(error));
     }
-    check(decoded.metadata.validation.mime === "matched", "image-mime", `Declared MIME disagrees with magic bytes: ${image.currentSrc}`);
     check(decoded.metadata.width === image.width && decoded.metadata.height === image.height,
       "image-dimensions", `Captured dimensions disagree with bytes: ${image.currentSrc}`);
+    if (decoded.metadata.validation.mime !== "matched") {
+      report("image-mime", context,
+        `Declared ${rawAsset.contentType} disagrees with byte-detected ${decoded.metadata.contentType}: ${image.currentSrc}; original bytes retained for draft review only, capture verification blocked`);
+    }
     const id = byteSha256(decoded.bytes);
     const previous = registry.get(id);
+    const response = {
+      url: image.currentSrc, declaredContentType: rawAsset.contentType, detectedContentType: decoded.metadata.contentType,
+    };
+    const sourceResponses = [...(previous?.sourceResponses ?? [])];
+    if (!sourceResponses.some((item) => item.url === response.url &&
+      item.declaredContentType === response.declaredContentType && item.detectedContentType === response.detectedContentType)) {
+      sourceResponses.push(response);
+    }
+    sourceResponses.sort((a, b) => a.url.localeCompare(b.url) ||
+      a.declaredContentType.localeCompare(b.declaredContentType) || a.detectedContentType.localeCompare(b.detectedContentType));
     const asset: Sc900DraftAsset = {
       examId: SC900_EXAM_ID, id, contentType: decoded.metadata.contentType,
       width: decoded.metadata.width, height: decoded.metadata.height, byteLength: decoded.bytes.length,
-      sourceUrls: sortedUnique([...(previous?.sourceUrls ?? []), image.currentSrc]),
+      sourceUrls: sortedUnique([...(previous?.sourceUrls ?? []), image.currentSrc]), sourceResponses,
       base64: decoded.bytes.toString("base64"),
     };
     registry.set(id, asset);
@@ -599,7 +617,7 @@ export function normalizeSc900Captures(
         kind: first.kind, prompt: first.prompt, options: first.options, shuffle: first.shuffle,
         fixedOptionOrder: first.fixedOptionOrder, sourceOccurrenceIds: group.map((question) => question.occurrence.id),
         assetIds, commentCount: comments.length, readiness: { grading: value.kind === "option-selection" ? "automatic" : "manual" },
-        media: draftAssets.filter((asset) => assetIds.includes(asset.id)).map(({ base64: _base64, examId: _examId, ...asset }) => ({
+        media: draftAssets.filter((asset) => assetIds.includes(asset.id)).map(({ base64: _base64, examId: _examId, sourceResponses: _responses, ...asset }) => ({
           ...asset, objectPath: `published/sc900/${draftReleaseId}/assets/${asset.id}.${mediaExtension(asset.contentType)}`,
         })),
         sources: group.map(({ occurrence }) => ({
