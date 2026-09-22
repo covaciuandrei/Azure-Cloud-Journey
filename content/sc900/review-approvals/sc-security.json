@@ -1,0 +1,22 @@
+[
+  {
+    "id": "sc-infrastructure-protection",
+    "digest": "d549a1dcf4c235d0304076d29bccb6608af4d9998c21e98fca31464588a18d83",
+    "note": "Independent reviewer read both complete lessons, all nine keys and explanations, and every mapped infrastructure objective against first-party sources. Coordinator reviewed the focused correction restricting Premium TLS inspection to supported HTTPS application flows, including the QUIC counterexample and aligned worked example. DDoS, WAF, NSG statefulness, routing, Bastion, and Key Vault permission and export boundaries remain distinct."
+  },
+  {
+    "id": "sc-defender-cloud",
+    "digest": "78d015afa2395c03a49d7f5041903e70e5e7ee3271c3e7d4003e27525a43c0d1",
+    "note": "Independent full review verified both lessons, eight answer keys and all explanations, with substantive objective coverage and worked applications. Cloud posture, workload-protection plans, assessment versus remediation, alerts and risk-based versus classic scores remain correctly scoped. No universal plan entitlement, automatic remediation, security guarantee or actual tenant validation is claimed."
+  },
+  {
+    "id": "sc-sentinel-operations",
+    "digest": "5b7093994c6bb8cd690a4d2e75f6883f2940bfdf87687af93947b48334df5530",
+    "note": "Independent reviewer checked both full lessons and all eight keys, separating data collection, queries, detection, hunting, incidents and response automation. Current dedicated documentation supports the dated March 2027 portal transition and distinct operator, invocation and target-action permissions. Examples preserve possible Logic Apps charges, human review and response scope without claiming a live deployment."
+  },
+  {
+    "id": "sc-defender-xdr",
+    "digest": "d313d3caba122beb16593f4b42805c46c86c6c6cc6076e68447212423e5eb9fc",
+    "note": "Independent reviewer read all three lessons, twelve keys and every option explanation, including all mapped product boundaries and worked investigations. Dedicated current sources substantiate the scoped standalone intelligence retirement, Endpoint automation change without EDR retirement, cloud and hybrid identity capabilities, preview qualifications and correlated response blast radius. Entitlement and rollout remain feature-specific rather than universal promises."
+  }
+]
