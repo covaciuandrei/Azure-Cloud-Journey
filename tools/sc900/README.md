@@ -218,3 +218,108 @@ journal. It makes no network requests. Firestore encoding, cloud controls,
 Storage quotas, runtime wiring, final live publication, and real content review
 are explicitly outside this API. In particular, nested rich-content arrays
 must not be sent to Firestore without a separately verified encoding.
+
+## Guarded Firestore and Storage executor
+
+The separate `upload.ts` command supplies the real executor. The estimation
+helpers above remain nonexecuting. No production upload is performed merely by
+importing a module, building the app, or running a plan.
+
+First select an independently approved complete static bank and its **original**
+`.data/sc900/source-scope.json` receipt. The executor hashes the untouched receipt
+bytes, compares them to `expectedCapture.receiptSha256`, and validates numeric
+exam 128, the exact terminal page URL/title, sequential last-page headings,
+five-question page allocation, observed totals, zero Next/Last controls, and zero
+discussion requests in this scope-only observation. The full bank's separate
+verified capture ledger must still prove that all discussions and answers were
+captured and reviewed. Questions-only data is not eligible.
+
+```bash
+npm run sc900:cloud -- --plan \
+  --approval .data/sc900-publication/current-approval.json \
+  --scope .data/sc900/source-scope.json
+```
+
+For a subsequent release, also pass
+`--baseline .data/sc900-cloud/current-production.json`. Omission means all three
+SC-900 metadata documents must be absent, not permission to overwrite them.
+The plan is saved under `.data/sc900-cloud/plans/<planDigest>.json`; it binds
+the complete document/object inventory, target, exact static approval, source
+receipt and metadata baseline. `--dry-run` is an alias for local planning.
+
+The operator must independently approve that exact plan in a private JSON file.
+`CloudApplyApprovalSchema` in `cloud-plan.ts` defines the required fields:
+`schemaVersion: 1`, `examId: "sc900"`, `target: "production"`,
+`dataKind: "authorized-source"`, `planDigest`, `staticPlanDigest`,
+`sourceScopeSha256`, the approved administrator as `reviewer`, `reviewedAt`,
+and `decision: "approve-cloud-upload-and-metadata-switch"`.
+The command does not generate this approval or accept an approval for another
+plan. The existing isolated user ADC and `AZURE_CLOUD_JOURNEY_ADMIN_EMAIL`
+configuration are required only for explicit production apply.
+
+```bash
+npm run sc900:cloud -- --apply '.data/sc900-cloud/plans/<planDigest>.json' \
+  --cloud-approval '.data/sc900-cloud/approvals/<planDigest>.json'
+```
+
+Apply refuses emulator environment variables for production and requires the
+existing `.data/upload-journal.json`, `.data/operation-journal.json`,
+`.data/rollout/storage-journal.json` and `.data/rollout/hosting-journal.json`.
+It holds both existing upload and Storage/Hosting locks. It refreshes the
+approved ADC identity, exact project/default bucket, deployed rules, private
+bucket controls, billing alert configuration and project-wide quota evidence.
+The shared Pacific-day limits remain 45,000 reads and 18,000 writes/deletes.
+Observed Firestore high-water usage is preserved monotonically in the same
+journals so a restart or delayed telemetry cannot restore spent headroom.
+Existing monthly Storage limits and the 9 GB Hosting headroom check are reused.
+Failed and uncertain requests are charged in advance and never refunded.
+Disk space is checked at least every 120 seconds and must remain above
+2,500,000,000 bytes.
+
+Original images are created at their already-approved
+`published/sc900/<release>/assets/<hash>.<ext>` locations using generation-zero
+preconditions, private cache/ACL settings and SHA-256 metadata only. Every image
+is downloaded through authenticated, generation-pinned access to verify the
+original bytes. Unsafe existing ACLs, download tokens or conflicting bytes are
+errors, not instructions to overwrite or repair a bucket.
+
+Documents are first created privately under `sc900ImportRuns/<stageDigest>`.
+They are then promoted create-only to `studyBanks/sc900/releases/<release>`.
+Catalogs, questions, comments and explanations use `sc900-json-v1` envelopes;
+the SC-only runtime decoder verifies the payload hash and preserves nested
+arrays, manual answers, images and thread identities. Comment envelopes retain
+the top-level `questionId` needed by bounded Firestore discussion queries.
+AZ-104 encoding and paths are unchanged.
+
+Only after revalidating the source, approvals, every staged/final document and
+every original image does one atomic Firestore commit replace
+`studyMetadata/sc900Bank`, `sc900Topics` and `sc900Learning`. Each write uses the
+approved expected absence or exact prior update time. Concurrent changes or a
+mixed pointer state stop publication. A lost response after a successful commit
+is recovered by verifying the exact complete target, not writing it again.
+
+Checkpoints are fsynced and atomically replaced under
+`.data/sc900-cloud/progress/`. They are hints, never substitutes for final remote
+verification. Re-running the same approved apply resumes safely after
+interruption or a quota pause. Quota pauses return exit code 3; other errors
+return exit code 1. SIGINT/SIGTERM abort pending HTTP requests, checkpoint the
+uncertain phase and release the shared locks, with exit code 130/143. A request
+may already have committed; resume verifies its actual state rather than
+assuming that interruption rolled it back. After a forced kill or machine
+failure, inspect the recorded lock PID and remove a stale lock only after
+confirming that its owner is no longer running. Never remove an active lock or
+reset a quota journal. There is no deletion API, automatic request retry, Hosting
+deployment, rules change, app-availability update, course activation or AZ-104
+write path in this executor.
+
+For synthetic tests use `--emulator` for both planning and apply, or run:
+
+```bash
+npm run test:sc900-cloud
+```
+
+The test runner uses isolated loopback ports 18180/19199, the exact
+`demo-az104-study` project, an isolated Firebase CLI home, and no ADC credentials.
+Synthetic plans cannot be applied to production; production plans cannot be
+redirected into the emulator mode. Never copy synthetic fixtures into a real
+source approval. Emulator success does not authorize a real bank or deployment.

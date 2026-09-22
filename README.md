@@ -285,12 +285,23 @@ course, preserves archived releases and atomically selects a complete Hosting
 bundle. The normal export and Hosting guard revalidate its files. Neither API
 deploys to Firebase.
 
-The SC-900 Firestore/Storage publisher is intentionally a **nonexecuting,
-quota-guarded planning interface**, not an upload command. The parent must
-complete and approve cloud encoding/staging/atomic-pointer application before
-enabling the Firestore source. Existing shared quota journals and conservative
-limits are not reset or split per exam. Missing capture, approvals or cloud
-execution are reported blockers, not successful production publication.
+SC-900 has a separate **explicitly approved cloud executor** in
+`tools/sc900/upload.ts`. Planning is local-only; apply requires the exact approved
+static bank, original source-scope receipt, a separate cloud-plan approval,
+fresh administrator/project/rules/privacy checks, and the existing shared
+quota journals. Immutable private staging and original-byte verification precede
+an atomic, preconditioned switch of the three SC-900 Firestore metadata records.
+Nested rich content uses a versioned, hash-checked JSON envelope in Firestore.
+Media retains its approved `published/sc900/<release>/assets/...` path but has
+private access settings, with no anonymous ACLs or download tokens.
+
+`npm run test:sc900-cloud` exercises only isolated `demo-az104-study` emulators
+with synthetic fixtures. No production upload or SC-900 activation is implied
+by those tests. Full capture, discussion review and factual approval are still
+mandatory; questions-only captures are ineligible. See
+[`tools/sc900/README.md`](tools/sc900/README.md) for the guarded plan/apply workflow.
+Budgets are never reset or split by exam, and this executor does not deploy
+Hosting, change application availability, alter rules or modify AZ-104 data.
 
 ## Full local application
 

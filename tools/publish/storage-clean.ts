@@ -27,7 +27,7 @@ const GiB = 1024 ** 3;
 export const storageLimits = { requests: 4500, transferBytes: 90 * GiB, storedBytes: 4 * GiB };
 export interface Amounts { requests: number; transferBytes: number; storedBytes: number }
 export interface MetricSample { labels: Record<string, string>; value: number; endTime: string }
-interface StorageUsage {
+export interface StorageUsage {
   checkedAt: string;
   month: string;
   periodStart: string;
@@ -149,9 +149,9 @@ export function assertStorageHeadroom(usage: Amounts, reserved: Amounts, next: A
   }
 }
 class Reservations {
-  private constructor(private usage: StorageUsage, private journal: Journal) {}
-  static async open(usage: StorageUsage): Promise<Reservations> {
-    const journal = await optional<Journal>(`${rollout}/storage-journal.json`) ?? { schemaVersion: 1, months: {} };
+  private constructor(private usage: StorageUsage, private journal: Journal, private workspace: string) {}
+  static async open(usage: StorageUsage, workspace = process.cwd()): Promise<Reservations> {
+    const journal = await optional<Journal>(resolve(workspace, `${rollout}/storage-journal.json`)) ?? { schemaVersion: 1, months: {} };
     if (journal.schemaVersion !== 1 || !journal.months || typeof journal.months !== "object") {
       throw new Error("Invalid Storage reservation journal.");
     }
@@ -160,7 +160,7 @@ class Reservations {
         throw new Error("Invalid Storage reservation values.");
       }
     }
-    return new Reservations(usage, journal);
+    return new Reservations(usage, journal, workspace);
   }
   get current(): Amounts {
     return this.journal.months[this.usage.month] ?? { requests: 0, transferBytes: 0, storedBytes: 0 };
@@ -180,9 +180,10 @@ class Reservations {
       transferBytes: before.transferBytes + amount.transferBytes,
       storedBytes: before.storedBytes + amount.storedBytes,
     };
-    await persist(`${rollout}/storage-journal.json`, this.journal);
+    await persist(resolve(this.workspace, `${rollout}/storage-journal.json`), this.journal);
   }
 }
+export { Reservations as StorageReservations };
 class Api {
   private token = "";
   private expires = 0;
@@ -419,13 +420,15 @@ async function prepareCloud() {
   await persist(`${rollout}/storage-usage.json`, usage);
   return { usage, reservations, controls, privacy, privacyRequests, api, cloud };
 }
-async function lock(): Promise<() => Promise<void>> {
-  await mkdir(rollout, { recursive: true });
-  const path = `${rollout}/storage-hosting.lock`;
+export { prepareCloud as prepareStorageCloud };
+async function lock(workspace = process.cwd()): Promise<() => Promise<void>> {
+  await mkdir(resolve(workspace, rollout), { recursive: true });
+  const path = resolve(workspace, `${rollout}/storage-hosting.lock`);
   const handle = await open(path, "wx");
   await handle.writeFile(`${process.pid}\n`);
   return async () => { await handle.close(); await unlink(path); };
 }
+export { lock as acquireStorageHostingLock };
 async function regularFiles(root: string, directory = root): Promise<string[]> {
   const stat = await lstat(directory);
   if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Unsafe data directory: ${directory}`);

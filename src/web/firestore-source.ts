@@ -6,6 +6,7 @@ import { STUDY_CURRENT_BANK_PATH, STUDY_DATA_ROOT, STUDY_LEARNING_PATH, STUDY_TO
 import { getFirebaseClients } from "./firebase-client.js";
 import type { StudyCloudReader } from "./firestore-repository.js";
 import { ExamIdSchema, type ExamId } from "../domain/exams.js";
+import { decodeSc900CloudEnvelope } from "../domain/sc900Cloud.js";
 
 export function approvedStudyPath(path: string, examId: ExamId): boolean {
   ExamIdSchema.parse(examId);
@@ -32,7 +33,8 @@ export function createStudyCloudReader(uid: string, examId: ExamId = "az104"): S
       }
       const snapshot = await getDocFromServer(doc(authorize(), path));
       if (!snapshot.exists()) throw new Error("The Firestore study document is missing.");
-      return snapshot.data();
+      return examId === "sc900" && path.startsWith("studyBanks/")
+        ? decodeSc900CloudEnvelope(snapshot.data()) : snapshot.data();
     },
     async comments(questionId, expectedCount, releaseId) {
       if (!/^q_[a-f0-9]{64}$/.test(questionId) ||
@@ -53,7 +55,8 @@ export function createStudyCloudReader(uid: string, examId: ExamId = "az104"): S
           ...constraints, ...(after ? [startAfter(after)] : []),
         ));
         if (page.empty) throw new Error("The Firestore discussion ended before all retained comments were loaded.");
-        comments.push(...page.docs.map((snapshot) => snapshot.data()));
+        comments.push(...await Promise.all(page.docs.map((snapshot) => examId === "sc900"
+          ? decodeSc900CloudEnvelope(snapshot.data()) : snapshot.data())));
         after = page.docs.at(-1);
       }
       return comments;
