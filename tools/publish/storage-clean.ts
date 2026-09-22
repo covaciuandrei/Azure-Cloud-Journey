@@ -54,7 +54,7 @@ export interface StorageUsage {
   samples: Record<string, MetricSample[]>;
 }
 interface Journal {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   months: Record<string, Amounts>;
 }
 interface CloudObject {
@@ -186,7 +186,7 @@ class Reservations {
   private constructor(private usage: StorageUsage, private journal: Journal, private workspace: string) {}
   static async open(usage: StorageUsage, workspace = process.cwd()): Promise<Reservations> {
     const journal = await optional<Journal>(resolve(workspace, `${rollout}/storage-journal.json`)) ?? { schemaVersion: 1, months: {} };
-    if (journal.schemaVersion !== 1 || !journal.months || typeof journal.months !== "object") {
+    if (![1, 2].includes(journal.schemaVersion) || !journal.months || typeof journal.months !== "object") {
       throw new Error("Invalid Storage reservation journal.");
     }
     for (const entry of Object.values(journal.months)) {
@@ -210,6 +210,10 @@ class Reservations {
     const amount = { requests: 0, transferBytes: 0, storedBytes: 0, ...next };
     this.assert(amount);
     const before = this.current;
+    if (amount.classARequests !== undefined || amount.classBRequests !== undefined ||
+        before.classARequests !== undefined || before.classBRequests !== undefined) {
+      this.journal.schemaVersion = 2;
+    }
     this.journal.months[this.usage.month] = {
       requests: before.requests + amount.requests,
       transferBytes: before.transferBytes + amount.transferBytes,
@@ -223,6 +227,21 @@ class Reservations {
   }
 }
 export { Reservations as StorageReservations };
+export function storageRequestClass(urlInput: string, method = "GET"): Partial<Amounts> {
+  const url = new URL(urlInput);
+  if (url.protocol !== "https:" || url.hostname !== "storage.googleapis.com") return { requests: 1 };
+  if (method === "GET") {
+    if (url.pathname === "/storage/v1/b") return { classARequests: 1 };
+    if (/^\/storage\/v1\/b\/[^/]+\/o$/.test(url.pathname)) {
+      return url.searchParams.get("softDeleted") === "true" ? { classBRequests: 1 } : { classARequests: 1 };
+    }
+    if (/^\/storage\/v1\/b\/[^/]+(?:\/(?:iam|acl|defaultObjectAcl|o\/[^/]+))?$/.test(url.pathname)) {
+      return { classBRequests: 1 };
+    }
+  }
+  if (method === "POST" && /^\/upload\/storage\/v1\/b\/[^/]+\/o$/.test(url.pathname)) return { classARequests: 1 };
+  return { requests: 1 };
+}
 class Api {
   private token = "";
   private expires = 0;
@@ -236,7 +255,8 @@ class Api {
     if (storage && !this.reservations) throw new Error("Storage requests require a persisted reservation.");
     // Metadata/list responses are bounded; no content downloads or automatic retries are used.
     if (storage) {
-      await this.reservations!.reserve({ requests: 1, transferBytes: 1024 ** 2, storedBytes: storageBytes });
+      await this.reservations!.reserve({ ...storageRequestClass(url, init.method ?? "GET"),
+        transferBytes: 1024 ** 2, storedBytes: storageBytes });
       this.storageRequests++;
     }
     if (Date.now() >= this.expires) {
@@ -311,7 +331,8 @@ export function storageOperationClasses(samples: MetricSample[]) {
     if (!Number.isFinite(sample.value) || sample.value < 0) throw new Error("Invalid Storage operation metric.");
     const method = sample.labels.method;
     if (method === "WriteObject" || method === "ListObjects") classARequests += sample.value;
-    else if (method === "GetObjectMetadata" || method === "ReadObject" || method === "GetObject") {
+    else if (["GetObjectMetadata", "ReadObject", "GetObject", "GetBucketMetadata", "GetIamPolicy",
+      "GetStorageLayout", "ListDefaultObjectAccessControls", "ListBucketAccessControls", "ListObjectAccessControls"].includes(method ?? "")) {
       classBRequests += sample.value;
     } else {
       classARequests += sample.value;
@@ -454,12 +475,13 @@ async function prepareCloud() {
   if (!controls.cloudControlsReady || controls.storage.bucketName !== cleanBucket || controls.storage.location !== "US-EAST1") {
     throw new Error(`Cloud safeguards/bucket mismatch: ${controls.blockers.join("; ")}`);
   }
-  // Privacy performs at most 4 bucket reads in the existing single-page ACL configuration.
-  await reservations.reserve({ requests: 4, transferBytes: 4 * 1024 ** 2 });
   let privacyRequests = 0;
   const privacy = await inspectBucketPrivacy(cleanBucket, {
     fetch: async (url, init) => {
-      if (++privacyRequests > 4) await reservations.reserve({ requests: 1, transferBytes: 1024 ** 2 });
+      privacyRequests++;
+      await reservations.reserve({
+        ...storageRequestClass(String(url), init?.method ?? "GET"), transferBytes: 1024 ** 2,
+      });
       return fetch(url, { ...init, redirect: "error" });
     },
   });

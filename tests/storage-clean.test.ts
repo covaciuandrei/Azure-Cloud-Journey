@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertStorageHeadroom, cleanMediaObjectPath, crc32c, storageLimits, storageOperationClasses, StorageReservations, validateCleanFile, validateStaticFavicon, verifyRemoteMedia, type StorageUsage } from "../tools/publish/storage-clean.js";
+import { assertStorageHeadroom, cleanMediaObjectPath, crc32c, storageLimits, storageOperationClasses, storageRequestClass, StorageReservations, validateCleanFile, validateStaticFavicon, verifyRemoteMedia, type StorageUsage } from "../tools/publish/storage-clean.js";
 import { pacificQuotaDay } from "../tools/publish/quota.js";
 
 test("Hosting favicon must be referenced, unchanged and not a source symlink", async () => {
@@ -88,6 +88,7 @@ test("classified reservations append to the existing journal without refunding o
     const next = await StorageReservations.open(usage, workspace);
     await next.reserve({ classBRequests: 3 });
     const journal = JSON.parse(await readFile(join(workspace, ".data/rollout/storage-journal.json"), "utf8"));
+    assert.equal(journal.schemaVersion, 2, "Older single-counter writers must not discard classified reservations.");
     assert.deepEqual(journal.months[month], {
       ...previous, transferBytes: previous.transferBytes + 100, storedBytes: previous.storedBytes + 50,
       classARequests: 1, classBRequests: 5,
@@ -96,6 +97,22 @@ test("classified reservations append to the existing journal without refunding o
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
+});
+
+test("bucket metadata, IAM and ACL reads use Google's Class B table while object listings remain Class A", () => {
+  const base = "https://storage.googleapis.com/storage/v1/b/example-bucket";
+  for (const path of ["", "/iam", "/acl", "/defaultObjectAcl", "/o/encoded%2Fobject.png"]) {
+    assert.deepEqual(storageRequestClass(base + path), { classBRequests: 1 });
+  }
+  assert.deepEqual(storageRequestClass(base + "/o"), { classARequests: 1 });
+  assert.deepEqual(storageRequestClass(base + "/o?softDeleted=true"), { classBRequests: 1 });
+  assert.deepEqual(storageRequestClass("https://storage.googleapis.com/storage/v1/b"), { classARequests: 1 });
+  assert.deepEqual(storageRequestClass(base + "/unknown"), { requests: 1 });
+  assert.deepEqual(storageRequestClass(base + "/o/one", "DELETE"), { requests: 1 });
+  assert.deepEqual(storageOperationClasses([
+    { labels: { method: "GetBucketMetadata" }, value: 69, endTime: "2026-09-22T00:00:00Z" },
+    { labels: { method: "GetIamPolicy" }, value: 34, endTime: "2026-09-22T00:00:00Z" },
+  ]), { classARequests: 0, classBRequests: 103 });
 });
 
 test("CRC32C uses the server-compatible Castagnoli checksum", () => {

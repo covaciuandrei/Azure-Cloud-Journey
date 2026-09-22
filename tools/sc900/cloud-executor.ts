@@ -116,7 +116,11 @@ export async function executeSc900CloudPlan(rawPlan: unknown, rawApproval: unkno
       diskCheckedAt = Date.now();
     }
     if (Date.now() - refreshedAt >= 60_000 || force) {
-      quotas = await dependencies.refresh();
+      try { quotas = await dependencies.refresh(); }
+      catch (error) {
+        if (error instanceof Error && /quota pause|month changed/i.test(error.message)) throw new CloudQuotaPause(error.message);
+        throw error;
+      }
       if (!quotas.privacy.safeForPrivateUploads || quotas.privacy.bucketName !== plan.bucket ||
           quotas.privacy.anonymousIamBindings.length || quotas.privacy.anonymousDefaultObjectAcls.length) {
         throw new Error("Fresh verified private bucket controls are required.");
