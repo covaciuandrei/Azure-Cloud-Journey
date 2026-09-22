@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "examId": "sc900",
+  "examCode": "SC-900",
+  "source": {
+    "provider": "examprepper",
+    "examId": 128,
+    "firstPage": "https://www.examprepper.co/exam/128/1",
+    "permission": "The project owner states that ExamPrepper has approved collection for this application.",
+    "verifiedPageCount": null,
+    "verifiedOccurrenceCount": null,
+    "accessStatus": "verification-required",
+    "statusCheckedAt": "2026-09-22",
+    "blocker": "Normal HTTP and isolated Chrome navigation returned a Vercel Security Checkpoint. Natural verification ended with Code 21. No access-control bypass was attempted.",
+    "acceptedUnblockMethods": ["Owner-provided authorized export", "Human-completed normal browser verification", "Provider-approved automation or export access"]
+  },
+  "practice": {
+    "freeSizes": [10, 20, 30, 40],
+    "mockQuestionCount": 40,
+    "mockDurationMinutes": 45,
+    "durationSource": "https://learn.microsoft.com/en-us/credentials/certifications/security-compliance-and-identity-fundamentals/",
+    "formatNotice": "The certification page specifies 45 assessment minutes. Forty questions is this app's practice format, not a claim about the real exam's exact question count. AZ-104 retains its existing 40-question, 60-minute format."
+  },
+  "publicationGates": [
+    "Verified complete authorized source capture with all pages, answers, assets and discussion threads reconciled.",
+    "Every canonical question has topic, duplicate, relevance and answer review, with original teaching explanations and explicit uncertainty where necessary.",
+    "Unsupported or outdated questions are excluded from new practice rather than guessed or silently re-keyed.",
+    "All original SC-900 modules and 58 announced-outline objectives are independently reviewed and digest-approved.",
+    "Multi-exam account, attempt, learning, topic and offline storage is isolated, retaining all old AZ-104 data and links.",
+    "Only approved immutable data is uploaded with the existing Firebase identity, quota, privacy and budget controls.",
+    "Public Git contains source, original lessons and synthetic fixtures only, not the imported question bank."
+  ],
+  "activateAutomatically": false
+}

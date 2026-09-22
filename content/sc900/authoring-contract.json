@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "audience": "A PC-literate Romanian 12th-grade student studying fundamentals. Clear English, concepts before product names, no assumed security or enterprise identity expertise.",
+  "scope": "Use the existing authored module and block shapes. Only module IDs are new. Every lesson needs four to twelve sections, a concrete worked application, an explained prediction, an exam distinction, three to five original checkpoints with every option explained, and three to seven takeaways. Each module needs at least one diagram, a glossary and a safe optional manual or paper lab.",
+  "datePolicy": "The guide fetched September 22, 2026 is labelled effective October 21, 2026. Preserve that as an announced future outline. Teach current product facts with dated future retirements labelled as plans, not completed events. Do not invent a verified prior-English objective snapshot.",
+  "style": [
+    "Never use em dashes or their HTML entities.",
+    "Write original explanations, not copied Microsoft paragraphs or exam questions.",
+    "Use concrete student, teacher, school application and document scenarios with explicit assumptions.",
+    "Explain why a control works and what it does not do. Distinguish authentication, authorization, licensing and connectivity.",
+    "Fundamentals means understandable reasoning and product selection, not shallow lists or an AZ-104 administration manual.",
+    "Read current first-party sources for claims and validate high-risk licensing, SKU, preview, portal and retirement distinctions.",
+    "Use official code-sample search before any Microsoft-related code. Prefer paper examples where real code adds no learning value.",
+    "Do not execute cloud provisioning, alter identities or secrets, or run potentially billable security/compliance actions.",
+    "Current documentation conflicts should be explicitly scoped rather than resolved by guessing."
+  ],
+  "coverage": {
+    "directory": "content/sc900/coverage",
+    "shape": {
+      "schemaVersion": 1,
+      "domainId": "<assigned sc-domain>",
+      "reviewedAt": "2026-09-22",
+      "objectives": [
+        {
+          "objectiveId": "<sc-f/i/s/c-NN>",
+          "lessons": [
+            {
+              "moduleId": "<assigned module>",
+              "lessonId": "<exact allocated lesson id>",
+              "sectionIds": ["<real substantive section>", "<real worked-example section>"],
+              "checkpointIds": ["<relevant original scored checkpoint>"],
+              "evidence": "At least 80 characters and 12 words describing actual teaching, worked application and assessment."
+            }
+          ]
+        }
+      ]
+    },
+    "requirements": "Every assigned objective exactly once; each target at least 80 substantive paragraph/list/example words; every objective at least one referenced worked application and a relevant checkpoint. Structural validation is not independent factual approval."
+  },
+  "sourceBoundary": "Original course inputs can be committed. ExamPrepper question text, marked images and comments remain only in ignored private artifacts and approved Firebase publication. Do not claim any source question was captured or reviewed until the capture receipt proves it.",
+  "approvalBoundary": "Authors never approve their own modules. The coordinator binds independently reviewed exact module and coverage/curriculum/objective digests.",
+  "commitBoundary": "Commit only owned original content/coverage files on the assigned branch with the required Copilot coauthor trailer. Do not push main, create a PR or deploy. Parent integrates reviewed increments."
+}

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "examCode": "SC-900",
+  "guideUrl": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900",
+  "certificationUrl": "https://learn.microsoft.com/en-us/credentials/certifications/security-compliance-and-identity-fundamentals/",
+  "effectiveDate": "2026-10-21",
+  "checkedAt": "2026-09-22",
+  "statusAtReview": "announced-upcoming",
+  "dateNotice": "Microsoft's English guide currently publishes objectives effective October 21, 2026. That date is in the future relative to this review. The certification page explicitly announces the upcoming update. Do not label this outline as already effective or retire otherwise useful current questions solely because of this future outline.",
+  "previousEnglishSnapshotVerified": false,
+  "coverageMeaning": "Lessons map the published announced outline and explain currently documented concepts and services. Coverage is not a guarantee of exam questions, readiness or perfect accuracy. Candidates sitting before the effective date should confirm the applicable outline.",
+  "domains": [
+    {
+      "id": "sc-concepts",
+      "title": "Security, compliance and identity concepts",
+      "weight": { "min": 10, "max": 15 },
+      "groups": [
+        { "id": "sc-security-concepts", "title": "Security and compliance concepts", "objectives": [
+          { "id": "sc-f-01", "label": "Describe the shared responsibility model" },
+          { "id": "sc-f-02", "label": "Describe defense-in-depth" },
+          { "id": "sc-f-03", "label": "Describe the Zero Trust model" },
+          { "id": "sc-f-04", "label": "Describe encryption and hashing" },
+          { "id": "sc-f-05", "label": "Describe Governance, Risk, and Compliance concepts" }
+        ] },
+        { "id": "sc-identity-concepts", "title": "Identity concepts", "objectives": [
+          { "id": "sc-f-06", "label": "Define identity as the primary security perimeter" },
+          { "id": "sc-f-07", "label": "Define authentication" },
+          { "id": "sc-f-08", "label": "Define authorization" },
+          { "id": "sc-f-09", "label": "Describe identity providers" },
+          { "id": "sc-f-10", "label": "Describe directory services and Active Directory" },
+          { "id": "sc-f-11", "label": "Describe federation" }
+        ] }
+      ]
+    },
+    {
+      "id": "sc-entra",
+      "title": "Microsoft Entra capabilities",
+      "weight": { "min": 25, "max": 30 },
+      "groups": [
+        { "id": "sc-entra-types", "title": "Entra ID function and identity types", "objectives": [
+          { "id": "sc-i-01", "label": "Describe Microsoft Entra ID" },
+          { "id": "sc-i-02", "label": "Describe identity types, including workload identities" },
+          { "id": "sc-i-03", "label": "Describe hybrid identity" }
+        ] },
+        { "id": "sc-entra-authentication", "title": "Entra ID authentication capabilities", "objectives": [
+          { "id": "sc-i-04", "label": "Describe authentication methods" },
+          { "id": "sc-i-05", "label": "Describe multifactor authentication" },
+          { "id": "sc-i-06", "label": "Describe password protection and management capabilities" }
+        ] },
+        { "id": "sc-entra-access", "title": "Entra ID access management", "objectives": [
+          { "id": "sc-i-07", "label": "Describe Microsoft Entra Conditional Access" },
+          { "id": "sc-i-08", "label": "Describe Microsoft Entra roles and role-based access control" }
+        ] },
+        { "id": "sc-entra-governance", "title": "Identity protection and governance", "objectives": [
+          { "id": "sc-i-09", "label": "Describe Microsoft Entra ID Governance" },
+          { "id": "sc-i-10", "label": "Describe access reviews" },
+          { "id": "sc-i-11", "label": "Describe Privileged Identity Management capabilities" },
+          { "id": "sc-i-12", "label": "Describe Microsoft Entra ID Protection" }
+        ] }
+      ]
+    },
+    {
+      "id": "sc-security",
+      "title": "Microsoft security solutions",
+      "weight": { "min": 35, "max": 40 },
+      "groups": [
+        { "id": "sc-infrastructure-security", "title": "Core Azure infrastructure security", "objectives": [
+          { "id": "sc-s-01", "label": "Describe Azure DDoS Protection" },
+          { "id": "sc-s-02", "label": "Describe Azure Firewall" },
+          { "id": "sc-s-03", "label": "Describe Azure Web Application Firewall" },
+          { "id": "sc-s-04", "label": "Describe network segmentation with virtual networks" },
+          { "id": "sc-s-05", "label": "Describe network security groups" },
+          { "id": "sc-s-06", "label": "Describe Azure Bastion" },
+          { "id": "sc-s-07", "label": "Describe Azure Key Vault" }
+        ] },
+        { "id": "sc-cloud-security-posture", "title": "Azure security management", "objectives": [
+          { "id": "sc-s-08", "label": "Describe Microsoft Defender for Cloud" },
+          { "id": "sc-s-09", "label": "Describe Cloud Security Posture Management" },
+          { "id": "sc-s-10", "label": "Describe how policies, standards and recommendations improve cloud security posture" },
+          { "id": "sc-s-11", "label": "Describe enhanced cloud workload protection security features" }
+        ] },
+        { "id": "sc-sentinel", "title": "Microsoft Sentinel", "objectives": [
+          { "id": "sc-s-12", "label": "Define SIEM and SOAR" },
+          { "id": "sc-s-13", "label": "Describe Sentinel threat detection and mitigation" }
+        ] },
+        { "id": "sc-defender-xdr", "title": "Microsoft Defender XDR threat protection", "objectives": [
+          { "id": "sc-s-14", "label": "Describe Microsoft Defender XDR services" },
+          { "id": "sc-s-15", "label": "Describe Microsoft Defender for Office 365" },
+          { "id": "sc-s-16", "label": "Describe Microsoft Defender for Endpoint" },
+          { "id": "sc-s-17", "label": "Describe Microsoft Defender for Cloud Apps" },
+          { "id": "sc-s-18", "label": "Describe Microsoft Defender for Identity" },
+          { "id": "sc-s-19", "label": "Describe Microsoft Defender Vulnerability Management" },
+          { "id": "sc-s-20", "label": "Describe Microsoft Threat Intelligence" },
+          { "id": "sc-s-21", "label": "Describe the Microsoft Defender portal" }
+        ] }
+      ]
+    },
+    {
+      "id": "sc-compliance",
+      "title": "Microsoft compliance solutions",
+      "weight": { "min": 20, "max": 25 },
+      "groups": [
+        { "id": "sc-trust-privacy", "title": "Service Trust Portal and privacy", "objectives": [
+          { "id": "sc-c-01", "label": "Describe Service Trust Portal offerings" },
+          { "id": "sc-c-02", "label": "Describe Microsoft's privacy principles" }
+        ] },
+        { "id": "sc-compliance-management", "title": "Purview compliance management", "objectives": [
+          { "id": "sc-c-03", "label": "Describe the Microsoft Purview portal" },
+          { "id": "sc-c-04", "label": "Describe Compliance Manager" },
+          { "id": "sc-c-05", "label": "Describe uses and benefits of compliance score" }
+        ] },
+        { "id": "sc-information-protection", "title": "Information protection, lifecycle and governance", "objectives": [
+          { "id": "sc-c-06", "label": "Describe data classification capabilities" },
+          { "id": "sc-c-07", "label": "Describe Content explorer and Activity explorer benefits" },
+          { "id": "sc-c-08", "label": "Describe sensitivity labels and label policies" },
+          { "id": "sc-c-09", "label": "Describe data loss prevention" },
+          { "id": "sc-c-10", "label": "Describe records management" },
+          { "id": "sc-c-11", "label": "Describe retention policies, labels and label policies" }
+        ] },
+        { "id": "sc-risk-discovery-audit", "title": "Insider risk, eDiscovery and audit", "objectives": [
+          { "id": "sc-c-12", "label": "Describe insider risk management" },
+          { "id": "sc-c-13", "label": "Describe Purview eDiscovery solutions" },
+          { "id": "sc-c-14", "label": "Describe Purview audit solutions" }
+        ] }
+      ]
+    }
+  ]
+}

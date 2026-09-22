@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "examCode": "SC-900",
+  "title": "Understand security, compliance and identity",
+  "pathUrl": "https://learn.microsoft.com/en-us/credentials/certifications/security-compliance-and-identity-fundamentals/",
+  "reviewedAt": "2026-09-22",
+  "objectiveGuide": "content/sc900/objectives.json",
+  "domains": [
+    { "id": "sc-concepts", "title": "Security and identity foundations", "moduleIds": ["sc-security-foundations", "sc-identity-foundations"] },
+    { "id": "sc-entra", "title": "Microsoft Entra", "moduleIds": ["sc-entra-identities", "sc-authentication-access", "sc-identity-governance"] },
+    { "id": "sc-security", "title": "Microsoft security solutions", "moduleIds": ["sc-infrastructure-protection", "sc-defender-cloud", "sc-sentinel-operations", "sc-defender-xdr"] },
+    { "id": "sc-compliance", "title": "Microsoft compliance solutions", "moduleIds": ["sc-trust-compliance", "sc-information-lifecycle", "sc-insider-discovery-audit"] }
+  ],
+  "modules": [
+    { "id": "sc-security-foundations", "domainId": "sc-concepts", "sourcePath": "content/sc900/modules/sc-security-foundations.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/describe-security-concepts-methodologies/", "lessonIds": ["sc-shared-responsibility-and-defense", "sc-zero-trust-crypto-and-grc"], "minimumWords": 2400, "practiceTopics": ["sc-security-concepts"] },
+    { "id": "sc-identity-foundations", "domainId": "sc-concepts", "sourcePath": "content/sc900/modules/sc-identity-foundations.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/", "lessonIds": ["sc-identity-authentication-authorization", "sc-directories-providers-federation"], "minimumWords": 2400, "practiceTopics": ["sc-identity-concepts"] },
+    { "id": "sc-entra-identities", "domainId": "sc-entra", "sourcePath": "content/sc900/modules/sc-entra-identities.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/fundamentals/whatis", "lessonIds": ["sc-entra-tenants-and-identity-types", "sc-hybrid-and-workload-identities"], "minimumWords": 2400, "practiceTopics": ["sc-entra-types"] },
+    { "id": "sc-authentication-access", "domainId": "sc-entra", "sourcePath": "content/sc900/modules/sc-authentication-access.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/identity/authentication/overview-authentication", "lessonIds": ["sc-authentication-mfa-passwords", "sc-conditional-access-and-roles"], "minimumWords": 3000, "practiceTopics": ["sc-entra-authentication", "sc-entra-access"] },
+    { "id": "sc-identity-governance", "domainId": "sc-entra", "sourcePath": "content/sc900/modules/sc-identity-governance.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/entra/id-governance/identity-governance-overview", "lessonIds": ["sc-access-lifecycle-reviews-pim", "sc-identity-risk-and-protection"], "minimumWords": 2400, "practiceTopics": ["sc-entra-governance"] },
+    { "id": "sc-infrastructure-protection", "domainId": "sc-security", "sourcePath": "content/sc900/modules/sc-infrastructure-protection.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/security/fundamentals/network-overview", "lessonIds": ["sc-segmentation-firewalls-ddos", "sc-safe-admin-and-key-vault"], "minimumWords": 3200, "practiceTopics": ["sc-infrastructure-security"] },
+    { "id": "sc-defender-cloud", "domainId": "sc-security", "sourcePath": "content/sc900/modules/sc-defender-cloud.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/defender-for-cloud/defender-for-cloud-introduction", "lessonIds": ["sc-cloud-posture-and-recommendations", "sc-workload-protection-and-alerts"], "minimumWords": 2400, "practiceTopics": ["sc-cloud-security-posture"] },
+    { "id": "sc-sentinel-operations", "domainId": "sc-security", "sourcePath": "content/sc900/modules/sc-sentinel-operations.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/azure/sentinel/overview", "lessonIds": ["sc-siem-data-detection-incidents", "sc-soar-hunting-response"], "minimumWords": 2400, "practiceTopics": ["sc-sentinel"] },
+    { "id": "sc-defender-xdr", "domainId": "sc-security", "sourcePath": "content/sc900/modules/sc-defender-xdr.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/defender-xdr/microsoft-365-defender", "lessonIds": ["sc-xdr-email-endpoint-identity", "sc-cloud-apps-vulnerabilities-intelligence", "sc-defender-portal-investigation"], "minimumWords": 3800, "practiceTopics": ["sc-defender-xdr"] },
+    { "id": "sc-trust-compliance", "domainId": "sc-compliance", "sourcePath": "content/sc900/modules/sc-trust-compliance.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/purview/purview", "lessonIds": ["sc-trust-privacy-and-evidence", "sc-purview-compliance-manager-score"], "minimumWords": 2600, "practiceTopics": ["sc-trust-privacy", "sc-compliance-management"] },
+    { "id": "sc-information-lifecycle", "domainId": "sc-compliance", "sourcePath": "content/sc900/modules/sc-information-lifecycle.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/purview/information-protection", "lessonIds": ["sc-classification-labels-and-explorers", "sc-data-loss-prevention", "sc-retention-records-and-lifecycle"], "minimumWords": 3800, "practiceTopics": ["sc-information-protection"] },
+    { "id": "sc-insider-discovery-audit", "domainId": "sc-compliance", "sourcePath": "content/sc900/modules/sc-insider-discovery-audit.json", "sourceModuleUrl": "https://learn.microsoft.com/en-us/purview/insider-risk-management", "lessonIds": ["sc-insider-risk-and-investigations", "sc-ediscovery-audit-and-evidence"], "minimumWords": 2600, "practiceTopics": ["sc-risk-discovery-audit"] }
+  ]
+}
