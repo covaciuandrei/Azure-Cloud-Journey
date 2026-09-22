@@ -177,13 +177,18 @@ The English study guide reviewed on **September 22,
 2026** announces an effective date of **October 21, 2026**. This is a future
 outline at review time; no verified earlier English outline is claimed.
 
-The authorized source has **219 occurrences across 44 pages**, not yet a verified
-unique or active question count. Browser-generated discussion requests returned
-a verification challenge. Accessible questions, revealed answers and images
-can be collected separately while discussions remain explicitly pending.
-These partial captures are private and cannot satisfy publication gates.
-Complete collection, answer and comment review, original per-question explanations, and the real cloud-upload
-executor remain unfinished. The existing hosted AZ-104 publication is unchanged.
+All **219 source occurrences across 44 pages** have been collected through the
+signed-in browser, with every source answer revealed and **252 original images**
+preserved. Draft normalization retains all 219 questions; it found no exact
+duplicates, which does not rule out near-duplicates. Seventeen valid JPEG images
+have incorrect source PNG labels. Draft rendering uses their detected format
+without changing the bytes, while preserving both labels and fatal diagnostics.
+
+Browser-generated discussion requests still return a verification challenge.
+Discussions remain unrequested, not confirmed empty. These private drafts
+cannot satisfy publication gates. Factual answer and relevance review,
+per-question teaching, discussion review and the real cloud-upload executor
+remain unfinished. The existing hosted AZ-104 publication is unchanged.
 
 Once independently approved and activated, SC-900 offers free practice in sets
 of 10, 20, 30 or 40 and a **40-question, 45-minute mock**. Forty questions is the
