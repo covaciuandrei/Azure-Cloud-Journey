@@ -23,7 +23,7 @@
           "lessonId": "sc-segmentation-firewalls-ddos",
           "sectionIds": ["firewall-and-tls", "work-the-school-design"],
           "checkpointIds": ["check-firewall-tls"],
-          "evidence": "Teaches routed centralized network and application filtering, Basic/Standard/Premium distinctions and configured Premium TLS inspection. The school example routes approved outbound traffic deliberately, while the checkpoint rejects treating Standard FQDN filtering as decrypted payload inspection."
+          "evidence": "Teaches routed centralized network and application filtering, Basic/Standard/Premium distinctions and Premium TLS inspection limited to supported HTTPS flows. The school example checks routing, protocol support and trust, while the checkpoint rejects treating Standard FQDN filtering as decrypted payload inspection."
         }
       ]
     },
