@@ -178,10 +178,11 @@ The English study guide reviewed on **September 22,
 outline at review time; no verified earlier English outline is claimed.
 
 The authorized source has **219 occurrences across 44 pages**, not yet a verified
-unique or active question count. Collection is paused because browser-generated
-discussion requests returned a verification challenge. The partial pilot is
-private and cannot satisfy publication gates. Complete collection, answer and
-comment review, original per-question explanations, and the real cloud-upload
+unique or active question count. Browser-generated discussion requests returned
+a verification challenge. Accessible questions, revealed answers and images
+can be collected separately while discussions remain explicitly pending.
+These partial captures are private and cannot satisfy publication gates.
+Complete collection, answer and comment review, original per-question explanations, and the real cloud-upload
 executor remain unfinished. The existing hosted AZ-104 publication is unchanged.
 
 Once independently approved and activated, SC-900 offers free practice in sets
@@ -227,6 +228,27 @@ node --import tsx tools/course/validate.ts --exam sc900 --module sc-security-fou
 node --import tsx tools/course/validate.ts --exam sc900 --domain sc-concepts
 node --import tsx tools/course/assemble.ts --exam sc900
 ```
+
+The browser collector `tools/ingest/sc900-capture.mjs` normally requires verified
+discussion loading and stops on a challenge. Its explicit `--questions-only`
+mode collects only accessible question content through the signed-in browser,
+without sending discussion requests to the server. It saves separately under
+`.data/sc900/question-content/`, records discussions as unrequested, restores
+normal browser request handling afterward, and never sets full capture complete.
+For an existing installed Playwright driver and the owner's browser on port 9224:
+
+```bash
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright-core/index.mjs \
+  node tools/ingest/sc900-capture.mjs --max-pages 44 --questions-only
+node --import tsx tools/sc900/normalize.ts \
+  --input .data/sc900/question-content/raw/pages \
+  --output .data/sc900/question-content/normalized \
+  --draft --expected-pages 44 --expected-occurrences 219
+```
+
+Draft normalization deliberately exits 2 while discussions or other required
+evidence are incomplete. This mode does not bypass verification or retrieve
+blocked discussions, and it cannot activate the bank.
 
 Full course assembly requires all domain/module approvals plus exact curriculum,
 objective and coverage digests. Its version-3 pointer stays inactive unless
