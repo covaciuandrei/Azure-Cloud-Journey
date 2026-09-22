@@ -9,9 +9,9 @@
     "permission": "The project owner states that ExamPrepper has approved collection for this application.",
     "verifiedPageCount": null,
     "verifiedOccurrenceCount": null,
-    "accessStatus": "verification-required",
+    "accessStatus": "question-ui-accessible-discussions-challenged",
     "statusCheckedAt": "2026-09-22",
-    "blocker": "Normal HTTP and isolated Chrome navigation returned a Vercel Security Checkpoint. Natural verification ended with Code 21. No access-control bypass was attempted.",
+    "blocker": "After the user signed into a dedicated regular Chrome browser, the SC-900 question and answer UI became accessible. The first two browser-generated discussion requests still returned HTTP 429 with a Vercel verification challenge. These are incomplete captures, not confirmed empty discussions. No access-control bypass was attempted.",
     "acceptedUnblockMethods": ["Owner-provided authorized export", "Human-completed normal browser verification", "Provider-approved automation or export access"]
   },
   "practice": {
