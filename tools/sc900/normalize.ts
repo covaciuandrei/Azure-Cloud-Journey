@@ -191,7 +191,10 @@ function parseQuestion(
     $(".chakra-accordion__button").length === 1 &&
     $(".chakra-accordion__button").text().trim() === raw.heading,
   "question-layout", "Expected one rendered Chakra question, panel and matching heading");
-  const sections = $(".chakra-accordion__panel").children().toArray();
+  const panel = $(".chakra-accordion__panel");
+  check(!panel.contents().toArray().some((node) => node.type === "text" && node.data.trim()),
+    "unparsed-panel-content", "Visible text outside recognized prompt, answer and discussion sections requires explicit parsing");
+  const sections = panel.children().toArray();
   const questionSection = sections[0];
   check(questionSection && sections[1] && /^(?:Hide|Show) Answer$/.test($(sections[1]).text().trim()),
     "question-layout", "Unexpected prompt/answer-control layout");
@@ -322,7 +325,9 @@ function parseQuestion(
   occurrence.selectedSourceLabels = selectedLabels;
   const manual = !options.length || manualFormat.test(plainText(prompt));
   const kind = manual ? "manual" : multiFormat.test(plainText(prompt)) || selectedLabels.length > 1 ? "multi-select" : "single-select";
-  const shuffle = { allowed: !manual && shufflePolicy(prompt, options.map((option) => ({
+  const parenthesizedReference = [prompt, ...options.map((option) => option.content)]
+    .some((content) => /\(\s*[A-Z]\s*\)/.test(plainText(content)));
+  const shuffle = { allowed: !manual && !parenthesizedReference && shufflePolicy(prompt, options.map((option) => ({
     ...option, contentHash: sc900Hash("option", option.content),
   }))).allowed };
   const fixedOptionOrder = options.map((option) => option.id);

@@ -358,6 +358,53 @@ test("label-relative, ordering and manual questions preserve order and cannot be
   assert.equal(doc(relative).question.shuffle.allowed, false);
 });
 
+test("parenthesized option references preserve order and prevent semantically different duplicate merges", () => {
+  for (const reference of ["(A) and (B)", "( A ) and ( B )"]) {
+    const contents = ["<p>Alpha</p>", "<p>Beta</p>", "<p>Gamma</p>", `<p>${reference}</p>`];
+    const reordered = [contents[2]!, contents[1]!, contents[0]!, contents[3]!];
+    const result = normalize([
+      question({ options: contents, selected: ["D"] }),
+      question({ number: 2, options: reordered, selected: ["D"] }),
+    ]);
+    assert.equal(result.draftDocuments.length, 2);
+    assert.equal(result.counts.duplicatesGrouped, 0);
+    assert.ok(result.verifiedCaptureLedger);
+    for (const number of [1, 2]) {
+      const document = doc(result, number);
+      const occurrence = result.draftOccurrences[number - 1]!;
+      assert.equal(document.question.shuffle.allowed, false);
+      assert.deepEqual(document.question.options.map((option) => option.id), occurrence.fixedOptionOrder);
+      assert.deepEqual(document.question.options.map((option) => plainText(option.content)),
+        number === 1 ? ["Alpha", "Beta", "Gamma", reference] : ["Gamma", "Beta", "Alpha", reference]);
+      assert.deepEqual(document.answers.originalAnswers[0]!.value, {
+        kind: "option-selection", optionIds: [occurrence.sourceLabelToOptionId.D],
+      });
+      assert.equal(document.question.id, sc900QuestionId(document.question));
+    }
+    assert.notEqual(doc(result, 1).question.id, doc(result, 2).question.id);
+  }
+  const promptReference = normalize([question({ prompt: "<p>Evaluate (A) and (B).</p>" })]);
+  assert.equal(doc(promptReference).question.shuffle.allowed, false);
+});
+
+test("ordinary nonlabel parentheses retain safe shuffling and exact permutation merging", () => {
+  const result = normalize([
+    question({
+      prompt: "<p>Choose a deployment (for production).</p>",
+      options: ["<p>Alpha (cloud)</p>", "<p>Beta (on-premises)</p>"], selected: ["B"],
+    }),
+    question({
+      number: 2, prompt: "<p>Choose a deployment (for production).</p>",
+      options: ["<p>Beta (on-premises)</p>", "<p>Alpha (cloud)</p>"], selected: ["A"],
+    }),
+  ]);
+  assert.equal(result.draftDocuments.length, 1);
+  assert.equal(result.counts.duplicatesGrouped, 1);
+  assert.equal(doc(result).question.shuffle.allowed, true);
+  assert.deepEqual(doc(result).answers.originalAnswers[0]!.value, doc(result).answers.originalAnswers[1]!.value);
+  assert.ok(result.verifiedCaptureLedger);
+});
+
 test("IDs ignore source letters for safe permutations but retain prompt values, case and code whitespace", () => {
   const first = normalize([question()]);
   const reversed = normalize([question({ options: ["<p>Second content</p>", "<p>First content</p>"], selected: ["A"] })]);
@@ -466,6 +513,42 @@ test("unsupported visible content and style text mismatches fail visibly without
   const mismatch = question();
   mismatch.choiceStyles[0]!.text = "Different content";
   assertBlocked(normalize([mismatch], [], true), "choice-style-text");
+});
+
+test("unconsumed bare prompt or answer text in the panel blocks verification instead of being discarded", () => {
+  for (const location of ["before-prompt", "before-controls", "after-controls", "after-explanation"]) {
+    const raw = question({ explanation: "<p>Marked author explanation.</p>" });
+    if (location === "before-prompt") {
+      raw.html = raw.html.replace('class="chakra-accordion__panel">', 'class="chakra-accordion__panel">Bare prompt condition.');
+    } else if (location === "before-controls") {
+      raw.html = raw.html.replace("<div><button>Hide Answer", "Additional prompt requirement.<div><button>Hide Answer");
+    } else if (location === "after-controls") {
+      raw.html = raw.html.replace("Hide Answer</button></div>", "Hide Answer</button></div>Bare source explanation.");
+    } else {
+      raw.html = raw.html.replace("Marked author explanation.</p></div>", "Marked author explanation.</p></div>Additional source explanation.");
+    }
+    raw.renderedText = htmlText(raw.html);
+    const result = normalize([raw], [], true);
+    assertBlocked(result, "unparsed-panel-content");
+    assert.equal(result.draftOccurrences.length, 1);
+    assert.equal(result.draftDocuments.length, 0);
+    assert.throws(() => normalize([raw]), Sc900NormalizationError);
+  }
+});
+
+test("benign panel whitespace is ignored while bare text inside known prompt and answer sections is preserved", () => {
+  const raw = question({ prompt: "Bare prompt within its section.", explanation: "Bare marked answer explanation." });
+  raw.html = raw.html
+    .replace('class="chakra-accordion__panel">', 'class="chakra-accordion__panel">\n \t')
+    .replace("<div><button>Hide Answer", "\n&nbsp; <div><button>Hide Answer")
+    .replace("Hide Answer</button></div>", "Hide Answer</button></div>\n\t ")
+    .replace("Bare marked answer explanation.</div>", "Bare marked answer explanation.</div>\n ");
+  raw.renderedText = htmlText(raw.html);
+  const result = normalize([raw]);
+  assert.ok(result.verifiedCaptureLedger);
+  assert.equal(result.issues.length, 0);
+  assert.equal(plainText(doc(result).question.prompt), "Bare prompt within its section.");
+  assert.equal(plainText(doc(result).answers.originalAnswers[0]!.explanation), "Bare marked answer explanation.");
 });
 
 test("comment counts, ancestry and unparsed reply text cannot silently lose threads", () => {
