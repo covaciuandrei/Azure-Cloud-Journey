@@ -145,7 +145,7 @@ test("exam-specific offline manifests preserve legacy defaults and reject foreig
 test("SC-900 saved release selection includes its own teaching and only requested archived questions", () => {
   const fixture = sc900ManifestFixture();
   const manifest = parseOfflineManifest({
-    ...fixture,
+    ...fixture, learningReleaseId: release,
     files: [...fixture.files,
       { kind: "data", url: `/exams/sc900/content/${legacy}/catalog.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "catalog" },
       { kind: "data", url: `/exams/sc900/content/${legacy}/topics.json`, sha256: hex(1), bytes: 1, releaseId: legacy, part: "topics" },

@@ -413,19 +413,29 @@ test("already-open legacy AZ-104 clients ignore every SC-900 state and unscoped 
   const storage = createCacheStorage();
   const worker = createWorker(storage, createFakeFetch(files, createServer()));
   await (await worker.download("legacy-az-download")).event.wait;
+  type LegacyEnvelope = {
+    protocol: string; type: string; examId?: string;
+    state: { ready: boolean; buildId: string | null; releaseId: string | null };
+  };
   const legacy = worker.makeClient();
+  const oldUi: { state?: LegacyEnvelope["state"] } = {};
+  // This is the old hook's listener, intentionally unaware of examId.
+  const oldListener = (event: { data: unknown }) => {
+    const message = event.data as LegacyEnvelope;
+    if (message.protocol !== PROTOCOL || (message.type !== "STATE" && message.type !== "RESULT")) return;
+    oldUi.state = message.state;
+  };
+  const recordMessage = legacy.postMessage;
+  legacy.postMessage = (message) => { recordMessage(message); oldListener({ data: message }); };
   await worker.dispatch("message", {
     data: { protocol: PROTOCOL, id: "legacy-registration", type: "STATUS" },
     source: legacy, _waits: [], waitUntil(p: Promise<unknown>) { this._waits.push(p); },
   });
-  const delivered = legacy.received as Array<{
-    protocol: string; type: string; examId?: string;
-    state: { ready: boolean; buildId: string | null; releaseId: string | null };
-  }>;
-  // This is the old hook's filter, intentionally unaware of examId.
+  const delivered = legacy.received as LegacyEnvelope[];
   const understoodByOldClient = () => delivered.filter((message) =>
     message.protocol === PROTOCOL && (message.type === "STATE" || message.type === "RESULT"));
   assert.equal(understoodByOldClient()[0]?.state.buildId, az104.manifest.buildId);
+  assert.equal(oldUi.state?.buildId, az104.manifest.buildId);
   delivered.length = 0;
   for (const fixture of [sc900, updated]) {
     for (const [path, bytes] of fixture.files) files.set(path, bytes);
@@ -437,6 +447,8 @@ test("already-open legacy AZ-104 clients ignore every SC-900 state and unscoped 
     assert.equal(result.examId, "sc900");
     assert.equal((await worker.status()).buildId, az104.manifest.buildId);
     assert.equal(understoodByOldClient().length, 0);
+    assert.equal(oldUi.state?.buildId, az104.manifest.buildId);
+    assert.equal(oldUi.state?.ready, true);
   }
   await (await worker.rpc("REMOVE", "remove-sc", { examId: "sc900" })).wait;
   assert.equal((await worker.status()).buildId, az104.manifest.buildId);
@@ -444,14 +456,18 @@ test("already-open legacy AZ-104 clients ignore every SC-900 state and unscoped 
   assert.ok(delivered.some((message) => message.type === "STATE"));
   assert.ok(delivered.every((message) => message.protocol === SC900_PROTOCOL && message.examId === "sc900"));
   assert.equal(understoodByOldClient().length, 0);
+  assert.equal(oldUi.state?.buildId, az104.manifest.buildId);
+  assert.equal(oldUi.state?.ready, true);
   await (await worker.rpc("DOWNLOAD", "sc-again", { examId: "sc900" })).wait;
   await (await worker.rpc("REMOVE", "legacy-unscoped-remove")).wait;
   assert.equal((await worker.status()).ready, false);
   assert.equal((await worker.status("sc-retained", "sc900")).ready, true);
+  assert.equal(oldUi.state?.ready, false);
   assert.ok(understoodByOldClient().every((message) => message.state.ready === false && message.state.releaseId === null));
   delivered.length = 0;
   await (await worker.rpc("REMOVE_ALL", "explicit-all-clear", { examId: "sc900" })).wait;
   assert.equal((await worker.status("sc-cleared", "sc900")).ready, false);
+  assert.equal(oldUi.state?.buildId, null);
   assert.ok(understoodByOldClient().length > 0);
   assert.ok(understoodByOldClient().every((message) => message.state.ready === false && message.state.buildId === null));
 });
@@ -669,12 +685,15 @@ test("SC-900 saved snapshots retain their own topics, teaching and exclusive ima
   const restarted = createWorker(storage, fetcher);
   assert.equal((await restarted.status("sc-saved", "sc900")).ready, true);
   for (const path of [
+    `${root}/catalog.json`, `${root}/questions/${archived.questionIds[0]}.json`,
     `${root}/topics.json`, `${root}/eligibility.json`, `${root}/learning/manifest.json`,
     `${root}/learning/questions/${archived.questionIds[0]}.json`, imagePath,
   ]) {
-    assert.deepEqual(await bytesOf((await restarted.fetchRequest(path, {
+    const response = (await restarted.fetchRequest(path, {
       headers: { "X-AZ104-Offline": "1" },
-    })).response), current.files.get(path));
+    })).response;
+    assert.equal(response?.status, 200, path);
+    assert.deepEqual(await bytesOf(response), current.files.get(path));
   }
 });
 
