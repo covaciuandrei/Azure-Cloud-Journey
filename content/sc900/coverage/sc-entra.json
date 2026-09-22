@@ -78,7 +78,7 @@
           "lessonId": "sc-authentication-mfa-passwords",
           "sectionIds": ["sc-password-protection-recovery", "sc-sspr-boundaries", "sc-worked-auth-recovery"],
           "checkpointIds": ["sc-auth-check-protection", "sc-auth-check-writeback", "sc-auth-check-method"],
-          "evidence": "Separates weak-password evaluation, malicious guessing and eligible recovery, including cloud-change, cloud-reset and writeback entitlement differences. Radu's two-proof ordinary-user application checks registration and policy before reset, while the teaching scopes administrator exceptions, current method support and future phone retirement."
+          "evidence": "Separates weak-password evaluation, malicious guessing and eligible recovery, including cloud-change, cloud-reset and writeback entitlement differences. Radu's two-proof ordinary-user application checks registration and policy before reset without equating proof count with MFA factors. Teaching also explains token-revocation limits, administrator exceptions, current method support and future phone retirement; checks assess feature selection and writeback entitlement."
         }
       ]
     },
@@ -114,7 +114,7 @@
           "lessonId": "sc-access-lifecycle-reviews-pim",
           "sectionIds": ["sc-governance-purpose-lifecycle", "sc-entitlement-access-packages", "sc-worked-governance-term"],
           "checkpointIds": ["sc-gov-check-mover", "sc-gov-check-package"],
-          "evidence": "Explains identity and access lifecycles, trustworthy joiner-mover-leaver signals, provisioning and governed access packages. Radu's complete project application covers approval, a bounded handover, review and expiry without deleting his continuing student identity, assessed by mover and package-selection questions."
+          "evidence": "Explains identity and access lifecycles, trustworthy joiner-mover-leaver signals, provisioning and governed access packages, including why account disabling is not universal instant session termination. Radu's complete project application covers approval, a bounded handover, review and expiry without deleting his continuing student identity, assessed by mover and package-selection questions."
         }
       ]
     },
@@ -150,7 +150,7 @@
           "lessonId": "sc-identity-risk-and-protection",
           "sectionIds": ["sc-protection-risk-types", "sc-risk-detection-policy-response", "sc-risk-investigate-reports", "sc-worked-risk-school", "sc-risk-product-boundaries", "sc-risk-current-boundaries"],
           "checkpointIds": ["sc-risk-check-event-account", "sc-risk-check-remediation", "sc-risk-check-separate-policies", "sc-risk-check-product"],
-          "evidence": "Teaches sign-in versus user risk, reports, detection timing, separate risk policies and password-based versus passwordless remediation with prerequisites. The school's two-alert application investigates a suspicious request and leaked credentials independently, distinguishing governance and network controls, qualified licensing and the future legacy-policy retirement."
+          "evidence": "Teaches sign-in versus user risk, reports, detection timing, separate risk policies and password-based versus passwordless remediation with prerequisites. The worked case separates real-time enforcement from retrospective alerts and secure risk-policy password change from forgotten-password SSPR. Checkpoints assess event/account risk, remediation, separate enabled policies and governance boundaries; licensing and legacy-policy retirement stay qualified."
         }
       ]
     }
