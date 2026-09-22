@@ -50,7 +50,7 @@
         "lessonId": "sc-purview-compliance-manager-score",
         "sectionIds": ["manager-score-meaning", "manager-worked-improvement"],
         "checkpointIds": ["manager-check-score"],
-        "evidence": "Teaches risk-weighted progress, baseline and aggregation qualifications, prioritization, and limits of scope; the worked improvement reports a limited result and the check rejects certification and legal-guarantee interpretations."
+        "evidence": "Teaches risk-weighted progress, baseline and aggregation qualifications, prioritization, scope, and the distinction from Microsoft Secure Score; the worked improvement reports a limited result and the check rejects certification and legal-guarantee interpretations."
       }]
     },
     {
@@ -110,7 +110,7 @@
         "lessonId": "sc-retention-records-and-lifecycle",
         "sectionIds": ["retention-purpose-and-scope", "retention-clocks-and-preservation", "retention-precedence", "retention-worked-timeline"],
         "checkpointIds": ["retention-check-policy-label", "retention-check-timeline", "retention-check-delete-precedence"],
-        "evidence": "Distinguishes location policies, item labels, publication and application, clock origins, holds, and ordered precedence; the dated worked timeline explicitly excludes Priority Cleanup and checks actual end dates rather than duration names."
+        "evidence": "Distinguishes location policies, item labels, publication and application, clock origins, holds, and ordered precedence; the dated worked timeline explicitly excludes Priority Cleanup and checks actual end dates using 365-day years rather than calendar anniversaries or duration names."
       }]
     },
     {
