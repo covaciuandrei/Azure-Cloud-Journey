@@ -418,3 +418,100 @@ The test runner uses isolated loopback ports 18180/19199, the exact
 Synthetic plans cannot be applied to production; production plans cannot be
 redirected into the emulator mode. Never copy synthetic fixtures into a real
 source approval. Emulator success does not authorize a real bank or deployment.
+
+## Explicit content-addressed Hosting validation allocation
+
+The ADC Hosting deployer supports `--sc900` for the approved combined publication,
+with reports under `.data/sc900/rollout/` and the `approved-sc900-exam` release
+label. This does not approve content or activate a missing SC-900 course/bank.
+The guard retains every AZ-104 path and saved-session archive. If the verified
+Hosting selection includes SC-900 releases, its private Storage check requires
+the **exact union** of the original AZ-104 inventory and the original SC-900
+media paths derived from every retained, independently approved release. Unknown,
+missing, modified, duplicate-generation or soft-deleted objects are rejected.
+Checksums, private ACLs and absence of download tokens remain mandatory. There
+is no prefix-based permission for extra objects, deletion or repair.
+
+Default Hosting transfer accounting remains `2 * allPathBytes`. An optional
+explicit parent-approved mode instead reserves the following bounded allowance
+for the operator's deployment and subsequent validation requests:
+
+```text
+2 * uniqueUncompressedContentBytes + 16 * 1024 * 1024
+```
+
+Each dist file is independently rehashed using SHA-256 and its actual byte
+length. Only equal content hashes with equal lengths share a payload accounting
+entry; all aliases remain in the file inventory and Hosting storage reservation.
+Storage is still charged at **all path bytes**. This formula is an allocated
+validation envelope, not a claim about compressed transfer, server-side storage
+savings or future user traffic. The monthly 9,000,000,000-byte caps and all
+previous global reservations remain unchanged.
+
+After building the final dist, obtain a local measurement:
+
+```bash
+node --import tsx tools/firebase/deploy-hosting-adc.ts --sc900 --measure-content-addressed
+```
+
+The parent must independently review the measured envelope and write a private
+approval matching `HostingValidationApprovalSchema` in
+`tools/publish/hosting-validation-budget.ts`: `schemaVersion: 1`,
+`mode: "content-addressed-v1"`,
+`decision: "approve-bounded-hosting-self-validation"`, `approvedBy: "parent"`,
+`approvedAt`, the current Pacific quota `month` (`YYYY-MM`), `distDigest`,
+`sourceDigest` and `envelopeDigest`. No caller-supplied byte allowance is accepted.
+The deployer and guard independently remeasure the actual build and reject any
+changed source, content, hash/length conflict, symbolic link or hard link.
+The Hosting deployer, storage guard and budget-helper source files are themselves
+included in build identity, so rebuild after changing these safeguards.
+
+```bash
+node --import tsx tools/firebase/deploy-hosting-adc.ts --sc900 \
+  --content-addressed-validation .data/rollout/hosting-validation-approval.json
+# Only after independent review and all existing preflight gates:
+node --import tsx tools/firebase/deploy-hosting-adc.ts --sc900 \
+  --content-addressed-validation .data/rollout/hosting-validation-approval.json --apply
+```
+
+The guard reserves the allocation in the existing
+`.data/rollout/hosting-journal.json` **before** writing a build-bound grant under
+`.data/rollout/hosting-validation/`. A crash between those writes can conservatively
+waste allowance, never create unreserved credit. Rerunning the same approved
+build preserves consumed validation allowance; it does not clear failed request
+charges or replenish the grant. Another Hosting version still reserves its
+full path-based storage bytes. Previous months and reservations are retained.
+
+The deployer continues to upload each required content hash once and verifies
+every remote file alias through the server manifest. Before requesting data,
+it persistently reserves bounded batches for its metadata responses and upload
+acknowledgements. Responses are streamed with the reserved maximum body size,
+redirects and hidden retries are disabled in this mode, and unexpected extra
+pagination stops rather than exceeding the reserved batch.
+
+The resulting deployment report provides `validationGrantId`. All subsequent
+operator content/browser checks **must reserve their maximum responses before
+sending requests**, using these helpers:
+
+- `fetchHostingValidationArtifact(grantId, path, workspace?)`: reserves one
+  request, fetches only `https://study-az104.web.app/<path>`, enforces the measured
+  body-byte bound and verifies exact bytes/hash. Failures and retries keep their
+  reservations. Paths are relative to dist without a leading slash.
+- `reserveHostingValidationRequests(grantId, requests, workspace?)`: persistently
+  reserves a batch before an external browser/network workflow. Artifact entries
+  are `{ kind: "artifact", path }`, with their measured file length charged on
+  **every request**, even aliases/repeats. Metadata entries are
+  `{ kind: "metadata", purpose: "hosting-api" | "browser-overhead", maximumResponseBytes }`;
+  the caller must enforce that response maximum. A fixed 4096-byte response-header
+  allowance is charged per request. Use `boundedHostingValidationResponse` for
+  directly fetched metadata bodies. A browser harness must intercept requests
+  before sending, reserve all expected Hosting paths/retries, and refuse
+  unreserved requests, redirects or responses above their reserved maximum.
+
+Both helpers revalidate the build, approval, current month and global reservation
+floor under a validation lock. They stop when the original envelope is exhausted,
+on unexpected artifact paths or if journals regress. Never edit/reset a grant
+or journal, turn off the guard, substitute a cheaper maximum, or continue
+untracked validation. Extra checks need remaining allocation or a separately
+approved global reservation that still fits the existing caps. Ordinary future
+user traffic is outside this self-validation ledger and still requires monitoring.

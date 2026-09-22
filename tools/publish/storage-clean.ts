@@ -7,11 +7,17 @@ import { approvedAdministrativeAccount, matchesProjectBudget } from "../firebase
 import { loadCleanBank } from "../web/bank.js";
 import { buildOfflineManifest } from "../web/offline-manifest.js";
 import { readTopicMap } from "../topics/data.js";
-import { loadStudyPublication, publicationFileBytes } from "../learning/publication.js";
+import { loadStudyPublication, publicationFileBytes, type PublicationFile } from "../learning/publication.js";
 import { loadCoursePublication } from "../course/publication.js";
 import { loadSc900HostingPublication } from "../web/sc900-publication.js";
+import { Sc900DocumentSchema } from "../../src/domain/sc900Bank.js";
+import { mediaExtension } from "../../src/domain/cleanBank.js";
 import { inspectBucketPrivacy, type BucketPrivacyReport } from "./bucket-privacy.js";
 import { pacificQuotaDay } from "./quota.js";
+import {
+  loadApprovedHostingValidation, reserveContentAddressedHostingUnderLock,
+  type HostingBuildIdentity,
+} from "./hosting-validation-budget.js";
 
 const project = "study-az104";
 export const cleanBucket = "study-az104.firebasestorage.app";
@@ -48,6 +54,7 @@ interface CloudObject {
   size?: string;
   generation?: string;
   contentType?: string;
+  cacheControl?: string;
   storageClass?: string;
   md5Hash?: string;
   crc32c?: string;
@@ -309,7 +316,7 @@ async function inventory(api: Api): Promise<Inventory> {
     project, maxResults: "100", fields: "nextPageToken,items(name,projectNumber,location,storageClass,versioning,softDeletePolicy)",
   });
   const details: Inventory["buckets"] = [];
-  const fields = "nextPageToken,items(name,size,generation,contentType,storageClass,md5Hash,crc32c,metadata,acl,timeDeleted,softDeleteTime,hardDeleteTime)";
+  const fields = "nextPageToken,items(name,size,generation,contentType,cacheControl,storageClass,md5Hash,crc32c,metadata,acl,timeDeleted,softDeleteTime,hardDeleteTime)";
   for (const bucket of buckets) {
     if (bucket.projectNumber !== "237261733668") throw new Error("Out-of-project bucket inventory.");
     const endpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket.name)}/o`;
@@ -526,6 +533,74 @@ function verifyMediaInventory(inventory: Inventory, plan: CleanPlan, privacy: Bu
     verifyRemoteMedia(object, media, privacy);
   }
 }
+
+export async function mediaFromApprovedSc900Files(files: ReadonlyMap<string, PublicationFile>): Promise<CleanMedia[]> {
+  const media = new Map<string, CleanMedia>();
+  for (const [path, file] of files) {
+    if (!/^exams\/sc900\/content\/r_[a-f0-9]{64}\/questions\/q_[a-f0-9]{64}\.json$/.test(path)) continue;
+    const document = Sc900DocumentSchema.parse(JSON.parse((await publicationFileBytes(file)).toString("utf8")));
+    if (path !== `exams/sc900/content/${document.releaseId}/questions/${document.question.id}.json`) {
+      throw new Error("Approved SC900 media owner has inconsistent release attribution.");
+    }
+    for (const asset of document.question.media) {
+      const extension = mediaExtension(asset.contentType);
+      const sourcePath = `exams/sc900/content/${document.releaseId}/media/${asset.id}.${extension}`;
+      const source = files.get(sourcePath);
+      if (!source || source.kind !== "source") throw new Error("Approved SC900 Hosting selection lacks original binary media.");
+      const info = await lstat(source.path);
+      if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size !== asset.byteLength) {
+        throw new Error("Approved SC900 media must be exact regular original files without hard links.");
+      }
+      const bytes = await publicationFileBytes(source);
+      if (bytes.length !== asset.byteLength || sha(bytes) !== asset.id ||
+          asset.objectPath !== `published/sc900/${document.releaseId}/assets/${asset.id}.${extension}`) {
+        throw new Error("Approved SC900 cloud media reference differs from its original bytes.");
+      }
+      const value: CleanMedia = { name: asset.objectPath, source: source.path, sha256: asset.id,
+        byteLength: bytes.length, contentType: asset.contentType,
+        md5Hash: createHash("md5").update(bytes).digest("base64"), crc32c: crc32c(bytes) };
+      const previous = media.get(value.name);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(value)) throw new Error("Conflicting approved SC900 media identities.");
+      media.set(value.name, value);
+    }
+  }
+  return [...media.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function verifyCombinedHostingMediaInventory(
+  inventory: Pick<Inventory, "buckets">, az104Media: readonly CleanMedia[], sc900Media: readonly CleanMedia[],
+  privacy: BucketPrivacyReport,
+): void {
+  const expected = new Map<string, CleanMedia>();
+  for (const item of az104Media) {
+    if (!/^private\/az104\/assets\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(item.name) || expected.has(item.name)) {
+      throw new Error("Invalid immutable AZ104 media inventory.");
+    }
+    expected.set(item.name, item);
+  }
+  const sc900Names = new Set<string>();
+  for (const item of sc900Media) {
+    if (!/^published\/sc900\/r_[a-f0-9]{64}\/assets\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(item.name) || expected.has(item.name)) {
+      throw new Error("Invalid independently approved SC900 media inventory.");
+    }
+    expected.set(item.name, item);
+    sc900Names.add(item.name);
+  }
+  const buckets = inventory.buckets.filter((item) => item.name === cleanBucket);
+  const bucket = buckets[0];
+  if (buckets.length !== 1 || !bucket || bucket.softDeleted.length || bucket.objects.length !== expected.size ||
+      new Set(bucket.objects.map((object) => object.name)).size !== expected.size) {
+    throw new Error("Combined Hosting media has missing, unknown, archived or soft-deleted objects.");
+  }
+  for (const object of bucket.objects) {
+    const media = expected.get(object.name);
+    if (!media) throw new Error("Storage object is outside the exact approved AZ104 and SC900 union.");
+    verifyRemoteMedia(object, media, privacy);
+    if (sc900Names.has(object.name) && object.cacheControl !== "private,no-store") {
+      throw new Error("SC900 original media has unapproved cache privacy metadata.");
+    }
+  }
+}
 async function upload(plan: CleanPlan, write: boolean): Promise<unknown> {
   await approved(plan);
   const cloud = await prepareCloud();
@@ -671,44 +746,47 @@ export async function validateHostingTree(plan: CleanPlan): Promise<{ files: num
   if ([...compiledAssets].some((asset) => !paths.includes(asset))) throw new Error("Compiled Hosting asset is missing.");
   return { files: paths.length, bytes };
 }
-export async function hostingBuildIdentity(): Promise<{ distDigest: string; sourceDigest: string }> {
-  const distFiles = await regularFiles("dist");
+export async function hostingBuildIdentity(workspace = process.cwd()): Promise<HostingBuildIdentity> {
+  const local = (path: string) => resolve(workspace, path);
+  const distFiles = await regularFiles(local("dist"));
   const sourceFiles = [
-    ...(await regularFiles("src")).map((path) => `src/${path}`),
-    ...(await regularFiles("tools/web")).map((path) => `tools/web/${path}`),
-    ...(await regularFiles("tools/learning")).map((path) => `tools/learning/${path}`),
-    ...(await regularFiles("tools/eligibility")).map((path) => `tools/eligibility/${path}`),
-    ...(await regularFiles("tools/course")).map((path) => `tools/course/${path}`),
-    ...(await regularFiles("tools/sc900")).map((path) => `tools/sc900/${path}`),
-    ...(await regularFiles("content/networking")).map((path) => `content/networking/${path}`),
-    ...(await regularFiles("content/az104")).map((path) => `content/az104/${path}`),
-    ...(await regularFiles("content/sc900")).map((path) => `content/sc900/${path}`),
+    ...(await regularFiles(local("src"))).map((path) => `src/${path}`),
+    ...(await regularFiles(local("tools/web"))).map((path) => `tools/web/${path}`),
+    ...(await regularFiles(local("tools/learning"))).map((path) => `tools/learning/${path}`),
+    ...(await regularFiles(local("tools/eligibility"))).map((path) => `tools/eligibility/${path}`),
+    ...(await regularFiles(local("tools/course"))).map((path) => `tools/course/${path}`),
+    ...(await regularFiles(local("tools/sc900"))).map((path) => `tools/sc900/${path}`),
+    ...(await regularFiles(local("content/networking"))).map((path) => `content/networking/${path}`),
+    ...(await regularFiles(local("content/az104"))).map((path) => `content/az104/${path}`),
+    ...(await regularFiles(local("content/sc900"))).map((path) => `content/sc900/${path}`),
+    "tools/publish/hosting-validation-budget.ts", "tools/publish/storage-clean.ts", "tools/firebase/deploy-hosting-adc.ts", "firebase.json",
     "index.html", "public/favicon.svg", "public/offline-worker.js", "package.json", "package-lock.json", "tsconfig.json", "vite.config.ts",
   ].sort();
   const selectionPath = ".data/sc900-publication/hosting.json";
   try {
-    await lstat(selectionPath);
+    await lstat(local(selectionPath));
     sourceFiles.push(selectionPath);
     sourceFiles.sort();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   const compiledTimes = await Promise.all(distFiles.filter((path) => /^assets\/.*\.js$/.test(path))
-    .map(async (path) => (await lstat(`dist/${path}`)).mtimeMs));
+    .map(async (path) => (await lstat(local(`dist/${path}`))).mtimeMs));
   if (!compiledTimes.length) throw new Error("No compiled JavaScript build found.");
   const builtAt = Math.max(...compiledTimes);
   const sources: Array<{ path: string; sha256: string }> = [];
   for (const path of sourceFiles) {
-    const stat = await lstat(path);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.mtimeMs > builtAt) {
+    const stat = await lstat(local(path));
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.mtimeMs > builtAt) {
       throw new Error(`Build input changed after compilation; parent must rebuild: ${path}`);
     }
-    sources.push({ path, sha256: sha(await readFile(path)) });
+    sources.push({ path, sha256: sha(await readFile(local(path))) });
   }
-  const artifacts = await Promise.all(distFiles.map(async (path) => ({ path, sha256: sha(await readFile(`dist/${path}`)) })));
+  const artifacts = await Promise.all(distFiles.map(async (path) => ({ path, sha256: sha(await readFile(local(`dist/${path}`))) })));
   return { distDigest: sha(JSON.stringify(artifacts)), sourceDigest: sha(JSON.stringify(sources)) };
 }
-async function hostingCheck(): Promise<unknown> {
+export interface HostingCheckOptions { contentAddressedApprovalPath?: string }
+async function hostingCheck(options: HostingCheckOptions = {}) {
   const plan = await buildCleanStoragePlan();
   await approved(plan);
   const hostingReady = await optional<Ready>(`${rollout}/hosting-ready.json`);
@@ -721,16 +799,36 @@ async function hostingCheck(): Promise<unknown> {
   if (hostingReady.distDigest !== identity.distDigest || hostingReady.sourceDigest !== identity.sourceDigest) {
     throw new Error("Hosting build/input hashes differ from the separately parent-approved build.");
   }
+  if (options.contentAddressedApprovalPath) {
+    await loadApprovedHostingValidation(options.contentAddressedApprovalPath, identity);
+  }
   const cloud = await prepareCloud();
   const storage = await optional<{ status: string; planDigest: string }>(`${rollout}/storage-report.json`);
   if (storage?.status !== "verified" || storage.planDigest !== plan.digest) throw new Error("Verify private Storage media before Hosting.");
-  verifyMediaInventory(cloud.cloud, plan, cloud.privacy);
+  const sc900Publication = await loadSc900HostingPublication();
+  if (sc900Publication.active) {
+    const sc900Media = await mediaFromApprovedSc900Files(sc900Publication.files);
+    verifyCombinedHostingMediaInventory(cloud.cloud, plan.media, sc900Media, cloud.privacy);
+  } else verifyMediaInventory(cloud.cloud, plan, cloud.privacy);
   const versions = cloud.cloud.hosting.flatMap((site) => site.versions) as Array<{ name?: string; versionBytes?: string; status?: string }>;
   const inventoryBytes = versions.reduce((sum, version) => {
     const amount = version.versionBytes === undefined && version.status === "DELETED" ? 0 : Number(version.versionBytes);
     if (!validAmount(amount)) throw new Error("Hosting version storage size is unavailable; cannot assume no-cost headroom.");
     return sum + amount;
   }, 0);
+  if (options.contentAddressedApprovalPath) {
+    const validationBudget = await reserveContentAddressedHostingUnderLock({
+      approvalPath: options.contentAddressedApprovalPath, identity, pathBytes: local.bytes,
+      usage: cloud.usage, inventoryBytes,
+    });
+    const report = { checkedAt: new Date().toISOString(), planDigest: plan.digest, ...local, ...identity,
+      project, site: project, url: `https://${project}.web.app`, status: "predeploy-verified",
+      usage: { storedBytes: cloud.usage.hostingStoredBytes, transferBytes: cloud.usage.hostingTransferBytes },
+      reservations: validationBudget.reservations, validationBudget,
+      note: "This allocation bounds operator deployment checks only, not future user traffic. Every check must reserve response bytes before requesting." };
+    await persist(`${rollout}/hosting-predeploy.json`, report);
+    return report;
+  }
   const journal = await optional<{ months: Record<string, { storedBytes: number; transferBytes: number }> }>(
     `${rollout}/hosting-journal.json`,
   ) ?? { months: {} };
@@ -753,9 +851,9 @@ async function hostingCheck(): Promise<unknown> {
   await persist(`${rollout}/hosting-predeploy.json`, report);
   return report;
 }
-export async function checkHostingDeployment(): Promise<unknown> {
+export async function checkHostingDeployment(options: HostingCheckOptions = {}) {
   const unlock = await lock();
-  try { return await hostingCheck(); }
+  try { return await hostingCheck(options); }
   finally { await unlock(); }
 }
 
