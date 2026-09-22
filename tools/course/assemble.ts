@@ -3,7 +3,7 @@ import { CourseSchema, CourseModuleIdSchema } from "../../src/domain/course.js";
 import { MAX_COURSE_BYTES, type CourseId, courseText } from "../../src/domain/courseCatalog.js";
 import { digest, jsonFile } from "../ingest/normalize-shared.js";
 import { isMain, readData, writeData } from "../review/data.js";
-import { COURSE_SOURCE_DIRECTORY, loadCourseCoverage, loadCourseModules, teachingWordCount } from "./validate.js";
+import { COURSE_SOURCE_DIRECTORY, loadCourseCoverage, loadCourseModules, parseCourseSelection, teachingWordCount } from "./validate.js";
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 export const ModuleApprovalsSchema = z.array(z.object({
@@ -23,10 +23,10 @@ function finalizedCourse(content: unknown) {
 }
 
 export async function assembleCourse(workspace = process.cwd(), selectedCourse?: CourseId) {
-  const { curriculum, modules, full } = await loadCourseModules(workspace, selectedCourse ? { course: selectedCourse } : {});
-  const coverage = full ? await loadCourseCoverage(workspace, modules) : null;
+  const { curriculum, modules, full, courseId } = await loadCourseModules(workspace, selectedCourse ? { course: selectedCourse } : {});
+  const coverage = full && courseId !== "networking" ? await loadCourseCoverage(workspace, modules, undefined, courseId) : null;
   const groups = full ? full.domains.map((domain) => ({
-    path: `content/az104/review-approvals/${domain.id}.json`, ids: domain.moduleIds,
+    path: `content/${courseId}/review-approvals/${domain.id}.json`, ids: domain.moduleIds,
   })) : [{ path: `${COURSE_SOURCE_DIRECTORY}/review-approvals.json`, ids: modules.map((module) => module.id) }];
   const approvals = [];
   for (const group of groups) {
@@ -41,7 +41,7 @@ export async function assembleCourse(workspace = process.cwd(), selectedCourse?:
     }
   }
   if (full) {
-    const approval = await readData("content/az104/review-approvals/metadata.json", MetadataApprovalSchema, workspace);
+    const approval = await readData(`content/${courseId}/review-approvals/metadata.json`, MetadataApprovalSchema, workspace);
     if (approval.curriculumDigest !== digest(full.curriculum) || approval.objectivesDigest !== digest(full.objectives) ||
         approval.coverageDigest !== digest(coverage)) {
       throw new Error("Approve this exact curriculum, objective guide and coverage mapping before publication.");
@@ -55,6 +55,23 @@ export async function assembleCourse(workspace = process.cwd(), selectedCourse?:
     })),
   }));
   if (full) {
+    if (courseId === "sc900" && "statusAtReview" in full.objectives) {
+      const content = {
+        schemaVersion: 3 as const, id: "sc900" as const, title: full.curriculum.title,
+        reviewedAt: full.curriculum.reviewedAt, pathUrl: full.curriculum.pathUrl,
+        examGuideUrl: full.objectives.guideUrl, objectiveEffectiveDate: full.objectives.effectiveDate,
+        objectiveStatusAtReview: full.objectives.statusAtReview, objectiveCheckedAt: full.objectives.checkedAt,
+        objectiveDateNotice: full.objectives.dateNotice,
+        previousEnglishSnapshotVerified: full.objectives.previousEnglishSnapshotVerified,
+        introduction: `Learn security, identity and compliance foundations through worked applications and explained checkpoints. ${full.objectives.coverageMeaning}`,
+        domains: full.domains, coverage,
+        modules: publishedModules.map((module) => {
+          const expected = full.curriculum.modules.find((item) => item.id === module.id)!;
+          return { ...module, domainId: expected.domainId, practiceTopics: expected.practiceTopics };
+        }),
+      };
+      return finalizedCourse({ ...content, releaseId: `c_${digest(content)}` });
+    }
     const content = {
       schemaVersion: 2 as const, id: "az104" as const, title: full.curriculum.title,
       reviewedAt: full.curriculum.reviewedAt, pathUrl: full.curriculum.pathUrl,
@@ -79,10 +96,13 @@ export async function assembleCourse(workspace = process.cwd(), selectedCourse?:
 }
 
 if (isMain(import.meta.url)) {
-  const course = await assembleCourse();
-  await writeData(`.data/course/releases/${course.releaseId}/${course.id}.json`, course);
-  await writeData(".data/course/current.json", { releaseId: course.releaseId, id: course.id });
-  await writeData(".data/course/content-report.json", {
+  const selection = parseCourseSelection(process.argv.slice(2));
+  if (selection.module || selection.domain) throw new Error("Assembly requires a complete approved course, not a partial selection.");
+  const course = await assembleCourse(process.cwd(), selection.course ?? selection.exam);
+  const directory = course.id === "sc900" ? ".data/exams/sc900/course" : ".data/course";
+  await writeData(`${directory}/releases/${course.releaseId}/${course.id}.json`, course);
+  await writeData(`${directory}/current.json`, { releaseId: course.releaseId, id: course.id });
+  await writeData(`${directory}/content-report.json`, {
     releaseId: course.releaseId, modules: course.modules.length, bytes: Buffer.byteLength(jsonFile(course)),
     lessons: course.modules.reduce((sum, module) => sum + module.lessons.length, 0),
     words: course.modules.reduce((sum, module) => sum + module.lessons.reduce((total, lesson) => total + lesson.wordCount, 0), 0),

@@ -1,21 +1,30 @@
 import { z } from "zod";
 import type { AuthoredModule } from "./course.js";
-import { CourseDomainIdSchema, CourseModuleIdSchema, courseId, courseText, objectiveIdsFor } from "./courseCatalog.js";
-import { TopicSelectionSchema } from "./topics.js";
+import {
+  CourseDomainIdSchema, CourseModuleIdSchema, CoursePracticeTopicSchema, CoursePracticeTopicsSchema,
+  SC900_DOMAIN_MODULES, Sc900TopicIdSchema, courseId, courseText, objectiveIdsFor,
+} from "./courseCatalog.js";
+import { TopicIdSchema } from "./topics.js";
 
-const objectiveId = z.string().regex(/^(ig|st|co|nw|mo)-\d{2}$/);
+const objectiveId = z.string().regex(/^(ig|st|co|nw|mo|sc-[fisc])-\d{2}$/);
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
 export const CourseDomainSchema = z.object({
   id: CourseDomainIdSchema, title: courseText,
   weight: z.object({ min: z.number().int().min(0).max(100), max: z.number().int().min(0).max(100) }).strict()
     .refine((value) => value.min <= value.max),
   moduleIds: z.array(CourseModuleIdSchema).min(1).max(8).refine(unique),
-  practiceTopics: TopicSelectionSchema.refine((topics) => topics.length > 0),
+  practiceTopics: CoursePracticeTopicsSchema,
   objectives: z.array(z.object({
-    id: objectiveId, label: courseText, topicId: TopicSelectionSchema.element,
+    id: objectiveId, label: courseText, topicId: CoursePracticeTopicSchema,
   }).strict()).min(1).max(24),
 }).strict().superRefine((domain, context) => {
   const expected = objectiveIdsFor(domain.id);
+  const sc = domain.id in SC900_DOMAIN_MODULES;
+  if (domain.practiceTopics.some((topic) => !(sc ? Sc900TopicIdSchema : TopicIdSchema).safeParse(topic).success) ||
+      (sc && JSON.stringify(domain.moduleIds) !== JSON.stringify(SC900_DOMAIN_MODULES[domain.id as keyof typeof SC900_DOMAIN_MODULES])) ||
+      (!sc && domain.moduleIds.some((id) => id.startsWith("sc-")))) {
+    context.addIssue({ code: "custom", message: `${domain.id}: module and practice topic exam ownership must match.` });
+  }
   if (domain.objectives.length !== expected.length || !unique(domain.objectives.map((item) => item.id)) ||
       domain.objectives.some((item) => !expected.includes(item.id) || !domain.practiceTopics.includes(item.topicId))) {
     context.addIssue({ code: "custom", message: `${domain.id}: all official objective identities and their practice topics are required.` });
@@ -71,5 +80,8 @@ export function validateCoverageReferences(coverage: DomainCoverage, domain: Cou
       worked ||= blocks.some((block) => block.type === "example");
     }
     if (!worked) throw new Error(`${objective.objectiveId}: cite at least one worked application section.`);
+    if (domain.id.startsWith("sc-") && !objective.lessons.some((target) => target.checkpointIds.length > 0)) {
+      throw new Error(`${objective.objectiveId}: cite at least one relevant checkpoint.`);
+    }
   }
 }

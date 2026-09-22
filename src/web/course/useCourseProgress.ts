@@ -1,34 +1,51 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Course } from "../../domain/course.js";
+import type { ExamId } from "../../domain/exams.js";
 import {
-  courseStorageKey, readCourseProgress, reduceCourseProgress, type CourseAction,
+  courseStorageKey, emptyCourseProgress, readCourseProgress, reduceCourseProgress, type CourseAction,
 } from "./progress.js";
 
-export function useCourseProgress(uid: string | null, course: Course | null) {
-  const key = courseStorageKey(uid);
-  const [initial] = useState(() => {
-    try { return readCourseProgress(window.localStorage, key); }
-    catch { return readCourseProgress({ getItem() { throw new Error("Storage unavailable"); } }, key); }
-  });
-  const [progress, setProgress] = useState(initial.progress);
-  const ref = useRef(progress);
-  const [warning, setWarning] = useState<string | null>(initial.warning);
+function readKey(key: string) {
+  try { return { key, ...readCourseProgress(window.localStorage, key) }; }
+  catch { return { key, ...readCourseProgress({ getItem() { throw new Error("Storage unavailable"); } }, key) }; }
+}
+
+export function useCourseProgress(uid: string | null, course: Course | null, examId: ExamId = course?.id === "sc900" ? "sc900" : "az104") {
+  const key = courseStorageKey(uid, examId);
+  const [state, setState] = useState(() => readKey(key));
+  const ref = useRef(state);
+  useEffect(() => {
+    if (ref.current.key === key) return;
+    const next = readKey(key);
+    ref.current = next;
+    setState(next);
+  }, [key]);
+  const updateWarning = (warning: string) => {
+    const next = { ...(ref.current.key === key ? ref.current : readKey(key)), warning };
+    ref.current = next;
+    setState(next);
+  };
   const dispatch = useCallback((action: CourseAction) => {
-    if (!course) { setWarning("Wait for the course to load before saving learning progress."); return; }
+    if (!course || (course.id === "sc900" ? "sc900" : "az104") !== examId) {
+      updateWarning("Wait for the selected exam's course to load before saving learning progress."); return;
+    }
     try {
-      const next = reduceCourseProgress(ref.current, course, action);
+      const current = ref.current.key === key ? ref.current : readKey(key);
+      const progress = reduceCourseProgress(current.progress, course, action);
+      const next = { ...current, progress };
       ref.current = next;
-      setProgress(next);
-      if (!initial.writable) return;
+      setState(next);
+      if (!current.writable) return;
       try {
-        window.localStorage.setItem(key, JSON.stringify(next));
-        setWarning(null);
+        window.localStorage.setItem(key, JSON.stringify(progress));
+        ref.current = { ...next, warning: null };
+        setState(ref.current);
       } catch {
-        setWarning("Browser storage is full or unavailable. Learning changes remain in this tab but are not saved.");
+        updateWarning("Browser storage is full or unavailable. Learning changes remain in this tab but are not saved.");
       }
     } catch (error) {
-      setWarning(error instanceof Error ? error.message : "Learning progress could not be updated.");
+      updateWarning(error instanceof Error ? error.message : "Learning progress could not be updated.");
     }
-  }, [course, key, initial.writable]);
-  return { progress, warning, dispatch };
+  }, [course, key, examId]);
+  return { progress: state.key === key ? state.progress : emptyCourseProgress(), warning: state.key === key ? state.warning : null, dispatch };
 }

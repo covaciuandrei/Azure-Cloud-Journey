@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Course, CourseLesson } from "../../domain/course.js";
+import { ExamIdSchema, type ExamId } from "../../domain/exams.js";
 
 const id = z.string().regex(/^[a-z][a-z0-9-]{2,79}$/);
 const timestamp = z.number().int().nonnegative().finite();
@@ -17,9 +18,10 @@ export const CourseProgressSchema = z.object({
 }).strict();
 export type CourseProgress = z.infer<typeof CourseProgressSchema>;
 export const emptyCourseProgress = (): CourseProgress => ({ schemaVersion: 1, lastLessonId: null, lessons: {} });
-export function courseStorageKey(uid: string | null) {
+export function courseStorageKey(uid: string | null, examId: ExamId = "az104") {
   if (uid !== null && !/^[A-Za-z0-9_-]{1,128}$/.test(uid)) throw new Error("Invalid learning account identity.");
-  return `az104-networking-course:v1:${uid ? `account:${uid}` : "guest"}`;
+  ExamIdSchema.parse(examId);
+  return `${examId === "az104" ? "az104-networking-course" : "sc900-course"}:v1:${uid ? `account:${uid}` : "guest"}`;
 }
 export function readCourseProgress(storage: Pick<Storage, "getItem">, key: string) {
   try {

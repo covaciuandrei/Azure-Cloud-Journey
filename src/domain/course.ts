@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
   AZ104_MODULE_IDS, COURSE_DOMAIN_IDS, CourseDomainIdSchema, CourseModuleIdSchema, NETWORKING_MODULE_IDS,
+  SC900_DOMAIN_IDS, SC900_MODULE_IDS, SC900_MODULE_LESSONS, CoursePracticeTopicsSchema, Sc900TopicIdSchema,
+  SC900_OBJECTIVE_DATE_NOTICE, SC900_MODULE_TOPICS,
   courseId as id, courseText as text, officialCourseUrl as officialUrl,
 } from "./courseCatalog.js";
-import { CourseDomainSchema, DomainCoverageSchema, validateCoverageReferences } from "./courseCoverage.js";
+import { CourseDomainSchema, DomainCoverageSchema, validateCoverageReferences, type CourseDomain, type DomainCoverage } from "./courseCoverage.js";
 import { TopicSelectionSchema } from "./topics.js";
 export { NETWORKING_MODULE_IDS, CourseModuleIdSchema } from "./courseCatalog.js";
 export const CourseSourceSchema = z.object({
@@ -94,7 +96,11 @@ export const CourseModuleSchema = AuthoredModuleSchema.extend({
 const FullCourseModuleSchema = CourseModuleSchema.extend({
   domainId: CourseDomainIdSchema, practiceTopics: TopicSelectionSchema.refine((topics) => topics.length > 0),
 });
-export type CourseModule = z.infer<typeof CourseModuleSchema> | z.infer<typeof FullCourseModuleSchema>;
+const Sc900CourseModuleSchema = CourseModuleSchema.extend({
+  id: z.enum(SC900_MODULE_IDS), domainId: z.enum(SC900_DOMAIN_IDS),
+  practiceTopics: CoursePracticeTopicsSchema.refine((topics) => topics.every((topic) => Sc900TopicIdSchema.safeParse(topic).success)),
+});
+export type CourseModule = z.infer<typeof CourseModuleSchema> | z.infer<typeof FullCourseModuleSchema> | z.infer<typeof Sc900CourseModuleSchema>;
 export const LegacyCourseSchema = z.object({
   schemaVersion: z.literal(1), id: z.literal("networking"), title: text,
   releaseId: z.string().regex(/^c_[a-f0-9]{64}$/), reviewedAt: z.string().date(),
@@ -135,6 +141,12 @@ export const FullCourseSchema = z.object({
       JSON.stringify(course.domains.flatMap((domain) => domain.moduleIds)) !== JSON.stringify(moduleIds)) {
     fail("Full course requires all ordered domains, unique modules and lessons, and a coverage map for every domain.");
   }
+  validateFullCourseBindings(course, fail);
+});
+
+function validateFullCourseBindings(course: {
+  domains: CourseDomain[]; coverage: DomainCoverage[]; modules: (CourseModule & { domainId: string })[];
+}, fail: (message: string) => void) {
   for (const module of course.modules) {
     const domain = course.domains.find((domain) => domain.id === module.domainId);
     if (!domain?.moduleIds.includes(module.id)) fail(`${module.id}: module/domain binding is invalid.`);
@@ -155,15 +167,51 @@ export const FullCourseSchema = z.object({
     try { validateCoverageReferences(coverage, domain, course.modules); }
     catch (error) { fail(error instanceof Error ? error.message : "Invalid coverage references."); }
   }
+}
+
+export const Sc900CourseSchema = z.object({
+  ...FullCourseSchema.shape,
+  schemaVersion: z.literal(3), id: z.literal("sc900"),
+  objectiveEffectiveDate: z.literal("2026-10-21"),
+  objectiveStatusAtReview: z.literal("announced-upcoming"),
+  objectiveCheckedAt: z.string().date(),
+  objectiveDateNotice: z.literal(SC900_OBJECTIVE_DATE_NOTICE),
+  previousEnglishSnapshotVerified: z.literal(false),
+  domains: z.array(CourseDomainSchema).length(4),
+  coverage: z.array(DomainCoverageSchema).length(4),
+  modules: z.array(Sc900CourseModuleSchema).length(12),
+}).strict().superRefine((course, context) => {
+  const fail = (message: string) => context.addIssue({ code: "custom", message });
+  if (course.objectiveCheckedAt >= course.objectiveEffectiveDate ||
+      course.domains.some((domain, index) => domain.id !== SC900_DOMAIN_IDS[index]) ||
+      course.coverage.some((map, index) => map.domainId !== SC900_DOMAIN_IDS[index]) ||
+      course.modules.some((module, index) => module.id !== SC900_MODULE_IDS[index]) ||
+      JSON.stringify(course.domains.flatMap((domain) => domain.moduleIds)) !== JSON.stringify(SC900_MODULE_IDS)) {
+    fail("SC-900 requires the ordered four domains, twelve modules and announced future outline.");
+  }
+  for (const module of course.modules) {
+    const expected = SC900_MODULE_LESSONS[module.id];
+    if (JSON.stringify(module.lessons.map((lesson) => lesson.id)) !== JSON.stringify(expected) ||
+        JSON.stringify(module.practiceTopics) !== JSON.stringify(SC900_MODULE_TOPICS[module.id])) {
+      fail(`${module.id}: SC-900 requires the exact allocated lesson identities.`);
+    }
+  }
+  validateFullCourseBindings(course, fail);
 });
-export const CourseSchema = z.union([LegacyCourseSchema, FullCourseSchema]);
+export const CourseSchema = z.union([LegacyCourseSchema, FullCourseSchema, Sc900CourseSchema]);
 const FullCoursePointerSchema = z.object({
   schemaVersion: z.literal(2), id: z.literal("az104"), releaseId: z.string().regex(/^c_[a-f0-9]{64}$/),
   url: z.string().regex(/^courses\/c_[a-f0-9]{64}\/az104\.json$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/), modules: z.literal(21),
   lessons: z.number().int().min(42).max(84), checkpoints: z.number().int().min(126).max(420),
 }).strict().refine((pointer) => pointer.url === `courses/${pointer.releaseId}/az104.json`);
-export const CoursePointerSchema = z.union([LegacyCoursePointerSchema, FullCoursePointerSchema]);
+export const Sc900CoursePointerSchema = z.object({
+  schemaVersion: z.literal(3), id: z.literal("sc900"), releaseId: z.string().regex(/^c_[a-f0-9]{64}$/),
+  url: z.string().regex(/^exams\/sc900\/course\/releases\/c_[a-f0-9]{64}\/sc900\.json$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/), modules: z.literal(12), lessons: z.literal(26),
+  checkpoints: z.number().int().min(78).max(130), active: z.boolean().default(false),
+}).strict().refine((pointer) => pointer.url === `exams/sc900/course/releases/${pointer.releaseId}/sc900.json`);
+export const CoursePointerSchema = z.union([LegacyCoursePointerSchema, FullCoursePointerSchema, Sc900CoursePointerSchema]);
 
 export function checkpointCorrect(checkpoint: CourseCheckpoint, selectedIds: readonly string[]) {
   return selectedIds.length === checkpoint.correctIds.length &&

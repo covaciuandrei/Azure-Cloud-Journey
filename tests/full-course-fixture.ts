@@ -5,8 +5,8 @@ import { loadFullCourseContract } from "../tools/course/contracts.js";
 import { teachingWordCount } from "../tools/course/validate.js";
 import { courseFixture } from "./course-fixture.js";
 
-export async function fullCourseInputs() {
-  const contract = await loadFullCourseContract();
+export async function fullCourseInputs(examId: "az104" | "sc900" = "az104") {
+  const contract = await loadFullCourseContract(process.cwd(), examId);
   const template = courseFixture().modules[0]!;
   const modules: AuthoredModule[] = contract.curriculum.modules.map((expected) => AuthoredModuleSchema.parse({
     ...template, id: expected.id, sourceModuleUrl: expected.sourceModuleUrl,

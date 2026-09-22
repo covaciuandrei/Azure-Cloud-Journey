@@ -1,5 +1,5 @@
 import type { Course } from "../../domain/course.js";
-import type { TopicId } from "../../domain/topics.js";
+import type { CoursePracticeTopic } from "../../domain/courseCatalog.js";
 import type { CourseProgress } from "./progress.js";
 
 export interface CoursePageProps {
@@ -12,5 +12,5 @@ export interface CoursePageProps {
   onCheck: (lessonId: string, checkpointId: string, selectedIds: string[]) => void;
   onStudy: (lessonId: string, studied: boolean) => void;
   onBookmark: (lessonId: string) => void;
-  onPractice: (topicIds: TopicId[]) => void;
+  onPractice: (topicIds: CoursePracticeTopic[]) => void;
 }

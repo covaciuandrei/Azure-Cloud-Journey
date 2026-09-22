@@ -1,7 +1,9 @@
 import { CoursePointerSchema, CourseSchema, type Course } from "../../domain/course.js";
-import { MAX_COURSE_BYTES } from "../../domain/courseCatalog.js";
+import { MAX_COURSE_BYTES, courseContentPath, coursePointerPath } from "../../domain/courseCatalog.js";
+import { ExamIdSchema, type ExamId } from "../../domain/exams.js";
 
-export async function loadCourse(baseUrl: string, downloaded: boolean, fetcher: typeof fetch = fetch): Promise<Course> {
+export async function loadCourse(baseUrl: string, downloaded: boolean, fetcher: typeof fetch = fetch, examId: ExamId = "az104"): Promise<Course> {
+  ExamIdSchema.parse(examId);
   const base = new URL(baseUrl);
   if (!["http:", "https:"].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
     throw new Error("Invalid course origin.");
@@ -23,13 +25,19 @@ export async function loadCourse(baseUrl: string, downloaded: boolean, fetcher: 
     try { return JSON.parse(new TextDecoder().decode(bytes)); }
     catch { throw new Error("The course response is not valid data. Reload the app or update its offline copy."); }
   };
-  const pointer = CoursePointerSchema.parse(parse(await read("data/course.json", 8000)));
+  const pointer = CoursePointerSchema.parse(parse(await read(coursePointerPath(examId), 8000)));
+  if ((pointer.schemaVersion === 3 ? "sc900" : "az104") !== examId) {
+    throw new Error("The course index belongs to a different exam.");
+  }
+  if (pointer.schemaVersion === 3 && !pointer.active) {
+    throw new Error("SC-900 learning materials are awaiting explicit reviewed publication approval.");
+  }
   const bytes = await read(pointer.url, MAX_COURSE_BYTES);
   const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
     .map((byte) => byte.toString(16).padStart(2, "0")).join("");
   if (hash !== pointer.sha256) throw new Error("Course content failed its integrity check. Retry or update the offline download.");
   const course = CourseSchema.parse(parse(bytes));
-  if (course.schemaVersion !== pointer.schemaVersion || pointer.url !== `courses/${course.releaseId}/${course.id}.json` ||
+  if (course.schemaVersion !== pointer.schemaVersion || pointer.url !== courseContentPath(course.id, course.releaseId) ||
       course.releaseId !== pointer.releaseId || course.modules.length !== pointer.modules ||
       course.modules.reduce((sum, module) => sum + module.lessons.length, 0) !== pointer.lessons ||
       course.modules.reduce((sum, module) => sum + module.lessons.reduce((count, lesson) => count + lesson.checkpoints.length, 0), 0) !== pointer.checkpoints) {

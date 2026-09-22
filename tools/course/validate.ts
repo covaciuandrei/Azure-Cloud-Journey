@@ -7,7 +7,7 @@ import { activeCourseId, CurriculumSchema, loadFullCourseContract } from "./cont
 export const COURSE_SOURCE_DIRECTORY = "content/networking";
 
 export { CurriculumSchema } from "./contracts.js";
-export interface CourseSelection { course?: CourseId; module?: string; domain?: CourseDomainId }
+export interface CourseSelection { course?: CourseId; exam?: "az104" | "sc900"; module?: string; domain?: CourseDomainId }
 export function teachingWordCount(lesson: AuthoredLesson): number {
   const strings: string[] = [];
   const visit = (value: unknown) => {
@@ -42,8 +42,11 @@ export function validateModule(module: AuthoredModule): void {
 export async function loadCourseModules(workspace = process.cwd(), selection: CourseSelection | string = {}) {
   const options = typeof selection === "string" ? { module: selection } : selection;
   if (options.module && options.domain) throw new Error("Choose a module or a domain, not both.");
-  const courseId = options.course ?? (options.module || options.domain ? "az104" : await activeCourseId(workspace));
-  const full = courseId === "az104" ? await loadFullCourseContract(workspace) : null;
+  if (options.exam && options.course && options.exam !== (options.course === "networking" ? "az104" : options.course)) {
+    throw new Error("Course and exam selections must agree.");
+  }
+  const courseId = options.course ?? options.exam ?? (options.module || options.domain ? "az104" : await activeCourseId(workspace));
+  const full = courseId !== "networking" ? await loadFullCourseContract(workspace, courseId) : null;
   const curriculum = full?.curriculum ?? await readData(`${COURSE_SOURCE_DIRECTORY}/curriculum.json`, CurriculumSchema, workspace);
   if (options.module && !curriculum.modules.some((module) => module.id === options.module)) throw new Error("Unknown curriculum module.");
   if (options.domain && (!full || !full.domains.some((domain) => domain.id === options.domain))) throw new Error("Unknown curriculum domain.");
@@ -66,17 +69,18 @@ export async function loadCourseModules(workspace = process.cwd(), selection: Co
   return { courseId, curriculum, modules, full };
 }
 
-export async function loadCourseCoverage(workspace: string, modules: AuthoredModule[], onlyDomain?: CourseDomainId) {
-  const { domains } = await loadFullCourseContract(workspace);
+export async function loadCourseCoverage(workspace: string, modules: AuthoredModule[], onlyDomain?: CourseDomainId, examId: "az104" | "sc900" = "az104") {
+  const { domains } = await loadFullCourseContract(workspace, examId);
+  if (onlyDomain && !domains.some((domain) => domain.id === onlyDomain)) throw new Error("Unknown curriculum domain.");
   const selected = domains.filter((domain) => !onlyDomain || domain.id === onlyDomain);
   const coverage = [];
   for (const domain of selected) {
-    const map = await readData(`content/az104/coverage/${domain.id}.json`, DomainCoverageSchema, workspace);
+    const map = await readData(`content/${examId}/coverage/${domain.id}.json`, DomainCoverageSchema, workspace);
     const required = new Set(map.objectives.flatMap((objective) => objective.lessons.map((target) => target.moduleId)));
     const available = [...modules];
     for (const id of required) {
       if (!available.some((module) => module.id === id)) {
-        available.push(...(await loadCourseModules(workspace, { course: "az104", module: id })).modules);
+        available.push(...(await loadCourseModules(workspace, { course: examId, module: id })).modules);
       }
     }
     validateCoverageReferences(map, domain, available);
@@ -91,17 +95,21 @@ export function parseCourseSelection(args: string[]): CourseSelection {
     const flag = args[index];
     const value = args[index + 1];
     if (flag === "--course" && !options.course) options.course = CourseIdSchema.parse(value);
+    else if (flag === "--exam" && !options.exam && (value === "az104" || value === "sc900")) options.exam = value;
     else if (flag === "--module" && !options.module) options.module = CourseModuleIdSchema.parse(value);
     else if (flag === "--domain" && !options.domain) options.domain = CourseDomainIdSchema.parse(value);
-    else throw new Error("Usage: validate.ts [--course networking|az104] [--module <id> | --domain <id>]");
+    else throw new Error("Usage: validate.ts [--exam az104|sc900] [--course networking|az104|sc900] [--module <id> | --domain <id>]");
   }
   if (options.module && options.domain) throw new Error("Choose a module or a domain, not both.");
+  if (options.exam && options.course && options.exam !== (options.course === "networking" ? "az104" : options.course)) {
+    throw new Error("Course and exam selections must agree.");
+  }
   return options;
 }
 if (isMain(import.meta.url)) {
   const options = parseCourseSelection(process.argv.slice(2));
   const { modules, courseId } = await loadCourseModules(process.cwd(), options);
-  if (courseId === "az104" && !options.module) await loadCourseCoverage(process.cwd(), modules, options.domain);
+  if (courseId !== "networking" && !options.module) await loadCourseCoverage(process.cwd(), modules, options.domain, courseId);
   console.log(JSON.stringify(modules.map((module) => ({
     id: module.id, lessons: module.lessons.length, words: module.lessons.reduce((sum, lesson) => sum + teachingWordCount(lesson), 0),
     checkpoints: module.lessons.reduce((sum, lesson) => sum + lesson.checkpoints.length, 0),

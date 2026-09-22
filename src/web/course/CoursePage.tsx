@@ -235,6 +235,11 @@ export function CoursePage(props: CoursePageProps) {
   const filtered = terms.length > 0 || bookmarksOnly || domainFilter !== "";
   const clearFilters = () => { setQuery(""); setBookmarksOnly(false); setDomainFilter(""); };
   const onOpenLesson = (lessonId: string) => { setContentsOpen(false); props.onOpenLesson(lessonId); };
+  const objectiveNotice = course.schemaVersion === 3 ? <p className="course-notice">
+    <strong>Announced outline, effective October 21, 2026. </strong>
+    <CourseInline text={course.objectiveDateNotice} />
+    {" "}No previous English objective snapshot has been verified.
+  </p> : null;
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -280,6 +285,7 @@ export function CoursePage(props: CoursePageProps) {
       <p className="course-eyebrow"><Icon name="book" size={16} /> {courseLabel(course)}</p>
       <h1 ref={heading} tabIndex={-1}><CourseInline text={course.title} /></h1>
       <p><CourseInline text={course.introduction} /></p>
+      {objectiveNotice}
       <p className="course-meta">{course.modules.length} modules / {entries.length} lessons / {totals.minutes} minutes estimated reading
         {" / Reviewed "}<time dateTime={course.reviewedAt}>{course.reviewedAt}</time></p>
       <div className="course-actions">
@@ -288,16 +294,18 @@ export function CoursePage(props: CoursePageProps) {
           : entries[0] && <button type="button" className="button button-primary" onClick={() => onOpenLesson(entries[0]!.lesson.id)}>Start first lesson</button>}
       </div>
       <div className="course-reference-links">
-        <ExternalLink href={course.pathUrl}>{course.id === "az104" ? "Azure Administrator certification" : "Microsoft Learn path"}</ExternalLink>
+        <ExternalLink href={course.pathUrl}>{course.id === "sc900" ? "Security, Compliance, and Identity Fundamentals certification"
+          : course.id === "az104" ? "Azure Administrator certification" : "Microsoft Learn path"}</ExternalLink>
         <ExternalLink href={course.examGuideUrl}>Official exam objectives</ExternalLink>
       </div>
       {progress.lastLessonId && !last && <p className="course-notice">Your last lesson is not in this release. Choose a lesson from the overview.</p>}
     </header>
     {progressLine}
     {storageNote}
-    {course.schemaVersion === 2 && <section className="course-domain-overview" aria-labelledby={`${id}-domains`}>
-      <h2 id={`${id}-domains`}>Five domains of Azure administration</h2>
+    {course.schemaVersion !== 1 && <section className="course-domain-overview" aria-labelledby={`${id}-domains`}>
+      <h2 id={`${id}-domains`}>{course.id === "sc900" ? "Four domains of security, compliance and identity" : "Five domains of Azure administration"}</h2>
       <p className="course-meta">{course.domains.reduce((sum, domain) => sum + domain.objectives.length, 0)} mapped official objectives.
+        {course.id === "sc900" && " These are the announced October 21, 2026 objectives, not a verified earlier outline."}
         Mapping is not a guarantee of exam coverage or readiness.</p>
       <div className="course-domain-grid">{domains.map((domain) => {
         const domainLessons = entries.filter((entry) => domain.moduleIds.includes(entry.module.id)).map((entry) => entry.lesson);
@@ -339,7 +347,7 @@ export function CoursePage(props: CoursePageProps) {
         <header><div className="course-module-kicker"><p className="course-eyebrow">Module {String(moduleIndex + 1).padStart(2, "0")} of {course.modules.length}</p>
           <span className={`course-badge course-badge-${module.priority}`}>{module.priority === "core" ? "Core" : "Supporting"}</span></div>
           <h2 id={`${id}-${module.id}`}><CourseInline text={module.title} /></h2>
-          {course.schemaVersion === 2 && <p className="course-meta">{domains.find((domain) => domain.moduleIds.includes(module.id))?.title}</p>}
+          {course.schemaVersion !== 1 && <p className="course-meta">{domains.find((domain) => domain.moduleIds.includes(module.id))?.title}</p>}
           <p><CourseInline text={module.summary} /></p>
         </header>
         <p className="course-meta">{module.lessons.length} lessons / {moduleResults.minutes} minutes
@@ -401,7 +409,7 @@ export function CoursePage(props: CoursePageProps) {
             <progress max={module.lessons.length} value={moduleResults.studied} aria-label="Current module lessons marked Studied" />
           </div>
           {domains.map((domain) => <section key={domain.id} aria-label={domain.title}>
-          {course.schemaVersion === 2 && <h3 className="course-domain-heading">{domain.title}</h3>}
+          {course.schemaVersion !== 1 && <h3 className="course-domain-heading">{domain.title}</h3>}
           {course.modules.map((item, index) => !domain.moduleIds.includes(item.id) ? null : <details key={`${item.id}-${module.id}`} open={item.id === module.id}>
             <summary>{index + 1}. <CourseInline text={item.title} /></summary>
             <ol>{item.lessons.map((itemLesson, itemIndex) => <li key={itemLesson.id}>
@@ -426,6 +434,7 @@ export function CoursePage(props: CoursePageProps) {
             <BookmarkButton lesson={lesson} bookmarked={current.bookmarked} onBookmark={onBookmark} /></div>
           <h1 ref={heading} id={`${id}-lesson-title`} tabIndex={-1}><CourseInline text={lesson.title} /></h1>
           <p className="course-lesson-lede"><CourseInline text={lesson.summary} /></p>
+          {objectiveNotice}
           <p className="course-meta course-reading-meta"><Icon name="clock" size={15} /> Lesson {activeIndex + 1} of {entries.length} / Estimated reading: {lesson.minutes} minutes
             {" / Reviewed "}<time dateTime={module.reviewedAt}>{module.reviewedAt}</time></p>
           {needsReview(progress, lesson) && <p className="course-notice" role="status">
@@ -444,7 +453,7 @@ export function CoursePage(props: CoursePageProps) {
         <section className="course-objectives" aria-labelledby={`${id}-objectives`}>
           <h2 id={`${id}-objectives`}>Learning objectives</h2>
           <ul>{lesson.objectives.map((objective, index) => <li key={index}><CourseInline text={objective} /></li>)}</ul>
-          {course.schemaVersion === 2 && <details className="course-details"><summary>Official objective coverage</summary>
+          {course.schemaVersion !== 1 && <details className="course-details"><summary>Official objective coverage</summary>
             <ul>{course.coverage.flatMap((coverage) => coverage.objectives.flatMap((objective) => {
               const target = objective.lessons.find((target) => target.moduleId === module.id && target.lessonId === lesson.id);
               if (!target) return [];
