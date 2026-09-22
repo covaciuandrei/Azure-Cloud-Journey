@@ -182,13 +182,17 @@ signed-in browser, with every source answer revealed and **252 original images**
 preserved. Draft normalization retains all 219 questions; it found no exact
 duplicates, which does not rule out near-duplicates. Seventeen valid JPEG images
 have incorrect source PNG labels. Draft rendering uses their detected format
-without changing the bytes, while preserving both labels and fatal diagnostics.
+without changing the bytes, while preserving both labels and explicit warnings.
+As in the AZ-104 importer, verified raster signatures and dimensions determine
+the normalized MIME type; corrupt bytes, unsafe types and dimension mismatches
+still fail. A MIME correction never establishes missing discussion evidence.
 
 Browser-generated discussion requests still return a verification challenge.
 Discussions remain unrequested, not confirmed empty. These private drafts
 cannot satisfy publication gates. Factual answer and relevance review,
-per-question teaching, discussion review and the real cloud-upload executor
-remain unfinished. The existing hosted AZ-104 publication is unchanged.
+per-question teaching and discussion review are not yet approved for publication.
+Cloud-upload code is implemented but not approved for a real apply with this
+incomplete capture. The existing hosted AZ-104 publication is unchanged.
 
 Once independently approved and activated, SC-900 offers free practice in sets
 of 10, 20, 30 or 40 and a **40-question, 45-minute mock**. Forty questions is the

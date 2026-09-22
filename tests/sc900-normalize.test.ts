@@ -475,14 +475,16 @@ test("original image bytes bind identity, URL provenance, MIME, lengths and deco
   }
 });
 
-test("valid JPEG declared PNG remains a byte-exact draft with both MIME values and fatal verification diagnostics", async () => {
+test("valid JPEG declared PNG retains exact bytes and both MIME values with the existing AZ104 correction warning", async () => {
   const fixture = manual();
   fixture.assets[0] = mislabeledJpeg();
   const originalInput = input([fixture.raw], fixture.assets);
   const before = structuredClone(fixture);
   const result = normalizeSc900Captures([originalInput], { draft: true, expected: { pages: 1, occurrences: 1 } });
-  assertBlocked(result, "image-mime");
+  assert.ok(result.verifiedCaptureLedger);
   assert.equal(result.issues.length, 1);
+  assert.equal(result.issues[0]!.code, "image-mime");
+  assert.equal(result.issues[0]!.severity, "warning");
   assert.match(result.issues[0]!.message, /Declared image\/png disagrees with byte-detected image\/jpeg/);
   assert.equal(result.counts.normalizedOccurrences, 1);
   assert.equal(result.draftDocuments.length, 1);
@@ -503,10 +505,11 @@ test("valid JPEG declared PNG remains a byte-exact draft with both MIME values a
   assert.equal(doc(result).answers.provisional, true);
   assert.deepEqual(fixture, before);
   assert.equal(originalInput.content, input([fixture.raw], fixture.assets).content);
-  assert.throws(() => normalize([fixture.raw], fixture.assets), error =>
-    error instanceof Sc900NormalizationError &&
-    error.result.issues.some(issue => issue.code === "image-mime" && issue.severity === "error") &&
-    error.result.verifiedCaptureLedger === null);
+  const strict = normalize([fixture.raw], fixture.assets);
+  assert.ok(strict.verifiedCaptureLedger);
+  assert.equal(strict.verifiedCaptureLedger.assets.find(asset => asset.id === id)!.contentType, "image/jpeg");
+  assert.equal(strict.publicationState, "blocked-independent-review");
+  assert.equal(doc(strict).answers.provisional, true);
   await withWorkspace(async (workspace) => {
     await persist(workspace, originalInput);
     const saved = await normalizeSc900Directory({
@@ -518,8 +521,8 @@ test("valid JPEG declared PNG remains a byte-exact draft with both MIME values a
     assert.equal(await readFile(resolve(workspace, originalInput.path), "utf8"), originalInput.content);
     const cli = spawnSync(process.execPath, ["--import", "tsx", resolve("tools/sc900/normalize.ts"),
       "--draft", "--expected-pages", "1", "--expected-occurrences", "1"], { cwd: workspace, encoding: "utf8" });
-    assert.equal(cli.status, 2, cli.stderr);
-    assert.equal(JSON.parse(cli.stdout).verifiedCaptureLedger, false);
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.equal(JSON.parse(cli.stdout).verifiedCaptureLedger, true);
   });
 });
 
@@ -532,7 +535,8 @@ test("draft MIME evidence retains every original declaration when identical imag
   const mismatched = mislabeledJpeg();
   const matched = { ...mislabeledJpeg(secondUrl), contentType: "image/jpeg" };
   const result = normalize([first.raw, second.raw], [mismatched, matched, first.assets[1]!], true);
-  assertBlocked(result, "image-mime");
+  assert.ok(result.verifiedCaptureLedger);
+  assert.ok(result.issues.some(issue => issue.code === "image-mime" && issue.severity === "warning"));
   assert.equal(result.draftDocuments.length, 1);
   assert.equal(doc(result).answers.originalAnswers.length, 2);
   const captured = result.draftAssets.find(asset => asset.id === byteSha256(jpeg()))!;
@@ -545,12 +549,28 @@ test("draft MIME evidence retains every original declaration when identical imag
   const reverseMismatch = manual();
   reverseMismatch.assets[0]!.contentType = "image/jpeg";
   const pngDraft = normalize([reverseMismatch.raw], reverseMismatch.assets, true);
-  assertBlocked(pngDraft, "image-mime");
+  assert.ok(pngDraft.verifiedCaptureLedger);
+  assert.ok(pngDraft.issues.some(issue => issue.code === "image-mime" && issue.severity === "warning"));
   const pngAsset = pngDraft.draftAssets.find(asset => asset.id === byteSha256(png()))!;
   assert.equal(pngAsset.contentType, "image/png");
   assert.deepEqual(pngAsset.sourceResponses, [{
     url: promptUrl, declaredContentType: "image/jpeg", detectedContentType: "image/png",
   }]);
+});
+
+test("MIME correction warnings never certify deferred or failed discussion retrieval", () => {
+  for (const discussionLoad of [{ status: "not-requested" as const }, { status: "failed" as const, httpStatus: 429 }]) {
+    const fixture = manual();
+    fixture.assets[0] = mislabeledJpeg();
+    fixture.raw.discussionLoad = discussionLoad;
+    const result = normalize([fixture.raw], fixture.assets, true);
+    assert.ok(result.issues.some(issue => issue.code === "image-mime" && issue.severity === "warning"));
+    assertBlocked(result, "discussion-unverified");
+    assert.equal(result.counts.confirmedComments, null);
+    assert.equal(result.draftDocuments.length, 1);
+    assert.equal(doc(result).answers.provisional, true);
+    assert.throws(() => normalize([fixture.raw], fixture.assets), Sc900NormalizationError);
+  }
 });
 
 test("draft MIME retention does not rescue corrupt JPEGs, unknown signatures, unsafe MIME or dimension mismatches", () => {

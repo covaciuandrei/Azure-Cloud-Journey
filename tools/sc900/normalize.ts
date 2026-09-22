@@ -24,7 +24,7 @@ import {
   byteSha256, canonicalJson, sc900Hash, sc900OptionId, sc900QuestionId, sc900SourceRevision,
 } from "./canonical.js";
 
-const NORMALIZER_VERSION = "sc900-rendered-ui-2";
+const NORMALIZER_VERSION = "sc900-rendered-ui-3";
 const MAX_PAGE_BYTES = 32 * 1024 * 1024;
 const MAX_INPUT_BYTES = 256 * 1024 * 1024;
 const MAX_ASSET_BYTES = 16 * 1024 * 1024;
@@ -265,7 +265,8 @@ function parseQuestion(
       "image-dimensions", `Captured dimensions disagree with bytes: ${image.currentSrc}`);
     if (decoded.metadata.validation.mime !== "matched") {
       report("image-mime", context,
-        `Declared ${rawAsset.contentType} disagrees with byte-detected ${decoded.metadata.contentType}: ${image.currentSrc}; original bytes retained for draft review only, capture verification blocked`);
+        `Declared ${rawAsset.contentType} disagrees with byte-detected ${decoded.metadata.contentType}: ${image.currentSrc}; verified signature/dimensions determine the normalized type, original bytes and source declarations retained`,
+        "warning");
     }
     const id = byteSha256(decoded.bytes);
     const previous = registry.get(id);
