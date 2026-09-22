@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-information-lifecycle",
+  "title": "Protect school information throughout its life",
+  "summary": "Recognize sensitive information, label it appropriately, reduce risky sharing, and reason about retention and records without confusing any of those controls with backup.",
+  "priority": "core",
+  "priorityReason": "Classification, explorers, sensitivity labels, DLP, records management, and retention are six distinct compliance objectives that must work together without becoming interchangeable buzzwords.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/purview/information-protection",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe the data classification capabilities.",
+    "Describe the benefits of Content explorer and Activity explorer.",
+    "Describe sensitivity labels and sensitivity label policies.",
+    "Describe data loss prevention.",
+    "Describe records management.",
+    "Describe retention policies, retention labels, and retention label policies."
+  ],
+  "lessons": [
+    {
+      "id": "sc-classification-labels-and-explorers",
+      "title": "Recognize the information before choosing protection",
+      "summary": "Distinguish classification, inventory, activity history, and sensitivity labeling using fictional school documents.",
+      "objectives": [
+        "Compare sensitive information types, trainable classifiers, and Exact Data Match.",
+        "Explain the Content explorer objective and its current Data explorer naming.",
+        "Separate an inventory question from an activity-history question.",
+        "Explain sensitivity label metadata, configured protection, publication, and automatic application.",
+        "Distinguish container protection from labeling the items inside it."
+      ],
+      "sections": [
+        {
+          "id": "classification-purpose-and-patterns",
+          "title": "A document's name does not tell the whole story",
+          "blocks": [
+            { "type": "paragraph", "text": "Ana is designing a fictional school document system on paper. One document is a public club timetable, another is a scholarship decision, and a third contains invented student identifiers and invented contact details. Calling all three 'school files' hides important differences. Classification means identifying what information an item contains or what category it belongs to. Protection is the next decision: which safeguards should follow from that classification? Finding a sensitive number does not by itself encrypt the file, block every share, or decide how long the document must be kept." },
+            { "type": "paragraph", "text": "A sensitive information type, often shortened to SIT, detects a defined kind of sensitive information. Built-in types can recognize categories such as financial identifiers or national identification numbers, while custom types can describe an organization's patterns. Detection can combine a primary pattern with supporting keywords, validation such as a checksum, proximity, and confidence levels. A sequence of digits near an appropriate heading is stronger evidence than the same digits inside an unrelated example. Confidence describes detection evidence, not certainty that a person broke a rule. Counts and thresholds can further affect how a policy uses a match." },
+            { "type": "paragraph", "text": "Manual classification uses human understanding of context. A teacher may know a document is a confidential draft even when it contains no recognizable number. A trainable classifier instead learns to recognize a category from examples rather than relying only on a fixed pattern. A category such as an application letter may have varied wording but a recognizable kind of content. Built-in classifiers and supported custom training are different options. Training quality, supported language, content, and feature eligibility matter: a model is not automatically accurate because it was given many files." },
+            { "type": "callout", "tone": "remember", "title": "Outline date and current concepts", "text": "Reviewed September 22, 2026: the mapped English outline is announced for October 21, 2026, still in the future. These lessons teach currently documented concepts and do not claim a verified prior English outline. Real school privacy and retention obligations require authorized advice." }
+          ]
+        },
+        {
+          "id": "classification-edm",
+          "title": "Exact Data Match narrows a specific kind of question",
+          "blocks": [
+            { "type": "paragraph", "text": "Exact Data Match, or EDM, is a specialized way to define a sensitive information type using values from a structured reference table. Imagine an invented table of scholarship applicant codes and matching invented surnames. Ordinary pattern detection asks whether a value looks like an applicant code. EDM can ask whether detected values correspond to entries in the organization's reference data, with configured supporting evidence. This can reduce false positives when many unrelated values have the same shape. It is not a general claim that every file will be compared perfectly against every database." },
+            { "type": "paragraph", "text": "EDM requires an appropriate schema, reference data, and detection rules. The primary field must be discoverable through a suitable sensitive information type; supporting fields and proximity help establish the match. Reference values are prepared with one-way cryptographic hashing before upload, rather than uploading an unprotected source table as the matching database. Hashing here is not reversible encryption and does not make the original data safe to publish. The organization must maintain the reference data and confirm licensing and support for the consuming feature. This lesson uses invented paper rows only, never actual student identifiers." },
+            { "type": "paragraph", "text": "Choose the classifier according to the evidence available. A recognizable number format suggests a pattern-based SIT. A document category expressed in varied language suggests a trainable classifier. A need to recognize specific structured records suggests EDM when its prerequisites fit. These mechanisms can complement each other. None removes the need to test false positives and missed matches before relying on the resulting classification for a restrictive policy." }
+          ]
+        },
+        {
+          "id": "classification-explorers",
+          "title": "WHAT is present versus WHAT HAPPENED",
+          "blocks": [
+            { "type": "paragraph", "text": "The announced SC-900 guide fetched September 22, 2026 still calls this objective Content explorer. Current Microsoft Learn guidance for the classification explorer uses Data explorer. Treat this as a name and context bridge, not as removal of the objective. The classification explorer provides a snapshot of classified or labeled items and their locations. It helps answer 'what sensitive or labeled content is present, and where?' It is not a guarantee of immediate, complete visibility into every file. Supported locations, indexing, encryption, permissions, and update delays can affect what appears." },
+            { "type": "paragraph", "text": "Activity explorer provides historical information about actions involving protected or sensitive content, drawing from audit activity. It helps answer 'what happened?' Examples include applying or downgrading labels and DLP-related activity. An inventory showing twenty labeled documents cannot tell you who changed a label yesterday; an activity view can help investigate that question within its coverage. Conversely, one label-change event does not count all labeled documents currently stored in the school. Current guidance describes up to thirty days in Activity explorer and notes ingestion delays. That view's window is not the retention period for every underlying audit record." },
+            { "type": "paragraph", "text": "Sensitive-content visibility requires particular care. Current Data explorer guidance separates Data Explorer List viewer from Data Explorer Content viewer. The permissions are not cumulative: seeing the list and being allowed to inspect content are separate grants, and item names can themselves require content-viewing permission. Access to the explorer page through a broad administrative role does not automatically provide both abilities. Content-viewing access is powerful because it can supersede ordinary item permissions; encryption and supported-preview limits still matter. Activity explorer also needs appropriate roles. Give reviewers the minimum necessary access and a legitimate purpose, not an unrestricted browsing opportunity." }
+          ]
+        },
+        {
+          "id": "classification-label-protection",
+          "title": "A sensitivity label is persistent metadata with possible protections",
+          "blocks": [
+            { "type": "paragraph", "text": "A sensitivity label expresses a category such as Public or School Confidential. For supported files and emails, the label is stored as persistent metadata, meaning information about the item travels with it through supported handling. The label identifier is not itself a secret: readable metadata lets compatible services recognize the category and apply policy. A label can be configured to add encryption, restrict permitted use, or apply visual markings such as a header or watermark where supported. A label can also classify without adding those protections. The word Confidential alone does not prove encryption is enabled." },
+            { "type": "paragraph", "text": "Encryption-based protection controls access to supported content according to configured rights. A watermark mainly communicates a warning to someone who can see the document; it is not equivalent to preventing an unauthorized reader from opening it. Neither mechanism guarantees control over every photograph, manual transcription, or unsupported conversion. Be precise: persistent labeling is designed to remain with supported content, while the protection outcome depends on the label's settings and the application or service. One item can have a sensitivity label and a retention label because sensitivity and lifecycle answer different questions." },
+            { "type": "paragraph", "text": "Container labels protect supported workspaces such as teams, groups, or SharePoint sites through settings including privacy and external sharing. A label on a school team does not automatically apply item labels, encryption, or watermarks to every document inside it. Protecting the room is different from protecting a paper carried out of the room. A separate file-labeling mechanism may label items, but that must be configured and supported in its own right. Do not confuse a site sensitivity label with a document library's separate default file-labeling capability." }
+          ]
+        },
+        {
+          "id": "classification-publication-and-auto",
+          "title": "Creating, publishing, and automatically applying are different",
+          "blocks": [
+            { "type": "paragraph", "text": "Creating a sensitivity label defines its category and settings. A sensitivity label policy publishes selected labels to users or groups and can set supported defaults, mandatory-labeling behavior, or justification requirements. Publishing makes the label available in the intended experience; it does not automatically inspect and relabel all old documents. A user can manually select a published label when the client, scope, permissions, and licensing support that action. The policy's audience is not the same thing as the people authorized to open an encrypted file." },
+            { "type": "paragraph", "text": "Automatic labeling is a separate capability. Client-side rules can recommend or apply a label while users work in supported Office applications. Service-side auto-labeling policies can process eligible saved SharePoint and OneDrive files and email passing through Exchange Online; the latter is not a blanket scan of all stored mailbox messages. Service-side policies do not present a recommendation for the user to accept, so simulation helps assess their intended matches before enforcement. Existing labels, file formats, application support, locations, and other conditions influence eligibility. Do not promise that publishing a label triggers all of this." },
+            { "type": "paragraph", "text": "Licensing is feature-specific and applies to benefiting users as well as relevant administration. The current service description contains different entries for manual, client-side automatic, service-side automatic, and classifier-related capabilities. Broad summary wording is not enough to decide a school's exact entitlement. The safe fundamentals statement is that basic labeling availability does not prove eligibility for every automation, classifier, or explorer feature. Check the precise method and current plan requirements before implementation. Our paper examples assume eligible features without asserting that every school tenant has them." }
+          ]
+        },
+        {
+          "id": "classification-worked-school",
+          "title": "Choose the evidence, explorer, and protection",
+          "blocks": [
+            { "type": "example", "title": "Three invented documents, three separate decisions", "scenario": "Ana has a public timetable, a fictional scholarship letter, and a fictional applicant table. The task is to identify sensitive content, find where it is stored, and protect appropriate documents. Assume any described production feature would first receive licensing, permission, and privacy review.", "steps": [
+              { "action": "Use the document's meaning to classify the timetable as public and the scholarship letter as confidential; consider a trainable classifier for varied application letters.", "why": "Context matters when the sensitivity cannot be reduced to a number pattern." },
+              { "action": "Compare a pattern-based SIT with an EDM design for the invented applicant codes and supporting fields.", "why": "A format match and a match against known structured records answer different questions and have different prerequisites." },
+              { "action": "Use the classification explorer concept to locate matching items, and Activity explorer concept to investigate a recent label downgrade.", "why": "The first answers WHAT and WHERE; the second answers WHAT HAPPENED. Reviewer visibility must remain scoped." },
+              { "action": "Define a file sensitivity label with the intended protection and publish it to the fictional reviewers.", "why": "The label defines protection while publication controls availability. A manual or separately eligible automatic application still has to occur." },
+              { "action": "Treat the team's container label as a workspace safeguard, then check item protection separately.", "why": "A container label does not automatically encrypt each file that someone might download." }
+            ], "result": "The design explains recognition, visibility, label availability, and applied protection separately. It avoids claiming that one label name or one policy protects everything." },
+            { "type": "diagram", "title": "Classification feeds decisions; it is not the decision", "description": "Detection produces evidence that a policy or person can use. Inventory and activity views answer different questions about the resulting content.", "nodes": [
+              { "id": "life-detect", "label": "Recognize information", "detail": "SIT, EDM, classifier, or human context", "column": 0, "row": 1 },
+              { "id": "life-decide", "label": "Apply suitable controls", "detail": "Label settings and scoped policies", "column": 1, "row": 1 },
+              { "id": "life-inventory", "label": "WHAT is present?", "detail": "Classification explorer snapshot", "column": 2, "row": 0 },
+              { "id": "life-activity", "label": "WHAT HAPPENED?", "detail": "Activity explorer history", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "life-detect", "to": "life-decide", "label": "Evidence informs action" },
+              { "from": "life-decide", "to": "life-inventory", "label": "Observe classified items" },
+              { "from": "life-decide", "to": "life-activity", "label": "Observe supported activity" }
+            ] }
+          ]
+        },
+        {
+          "id": "classification-prediction",
+          "title": "Predict what remains unprotected",
+          "blocks": [
+            { "type": "prediction", "id": "classification-predict-container", "prompt": "A team receives a confidential container label. No file-labeling mechanism is configured. Does a document inside it automatically receive the label's file encryption?", "answer": "No. The container settings do not automatically label or encrypt its individual files.", "explanation": "Workspace access and item protection are separate scopes. Additional supported configuration is needed to apply a file label and its protections." },
+            { "type": "callout", "tone": "exam", "title": "Keep the verbs separate", "text": "Classify means recognize. Publish means make labels available through policy. Apply means attach a label to an item. Encrypt is a configured protection, not an inevitable consequence of a label name. Content explorer in the announced objective maps to the current classification Data explorer, while Activity explorer concerns history." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "classification-check-edm", "kind": "single", "prompt": "The school wants to distinguish known invented applicant codes from unrelated strings of the same format. Which capability best fits when its prerequisites are met?", "choices": [
+          { "id": "classification-edm-fit", "text": "An EDM-based SIT using a maintained structured reference table and supporting evidence.", "explanation": "EDM can compare detected values with known reference records rather than relying only on shape." },
+          { "id": "classification-format-only", "text": "Assume every string of that length belongs to an applicant.", "explanation": "A generic format alone cannot establish membership in the reference data." },
+          { "id": "classification-watermark-fit", "text": "Add a watermark to the folder.", "explanation": "A visual marking does not perform structured data matching." }
+        ], "correctIds": ["classification-edm-fit"], "explanation": "EDM is a qualified detection method, not a guarantee of perfect recognition or a substitute for protected source data." },
+        { "id": "classification-check-explorers", "kind": "single", "prompt": "A reviewer asks where labeled files are stored and who downgraded a label yesterday. Which pairing fits?", "choices": [
+          { "id": "classification-reverse-pair", "text": "Activity explorer is a guaranteed full inventory; Data explorer is the activity timeline.", "explanation": "This reverses the purposes and overstates completeness." },
+          { "id": "classification-right-pair", "text": "Classification Data/Content explorer for the inventory; Activity explorer for the downgrade history.", "explanation": "The first shows classified or labeled items and locations, while the second shows supported activities." },
+          { "id": "classification-no-permission", "text": "Either tool lets any signed-in user inspect all file contents.", "explanation": "Specific roles and content-viewing permissions are required; sign-in alone is insufficient." }
+        ], "correctIds": ["classification-right-pair"], "explanation": "Match WHAT and WHERE to inventory, and WHAT HAPPENED to activity evidence." },
+        { "id": "classification-check-publication", "kind": "single", "prompt": "A label has been created and published to reviewers. What follows without an automatic-labeling policy?", "choices": [
+          { "id": "classification-every-file", "text": "Every file in the tenant immediately gets encrypted.", "explanation": "That confuses availability, application, encryption settings, scope, and timing." },
+          { "id": "classification-readers", "text": "The publication audience automatically becomes every encrypted file's authorized readers.", "explanation": "Label availability and configured content-use rights are separate decisions." },
+          { "id": "classification-available", "text": "Eligible reviewers can use the published label in supported experiences; old files are not thereby all scanned and labeled.", "explanation": "Publication controls availability and policy behavior, not universal retroactive application." }
+        ], "correctIds": ["classification-available"], "explanation": "Creating, publishing, applying, and protecting are distinct stages." },
+        { "id": "classification-check-container", "kind": "single", "prompt": "Which statement correctly describes a sensitivity label on a team or site?", "choices": [
+          { "id": "classification-inherit-all", "text": "Every document inherits the item's encryption and watermark settings automatically.", "explanation": "Container label application does not itself apply item-level labels or protections." },
+          { "id": "classification-container-only", "text": "It can control supported workspace settings without automatically labeling each document.", "explanation": "Container protections and item-level encryption or markings have different scopes." },
+          { "id": "classification-backup", "text": "It creates a backup of the whole workspace.", "explanation": "Sensitivity labels classify and protect; they are not a backup service." }
+        ], "correctIds": ["classification-container-only"], "explanation": "Protect the workspace and the item deliberately rather than assuming inheritance." },
+        { "id": "classification-check-classifier", "kind": "single", "prompt": "Application letters use varied wording and may contain no fixed identifier. Which classification approach recognizes the document category from examples?", "choices": [
+          { "id": "classification-edm-everything", "text": "EDM without any structured reference data or discoverable primary field.", "explanation": "EDM needs those prerequisites and is not a general document-meaning classifier." },
+          { "id": "classification-encryption-detect", "text": "Encryption alone.", "explanation": "Encryption protects information but does not identify its document category." },
+          { "id": "classification-trainable", "text": "A suitable trainable classifier, validated for the content and supported scenario.", "explanation": "It learns category characteristics from examples rather than relying solely on a fixed identifier pattern." }
+        ], "correctIds": ["classification-trainable"], "explanation": "Select a detection method that matches the available evidence and test its quality." }
+      ],
+      "takeaways": [
+        "Classification evidence and protective actions are separate.",
+        "SITs recognize sensitive patterns; trainable classifiers recognize categories; EDM uses qualified structured matching.",
+        "The announced Content explorer objective remains relevant under current Data explorer naming.",
+        "Inventory, activity history, and content-viewing permission answer different questions.",
+        "Sensitivity labels carry metadata and can apply configured protection.",
+        "Publishing a label is not universal auto-labeling, and container labels do not automatically protect each item."
+      ],
+      "sourceIds": ["life-guide", "life-classifiers", "life-edm", "life-explorer", "life-activity", "life-labels", "life-containers", "life-auto", "life-license"]
+    },
+    {
+      "id": "sc-data-loss-prevention",
+      "title": "Reduce risky sharing without breaking legitimate work",
+      "summary": "Reason from sensitive information, location, and user action to a scoped DLP response, including warnings, overrides, and blocking.",
+      "objectives": [
+        "Describe what Microsoft Purview DLP detects and why context matters.",
+        "Distinguish cloud-service, endpoint, and other supported locations.",
+        "Explain policy tips, blocking, overrides, and monitoring.",
+        "State why DLP is not a universal encryption, deletion, or backup tool."
+      ],
+      "sections": [
+        {
+          "id": "dlp-question-and-rule",
+          "title": "The problem is a risky action on information",
+          "blocks": [
+            { "type": "paragraph", "text": "A fictional teacher wants to send a scholarship document to an approved reviewer but accidentally chooses an outside address. The file may be necessary for the legitimate task and inappropriate for that recipient. Data loss prevention, or DLP, helps identify sensitive content and control supported activities that could expose it inappropriately. Here, loss includes losing control of information through disclosure, not only a disk losing its contents. DLP is therefore not a synonym for restoring deleted files. It addresses risky handling of data, using policies that combine detection with context and an action." },
+            { "type": "paragraph", "text": "Read a DLP rule as a sentence: in these locations, if this content and activity meet these conditions, take this supported response. The content condition might use a sensitive information type or a sensitivity label. Context can include external sharing or a particular operation. A threshold can distinguish an isolated match from many matches. Exceptions may allow approved circumstances. The same invented student identifier in a protected internal workflow and in an unapproved public upload need not produce the same outcome. A detector identifies evidence; the rule determines what that evidence means for the stated scenario." },
+            { "type": "paragraph", "text": "This also explains why a label alone is not DLP. A sensitivity label can classify content and apply configured protection. DLP can use that label as a condition when evaluating sharing or use. Conversely, DLP can detect sensitive information even if a user forgot to apply a label, when the location and detection method support it. Neither control is perfect, and they complement access control and user training rather than replacing them. Begin with the intended behavior, not a goal of blocking the largest possible number of actions." }
+          ]
+        },
+        {
+          "id": "dlp-locations-and-endpoints",
+          "title": "A location is part of the rule, not an afterthought",
+          "blocks": [
+            { "type": "paragraph", "text": "Microsoft Purview DLP supports different locations and activity channels, with different prerequisites and actions. Common cloud examples are Exchange Online email, SharePoint, OneDrive, and Teams chat or channel messages. Teams files are stored in underlying SharePoint or OneDrive locations, so protecting chat text and protecting a shared file are not automatically the same policy scope. A rule configured only for Exchange email does not thereby control every file transfer from a teacher's laptop. State exactly which workload and activity the example covers." },
+            { "type": "paragraph", "text": "Endpoint DLP extends supported controls to prepared, onboarded devices and supported operating systems and applications. For example, an organization can monitor or restrict supported copying of sensitive files to removable media, printing, or uploads to certain destinations. The device must be in scope and correctly prepared; feature parity cannot be assumed across every platform and application. An endpoint policy is not proof that a personal, unmanaged laptop has the same controls. Browser, network, connected-app, and other cloud-app scenarios also have their own support and integration requirements." },
+            { "type": "paragraph", "text": "Current DLP documentation includes expanding cloud and web capabilities, some marked preview. Fundamentals does not require treating every new channel as universally available. Licensing can differ between email and file workloads, Teams messages, endpoint features, and additional integrations. The school's planner must check the actual entitlement, configuration, and supported action for the chosen location. A visible DLP page or a rule name that says All sensitive information is not evidence that every destination, device, and file format is protected." }
+          ]
+        },
+        {
+          "id": "dlp-actions-and-overrides",
+          "title": "Warn, restrict, or record according to the scenario",
+          "blocks": [
+            { "type": "paragraph", "text": "Supported DLP responses include recording a match, notifying an administrator, showing a user a policy tip, and blocking a risky activity. A policy tip explains the issue near the user's action so the user can correct a mistake. Depending on the workload and configuration, a block can allow an override with justification or offer no override. An override is a deliberately permitted exception path, not proof that the detector was wrong or the activity was legally approved. Review the reasons and outcomes rather than treating every justification as trustworthy." },
+            { "type": "paragraph", "text": "For our fictional email example, a warning might ask the teacher to check the external recipient. A stricter rule might block sending the message. A justified override might be appropriate for an approved exception if the organization's policy allows it. In a supported endpoint scenario, the response could concern copying to USB rather than sending email. Action availability and user experience depend on location, policy configuration, and client support. Do not say that DLP always deletes the file, always encrypts the message, or always offers an override. Those are not universal DLP semantics." },
+            { "type": "paragraph", "text": "DLP also does not decide a person's intent. A match can reflect a test document, a false positive, an accidental mistake, or deliberate misuse. Alerts help an authorized reviewer investigate; they are not proof of wrongdoing. Policies and alerts can reveal sensitive information, so access to them must be controlled. Good user-facing explanations tell someone how to complete the legitimate task safely, such as choosing the approved reviewer, rather than only saying the action failed. This reduces frustration and makes the policy easier to follow." }
+          ]
+        },
+        {
+          "id": "dlp-test-and-boundaries",
+          "title": "Measure the intended effect before enforcing",
+          "blocks": [
+            { "type": "paragraph", "text": "A production DLP rollout should involve information owners, security staff, privacy staff, and the people whose work is affected. An authorized team can begin with simulation or other supported nonblocking evaluation, inspect matches, and tune conditions before enabling restrictive behavior. In this course that process is a paper design only. Invent both matching and nonmatching examples. If a public club timetable is repeatedly detected as a private application, the rule may be too broad. If obvious invented application data does not match, the detection or scope needs investigation." },
+            { "type": "paragraph", "text": "Test an entire sentence, not merely the existence of a policy. Is the location included? Is the file type supported? Does the content match at the chosen confidence and count? Does the recipient or activity meet the condition? Is an exception applicable? Is the policy in a mode that enforces the expected response? An unchanged result can arise from scope, unsupported processing, propagation delay, or deliberate simulation, not just from a broken product. Monitoring and Activity explorer can help evaluate supported events with suitable permissions and awareness of delay." },
+            { "type": "paragraph", "text": "DLP reduces exposure but is not a recovery plan. If a teacher overwrites a document, DLP does not supply yesterday's version. If a laptop fails, DLP does not rebuild it. Backup and versioning address recovery needs, retention addresses preservation and deletion obligations, and sensitivity labels address classification and configured protection. They may coexist on the same item. A robust design gives each tool a clear job and does not quietly assume that a successful block has created a backup or extended a retention period." }
+          ]
+        },
+        {
+          "id": "dlp-worked-sending",
+          "title": "Design one rule for one understandable mistake",
+          "blocks": [
+            { "type": "example", "title": "The scholarship attachment goes to the wrong address", "scenario": "On paper, a fictional Exchange Online message contains an invented scholarship attachment. Assume a supported detector recognizes the invented sensitive content, the sender and message are in scope, and the intended policy is enforcing. The example authorizes no real email or policy change.", "steps": [
+              { "action": "State the rule intent: prevent this sensitive application from being sent to an unapproved external recipient.", "why": "This names the content, location, and risky activity instead of vaguely demanding that all data loss stop." },
+              { "action": "Compare an approved internal reviewer and an unapproved external address using the same invented attachment.", "why": "Holding content constant shows that recipient context can change the outcome." },
+              { "action": "Choose a supported block with a clear policy tip for the external case, with no override in this particular paper rule.", "why": "The action follows the stated policy. Another policy could allow justification, but that option is not automatic." },
+              { "action": "Record the expected match and alert evidence, then include a public timetable as a nonmatching test.", "why": "The rule should protect the intended data without preventing unrelated legitimate communication." },
+              { "action": "Add a separate endpoint requirement if copying the file to removable media is also a risk.", "why": "An Exchange-only rule does not automatically govern USB operations on laptops." }
+            ], "result": "The design blocks the stated external email scenario under explicit assumptions, preserves a legitimate internal workflow, and identifies the separate endpoint gap." }
+          ]
+        },
+        {
+          "id": "dlp-predict-scope",
+          "title": "Predict a policy's boundary",
+          "blocks": [
+            { "type": "prediction", "id": "dlp-predict-usb", "prompt": "The school has only the Exchange DLP rule described above. A teacher copies a local file to USB on an unmanaged device. Does that email rule establish that the USB operation is blocked?", "answer": "No. The described rule governs the specified email location, not that endpoint operation.", "explanation": "A supported endpoint DLP scenario needs the relevant device preparation, scope, detection, policy action, and licensing. A policy name cannot extend those boundaries." },
+            { "type": "callout", "tone": "exam", "title": "DLP is contextual control, not universal remediation", "text": "Look for sensitive data plus a risky location or activity. DLP can warn, record, restrict, or allow a configured override. It does not universally delete or encrypt matching data, judge guilt, or restore lost files." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "dlp-check-context", "kind": "single", "prompt": "Why can the same sensitive attachment be allowed to an approved reviewer but blocked to an outside address?", "choices": [
+          { "id": "dlp-context-match", "text": "The rule can combine content detection with recipient or sharing context.", "explanation": "DLP evaluates the configured scenario, not only the existence of sensitive text." },
+          { "id": "dlp-random", "text": "DLP makes a random decision whenever a file is labeled.", "explanation": "Policies define conditions, exceptions, and supported responses." },
+          { "id": "dlp-content-changes", "text": "Changing the recipient necessarily removes all sensitive information from the file.", "explanation": "The content can remain the same while authorization and sharing context change." }
+        ], "correctIds": ["dlp-context-match"], "explanation": "State the location, content condition, context, and action together." },
+        { "id": "dlp-check-endpoint", "kind": "single", "prompt": "Which extra reasoning is needed before claiming USB-copy protection?", "choices": [
+          { "id": "dlp-email-covers", "text": "None; an Exchange policy automatically controls every laptop.", "explanation": "Email scope does not automatically cover endpoint operations." },
+          { "id": "dlp-endpoint-prerequisites", "text": "Confirm the supported endpoint scenario, onboarded device, scope, licensing, and action.", "explanation": "Device activity is a distinct supported DLP location with its own prerequisites." },
+          { "id": "dlp-label-name", "text": "Rename the file Sensitive and assume all USB copies stop.", "explanation": "A file name is not an enforcing endpoint policy." }
+        ], "correctIds": ["dlp-endpoint-prerequisites"], "explanation": "Coverage depends on configuration and support, not broad product branding." },
+        { "id": "dlp-check-override", "kind": "single", "prompt": "A supported DLP rule allows a user to override a block with justification. What does that mean?", "choices": [
+          { "id": "dlp-proof-benign", "text": "The system proved the action harmless.", "explanation": "An allowed override does not establish intent, correctness, or lawful processing." },
+          { "id": "dlp-all-overrides", "text": "Every DLP block in every workload must allow the same override.", "explanation": "Override support and behavior depend on workload and configuration." },
+          { "id": "dlp-permitted-exception", "text": "The organization configured an exception path whose use should be reviewed.", "explanation": "The override reflects policy design; justification is evidence to evaluate, not automatic legal approval." }
+        ], "correctIds": ["dlp-permitted-exception"], "explanation": "Do not confuse a permitted exception with a factual or legal verdict." },
+        { "id": "dlp-check-recovery", "kind": "single", "prompt": "A user overwrites a permitted document and needs yesterday's contents. Which statement is correct?", "choices": [
+          { "id": "dlp-not-backup", "text": "DLP is not a backup or version-recovery service.", "explanation": "Its role is to detect and govern risky handling; a separate recovery capability is needed." },
+          { "id": "dlp-restores", "text": "A previous DLP match guarantees a restorable copy.", "explanation": "Detection evidence is not a backup guarantee." },
+          { "id": "dlp-deletes", "text": "DLP always deletes the new file and recreates the old one.", "explanation": "Universal deletion and restoration are not DLP behavior." }
+        ], "correctIds": ["dlp-not-backup"], "explanation": "Protection against inappropriate sharing and recovery from data loss are different requirements." }
+      ],
+      "takeaways": [
+        "A DLP rule combines location, sensitive content, context, and supported response.",
+        "Cloud workloads and endpoint operations need their own supported scope and preparation.",
+        "Warnings and overrides depend on configuration, not universal product behavior.",
+        "Simulation, realistic matching examples, and nonmatching examples help tune a policy.",
+        "DLP is neither proof of guilt nor a backup, universal encryption, or universal deletion tool."
+      ],
+      "sourceIds": ["life-guide", "life-dlp", "life-activity", "life-labels", "life-license"]
+    },
+    {
+      "id": "sc-retention-records-and-lifecycle",
+      "title": "Keep what is required, then dispose of it responsibly",
+      "summary": "Compare retention policies and labels, calculate ordinary retention conflicts, and explain records and disposition with explicit assumptions.",
+      "objectives": [
+        "Distinguish retention policies, retention labels, and publication policies.",
+        "Explain records management and stricter regulatory record restrictions.",
+        "Resolve ordinary retention and deletion conflicts in the correct order.",
+        "Explain holds, timing, disposition review, and proof of disposal.",
+        "Separate preservation obligations from backup and version recovery."
+      ],
+      "sections": [
+        {
+          "id": "retention-purpose-and-scope",
+          "title": "Two lifecycle questions: preserve and delete",
+          "blocks": [
+            { "type": "paragraph", "text": "The fictional school does not need every draft timetable forever, but an approved scholarship decision may need to remain available for an approved period. Retention manages these lifecycle obligations: keep content, delete content when appropriate, or keep it and then delete it. Keeping everything indefinitely can create privacy, discovery, and storage burdens. Deleting everything quickly can destroy required evidence. The correct schedule comes from authorized organizational and legal decisions. All durations in this lesson are invented teaching assumptions, not recommendations for Romanian school records." },
+            { "type": "paragraph", "text": "A retention policy applies settings broadly to supported locations, such as selected sites or mailboxes. Think of rules for the documents within a specified container, rather than a new tag on every item. A retention label applies settings at item level, allowing different documents in the same location to have different lifecycle treatment. One item can be subject to multiple retention policies but has only one retention label at a time. A sensitivity label can coexist because it addresses sensitivity and protection, not the same lifecycle decision." },
+            { "type": "paragraph", "text": "A retention label policy can publish labels so users can select them in supported locations. Other supported policies can automatically apply labels when conditions match, with suitable licensing and prerequisites. Creating a label does not make it appear everywhere, and publishing a label does not prove it has been applied to an item. This repeats a useful distinction from sensitivity labeling: definition, availability, and application are separate. A label applied by an automated mechanism is still an item-level label; 'explicit' in retention precedence does not mean that a human must have clicked it." }
+          ]
+        },
+        {
+          "id": "retention-clocks-and-preservation",
+          "title": "The starting event changes the deadline",
+          "blocks": [
+            { "type": "paragraph", "text": "A period is incomplete without its starting point. Supported retention configurations can use creation or last modification; retention labels can additionally support labeling time or a defined event. An event-based schedule could relate to an approved end of a process rather than when someone first drafted a document. The appropriate options depend on the location and feature. Always write the actual start and end for the item before comparing durations. Five years after a later modification can finish after seven years from an earlier creation." },
+            { "type": "paragraph", "text": "Preservation also differs from keeping a file visibly in its original folder. Depending on the workload and settings, a user can remove an item from their normal view while the service preserves a copy in a protected location. Consequently, 'the user deleted it' does not prove permanent destruction, and 'retention applies' does not always mean every visible delete or edit button is disabled. Records can impose additional restrictions, discussed next. Workload processing and policy propagation introduce delays, so a calculated deadline is an eligibility boundary, not a promise of deletion at a precise second." },
+            { "type": "paragraph", "text": "An eDiscovery hold preserves relevant content for an investigation. Under the ordinary retention principles used here, an active hold prevents permanent deletion through retention policies or labels. Releasing a hold is an authorized case decision, not a classroom task, and it does not automatically cancel another unexpired retention requirement. These examples explicitly exclude exceptional Priority Cleanup. Current documentation describes that separately governed capability as able to override some protections in exceptional circumstances; do not apply an absolute 'nothing can ever override a hold' claim outside the stated ordinary scenario." }
+          ]
+        },
+        {
+          "id": "retention-records-restrictions",
+          "title": "A record is evidence with additional controls",
+          "blocks": [
+            { "type": "paragraph", "text": "Records management organizes important business, legal, or regulatory evidence through its lifecycle. A file plan describes categories and schedules so documents are not treated as a random pile. A retention label can declare an item a record and impose restrictions, log relevant activities, and support proof of disposition. Ordinary retention is therefore not the same as declaring a record. A draft scholarship note and a finalized decision may share a folder while requiring different controls. The declaration should follow the organization's approved recordkeeping process." },
+            { "type": "paragraph", "text": "For supported SharePoint and OneDrive records, locking can prevent content edits while an authorized unlocking and record-versioning workflow can permit certain continued work. This is not identical across workloads: Exchange records do not use that same unlocked-record behavior. Record state, container, and tenant settings influence allowed operations, including property editing and label changes. Do not memorize 'all records can never change in any way' as a universal rule. Understand why controlled evidence is stricter than an ordinary working file, then check the specific record type." },
+            { "type": "paragraph", "text": "A regulatory record imposes stronger restrictions. After that label is applied, even a global administrator cannot simply remove it. The retention period cannot be shortened after the regulatory label is saved; current guidance permits extending it. These labels have special configuration restrictions and are not supported by auto-labeling policies. They should not be created as an experiment or as a quick fix for a folder problem. Stronger immutability can help meet a defined requirement, but unnecessary irreversible restrictions can obstruct legitimate operations. This course performs no record declaration on real data." }
+          ]
+        },
+        {
+          "id": "retention-precedence",
+          "title": "Resolve preservation before deletion",
+          "blocks": [
+            { "type": "paragraph", "text": "For an ordinary item that is not subject to Priority Cleanup, resolve retain actions first. Retention wins over permanent deletion. If several applicable settings preserve the item, preserve it until the latest applicable retention end. This is often summarized as 'the longest retention wins', but compare actual end dates, not just the numbers written in policy names. An active eDiscovery hold also preserves relevant content under this model. Only after preservation requirements have been satisfied can deletion rules determine permanent disposal." },
+            { "type": "paragraph", "text": "Next resolve conflicting delete actions. An item's retention label delete action takes precedence over retention-policy delete actions. If there are only policies, a policy using an adaptive scope or explicitly selected instances takes precedence for deletion over an organization-wide policy for all instances of that location. When competing policies have equal precedence and earlier rules have not resolved the deletion conflict, the earliest applicable deletion deadline wins. These are ordered tie-breakers, not permission to let a short delete-only setting defeat a longer preservation requirement." },
+            { "type": "paragraph", "text": "Consider a separate paper item with no hold and no retain action. It is created on September 1, 2020. An organization-wide delete-only policy says two years, a specific-site delete-only policy says four years, and the applied retention label says delete after five years, all from creation. The label's explicit item delete action wins, giving September 1, 2025 as the governing deadline before processing delay. Without the label, the specific-site policy would govern at September 1, 2024. With two equally scoped policies of four and six years, the four-year deadline would win. No example here uses Priority Cleanup." }
+          ]
+        },
+        {
+          "id": "retention-worked-timeline",
+          "title": "Calculate a preservation timeline without shortcuts",
+          "blocks": [
+            { "type": "example", "title": "The decision cannot disappear just because one clock expires", "scenario": "An invented scholarship decision is created September 1, 2020. Policy A retains it for seven years from creation. Policy B retains it for five years from its last modification on September 1, 2024. Its ordinary retention label says delete after three years from creation. Assume all settings apply, the modification date stays fixed, no disposition review is configured, and exceptional Priority Cleanup is not used.", "steps": [
+              { "action": "Write Policy A's preservation end as September 1, 2027.", "why": "Seven years are counted from creation, not from the day the analyst reads the policy." },
+              { "action": "Write Policy B's preservation end as September 1, 2029.", "why": "Five years after the later modification ends later than seven years after creation." },
+              { "action": "Write the label's delete deadline as September 1, 2023, but do not permanently delete then.", "why": "Preservation takes precedence. The delete action remains subject to the unexpired retention requirements." },
+              { "action": "Identify September 1, 2029 as the earliest ordinary permanent-deletion eligibility date under these assumptions.", "why": "It is the latest preservation end, and the label's delete deadline has already passed. Actual deletion still depends on workload processing." },
+              { "action": "Add a hypothetical investigation hold lasting beyond that date, then remove it from the paper scenario only when the fictional authorized reviewer releases it.", "why": "While active, that hold continues preservation. Release would require checking remaining settings again, not declaring an automatic immediate purge." }
+            ], "result": "The five-year setting determines the later preservation boundary because its clock starts later. A short delete action does not defeat preservation, and a hold can extend it further." }
+          ]
+        },
+        {
+          "id": "retention-disposition-and-proof",
+          "title": "Disposition is a controlled conclusion, not a disappearing icon",
+          "blocks": [
+            { "type": "paragraph", "text": "Disposition means deciding and carrying out the appropriate end-of-life treatment of content. Retention labels can start a disposition review when the retention period ends; retention policies do not supply that label-based review capability. With a configured manual review, designated reviewers can consider disposal, extending the period, or another supported action. Our paper workflow assumes optional automatic approval is disabled. Current guidance includes an optional timeout-based auto-approval setting, so 'a person must always click approval for every disposition' would be too broad. Real configuration must match the organization's authorized process." },
+            { "type": "paragraph", "text": "Records managers need suitable permissions, and viewing document contents during review can need additional content-viewing rights. Assignment as a reviewer is not automatically every required permission. Proof of disposition records what happened to qualifying records or reviewed items, using the service's disposition information and relevant audit evidence. It helps demonstrate that an approved lifecycle was followed. It does not restore the disposed document, prove that every copy on every system vanished, or establish that the original retention schedule was legally correct. Good proof records the decision context without unnecessarily retaining all sensitive content again." },
+            { "type": "example", "title": "Review the final decision on paper", "scenario": "A different invented scholarship decision is declared a record through an appropriate retention label. Its fictional retention period has ended. A manual disposition review is configured, automatic approval and Priority Cleanup are not used, and a records officer must check for other preservation obligations.", "steps": [
+              { "action": "Match the document to its approved file-plan category and confirm the item's actual retention clock.", "why": "A familiar filename is insufficient evidence that the correct schedule has expired." },
+              { "action": "Check holds and other applicable preservation requirements before approving disposal.", "why": "A review does not bypass remaining preservation obligations." },
+              { "action": "Record the authorized decision and later verify the disposition result through appropriate records and audit evidence.", "why": "Approval, deletion eligibility, and completed processing are different events. The school needs evidence of the outcome, not just an empty folder." }
+            ], "result": "The fictional officer can explain why disposal was permitted and what evidence supports its completion without treating the process as a backup." }
+          ]
+        },
+        {
+          "id": "retention-predict-and-recovery",
+          "title": "Preservation is not a recovery promise",
+          "blocks": [
+            { "type": "paragraph", "text": "Backup is designed to recover from loss or damage through a defined restore process. Versioning helps retain versions under its own limits and configuration. Retention preserves or deletes content for lifecycle and compliance purposes, often through workload-specific hidden preservation mechanisms. Even when preserved content can assist an investigation, do not promise that retention provides a full application restore, a convenient point-in-time recovery interface, or indefinite copies of every version. The school should define recovery objectives separately from legal and organizational preservation requirements." },
+            { "type": "prediction", "id": "retention-predict-hold", "prompt": "A label's delete deadline has passed, but the relevant item remains on an active eDiscovery hold. Priority Cleanup is not used. Can the retention label permanently delete the held content now?", "answer": "No. The active hold prevents ordinary permanent deletion of the relevant content.", "explanation": "After authorized hold release, remaining retention settings and workload processing still have to be considered. An expired label deadline alone is insufficient." },
+            { "type": "callout", "tone": "exam", "title": "Different labels, different jobs", "text": "Sensitivity labels classify and can protect. Retention labels set item lifecycle behavior and can declare records. Retention policies cover locations broadly. Label policies publish or automatically apply eligible labels. Ordinary precedence resolves preservation before deletion, while backup and versioning address different recovery needs." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "retention-check-policy-label", "kind": "single", "prompt": "Different document categories share one site but need distinct schedules and possible record declaration. Which concept best matches item-specific treatment?", "choices": [
+          { "id": "retention-sensitivity-only", "text": "A sensitivity label's watermark alone.", "explanation": "A visual sensitivity marking does not define the retention schedule or record declaration." },
+          { "id": "retention-item-label", "text": "Appropriate retention labels applied to the individual items.", "explanation": "Labels provide item-level lifecycle settings and can declare records when configured." },
+          { "id": "retention-publish-equals-apply", "text": "Create a label and assume every item already has it.", "explanation": "Creation, publication, and actual application are distinct." }
+        ], "correctIds": ["retention-item-label"], "explanation": "Choose the scope and capability required by the item, rather than relying on its folder name." },
+        { "id": "retention-check-timeline", "kind": "single", "prompt": "In the worked example, seven years from September 1, 2020 and five years from September 1, 2024 both retain the item. The label deletes after three years from creation. No hold, review, or Priority Cleanup applies. What is the earliest ordinary permanent-deletion eligibility date?", "choices": [
+          { "id": "retention-date-2027", "text": "September 1, 2027, because seven is larger than five.", "explanation": "The starting events differ, so comparing only duration numbers gives the wrong answer." },
+          { "id": "retention-date-2023", "text": "September 1, 2023, because an item label always defeats preservation.", "explanation": "Label precedence for deletion is considered only after preservation requirements are resolved." },
+          { "id": "retention-date-2029", "text": "September 1, 2029, before workload processing delay.", "explanation": "The later modification-based preservation end wins; the label's earlier delete action cannot defeat it." }
+        ], "correctIds": ["retention-date-2029"], "explanation": "Compute actual dates, resolve preservation first, and distinguish eligibility from immediate deletion." },
+        { "id": "retention-check-regulatory", "kind": "single", "prompt": "Which warning matters before applying a regulatory record label?", "choices": [
+          { "id": "retention-regulatory-irreversible", "text": "Even a global administrator cannot simply remove it afterward, and the saved retention period cannot be shortened.", "explanation": "Regulatory records intentionally impose stronger restrictions than ordinary records or standard retention labels." },
+          { "id": "retention-admin-removes", "text": "A global administrator can always remove it for convenience.", "explanation": "That contradicts the regulatory record restriction." },
+          { "id": "retention-auto-always", "text": "All automatic labeling policies can apply regulatory record labels.", "explanation": "Current records guidance explicitly excludes these labels from auto-labeling policies." }
+        ], "correctIds": ["retention-regulatory-irreversible"], "explanation": "Irreversible controls require an established need and authorization, not experimentation." },
+        { "id": "retention-check-disposition", "kind": "single", "prompt": "What is the purpose of disposition review and proof in records management?", "choices": [
+          { "id": "retention-backup-proof", "text": "Guarantee that every deleted record can be restored.", "explanation": "Proof of disposition is evidence of the process, not a retained backup of the document." },
+          { "id": "retention-disposition-accountability", "text": "Support an authorized end-of-life decision and evidence of the resulting disposition.", "explanation": "Review and proof connect the lifecycle decision to an accountable process and outcome." },
+          { "id": "retention-hold-bypass", "text": "Let an ordinary reviewer ignore all active holds.", "explanation": "A routine disposition decision does not bypass remaining preservation requirements." }
+        ], "correctIds": ["retention-disposition-accountability"], "explanation": "A defensible disposal process is different from a recovery process." },
+        { "id": "retention-check-delete-precedence", "kind": "single", "prompt": "An item has no retain action or hold. All periods start at creation. An organization-wide policy deletes after two years, a specific-site policy after four, and its retention label after five. Priority Cleanup is not used. Which delete deadline governs?", "choices": [
+          { "id": "retention-global-two", "text": "The organization-wide two-year deadline because shortest always wins first.", "explanation": "Shortest deletion is a later tie-breaker, not the first rule." },
+          { "id": "retention-site-four", "text": "The specific-site four-year deadline even though the item has a delete label.", "explanation": "Specific policy scope outranks an organization-wide policy, but not the label's delete action." },
+          { "id": "retention-label-five", "text": "The retention label's five-year deadline.", "explanation": "For deletion conflicts after preservation is resolved, an applied item label takes precedence over policy delete actions." }
+        ], "correctIds": ["retention-label-five"], "explanation": "Apply the ordered precedence rules rather than selecting the smallest number." }
+      ],
+      "takeaways": [
+        "Retention policies cover locations; retention labels govern items; publication is not application.",
+        "Write each item's actual retention start and end before comparing periods.",
+        "In ordinary scenarios without Priority Cleanup, preserve before resolving delete actions.",
+        "Records and regulatory records impose different restrictions.",
+        "Disposition review and proof support accountable lifecycle decisions, with configured automation and permission boundaries.",
+        "Deletion eligibility is not instant deletion, and retention is not backup or version recovery."
+      ],
+      "sourceIds": ["life-guide", "life-retention", "life-records", "life-disposition", "life-license"]
+    }
+  ],
+  "glossary": [
+    { "term": "Sensitive information type", "definition": "A detector for a defined kind of sensitive information using patterns and supporting evidence." },
+    { "term": "Trainable classifier", "definition": "A mechanism that recognizes a content category from examples rather than only a fixed pattern." },
+    { "term": "Exact Data Match", "definition": "A qualified SIT method that compares detected values against hashed structured reference data." },
+    { "term": "Content explorer / Data explorer", "definition": "The announced exam name and current classification-explorer name for viewing classified or labeled items and locations." },
+    { "term": "Activity explorer", "definition": "A view of supported historical activities involving sensitive or labeled content, not a complete file inventory." },
+    { "term": "Sensitivity label", "definition": "Persistent classification metadata that can apply configured protections to supported items or workspaces." },
+    { "term": "DLP", "definition": "Data loss prevention: scoped policies that detect sensitive information and govern supported risky handling." },
+    { "term": "Retention policy", "definition": "Lifecycle settings applied broadly to supported locations rather than an item-level label." },
+    { "term": "Retention label", "definition": "Item-level lifecycle settings that can also declare a record or regulatory record." },
+    { "term": "Regulatory record", "definition": "A stricter record whose applied label cannot simply be removed, even by a global administrator." },
+    { "term": "Disposition", "definition": "The controlled end-of-life treatment of content, including review where configured and evidence of the outcome." },
+    { "term": "Hold", "definition": "Preservation for an investigation that blocks ordinary permanent deletion of relevant content while active." },
+    { "term": "Priority Cleanup", "definition": "A separately governed exceptional capability that can override some preservation protections; excluded from this module's ordinary examples." }
+  ],
+  "sources": [
+    { "id": "life-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "Fetched September 22, 2026: announced October 21, 2026 objectives, including the Content explorer name; no prior outline claim." },
+    { "id": "life-classifiers", "url": "https://learn.microsoft.com/en-us/purview/data-classification-overview", "title": "Classifiers overview", "supports": "Manual classification, pattern matching, trainable classifiers, and shared classification concepts." },
+    { "id": "life-edm", "url": "https://learn.microsoft.com/en-us/purview/sit-learn-about-exact-data-match-based-sits", "title": "Exact Data Match based sensitive information types", "supports": "Structured reference data, schema, primary and supporting elements, one-way hashes, and supported scenario qualifications." },
+    { "id": "life-explorer", "url": "https://learn.microsoft.com/en-us/purview/data-classification-data-explorer", "title": "Get started with Data explorer", "supports": "Current explorer naming, snapshot purpose, independent list/content viewer rights, sensitive item-name visibility, and preview/update limitations." },
+    { "id": "life-activity", "url": "https://learn.microsoft.com/en-us/purview/data-classification-activity-explorer", "title": "Get started with Activity explorer", "supports": "Historical label and DLP activity, up to thirty-day view, permissions, audit sources, and ingestion delay." },
+    { "id": "life-labels", "url": "https://learn.microsoft.com/en-us/purview/sensitivity-labels", "title": "Learn about sensitivity labels", "supports": "Persistent metadata, configurable encryption and markings, label scope, publication policies, and coexistence with retention labels." },
+    { "id": "life-containers", "url": "https://learn.microsoft.com/en-us/purview/sensitivity-labels-teams-groups-sites", "title": "Sensitivity labels for collaborative workspaces", "supports": "Container-level settings do not automatically label or encrypt the individual items inside." },
+    { "id": "life-auto", "url": "https://learn.microsoft.com/en-us/purview/apply-sensitivity-label-automatically", "title": "Automatically apply sensitivity labels", "supports": "Client versus service-side methods, simulation, supported content and locations, and Exchange in-transit rather than mailbox-at-rest distinction." },
+    { "id": "life-license", "url": "https://learn.microsoft.com/en-us/office365/servicedescriptions/microsoft-365-service-descriptions/microsoft-365-tenantlevel-services-licensing-guidance/microsoft-purview-service-description", "title": "Microsoft Purview service description", "supports": "Feature-specific licensing and benefiting-user requirements; no inferred all-feature entitlement from a portal or broad SKU summary." },
+    { "id": "life-dlp", "url": "https://learn.microsoft.com/en-us/purview/dlp-learn-about-dlp", "title": "Learn about data loss prevention", "supports": "Locations, supported cloud and endpoint scenarios, policy tips, configured overrides, blocking, and planning before enforcement." },
+    { "id": "life-retention", "url": "https://learn.microsoft.com/en-us/purview/retention", "title": "Retention policies and retention labels", "supports": "Scope, labels and policies, retention starts, ordered precedence, holds, processing delay, and exceptional Priority Cleanup qualification." },
+    { "id": "life-records", "url": "https://learn.microsoft.com/en-us/purview/records-management", "title": "Learn about records management", "supports": "File plans, record declaration, workload-specific locked/unlocked behavior, regulatory record restrictions, and disposition evidence." },
+    { "id": "life-disposition", "url": "https://learn.microsoft.com/en-us/purview/disposition", "title": "Disposition of content", "supports": "Label-based review, reviewer and content permissions, optional automatic approval, processing delay, and proof of disposition." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: protect and retire invented documents",
+    "purpose": "Practice classification, DLP scope, retention dates, and disposition without touching real information.",
+    "prerequisites": ["Paper or an offline blank document.", "Three invented titles: Club Timetable, Scholarship Draft, and Final Decision.", "No real names, identifiers, student records, tenant access, or policy permissions."],
+    "costWarning": "This paper exercise has no cloud cost or license requirement. It does not authorize a portal visit, trial, policy deployment, record declaration, content inspection, or deletion.",
+    "steps": [
+      "Assign a sensitivity category to each invented document and explain whether pattern or contextual classification fits.",
+      "Write one WHAT question for the classification explorer and one WHAT HAPPENED question for Activity explorer.",
+      "Separate the file label, the publication audience, and the people permitted to open an encrypted file.",
+      "Write an Exchange-only DLP rule with an external-recipient condition and a supported hypothetical response.",
+      "Name a USB-copy scenario that the Exchange rule alone does not cover.",
+      "Calculate the September 1, 2027 and September 1, 2029 preservation ends from the worked timeline.",
+      "Add and remove an invented hold on paper, always excluding Priority Cleanup and making no real changes.",
+      "Sketch a manual disposition decision with automatic approval disabled and list the evidence needed afterward."
+    ],
+    "expectedResults": ["Classification, labeling, sharing control, preservation, and recovery remain distinct.", "The later preservation end is September 1, 2029 under the stated assumptions.", "No student assumes that a label name, score, or expired deadline authorizes real deletion."],
+    "cleanup": ["Keep only invented notes or discard the paper.", "Do not create real records, upload source tables, activate trials, or change any organization's policies."]
+  }
+}

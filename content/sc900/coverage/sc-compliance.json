@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "domainId": "sc-compliance",
+  "reviewedAt": "2026-09-22",
+  "objectives": [
+    {
+      "objectiveId": "sc-c-01",
+      "lessons": [{
+        "moduleId": "sc-trust-compliance",
+        "lessonId": "sc-trust-privacy-and-evidence",
+        "sectionIds": ["trust-portal-artifacts", "trust-worked-evidence"],
+        "checkpointIds": ["trust-check-assurance", "trust-check-report-limits"],
+        "evidence": "Explains assurance reports, artifacts, service and period scope, access restrictions, and customer responsibility; the scholarship evidence register applies these distinctions and the checks separate provider assurance from school control evidence."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-02",
+      "lessons": [{
+        "moduleId": "sc-trust-compliance",
+        "lessonId": "sc-trust-privacy-and-evidence",
+        "sectionIds": ["trust-ownership-control", "trust-privacy-principles", "trust-worked-evidence"],
+        "checkpointIds": ["trust-check-privacy", "trust-check-transparency"],
+        "evidence": "Teaches customer control, appropriate purpose, transparency, security, contractual duties, and qualified third-party access protections; the school scenario creates a scoped privacy explanation and checks reject unrestricted ownership and legal overclaims."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-03",
+      "lessons": [{
+        "moduleId": "sc-trust-compliance",
+        "lessonId": "sc-purview-compliance-manager-score",
+        "sectionIds": ["manager-current-portal", "manager-worked-improvement"],
+        "checkpointIds": ["manager-check-portal"],
+        "evidence": "Describes the unified Purview entry point, solution purposes, permissions, subscription boundaries, and legacy context; the worked plan selects the current portal and the scored check distinguishes entry from unrestricted content access."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-04",
+      "lessons": [{
+        "moduleId": "sc-trust-compliance",
+        "lessonId": "sc-purview-compliance-manager-score",
+        "sectionIds": ["manager-assessments-controls", "manager-improvement-actions", "manager-worked-improvement"],
+        "checkpointIds": ["manager-check-actions", "manager-check-responsibility"],
+        "evidence": "Explains scoped assessment templates, Microsoft-managed, customer-managed and shared controls, action ownership, implementation, testing, and evidence; the school access-review example and checks apply the responsibility and workflow distinctions."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-05",
+      "lessons": [{
+        "moduleId": "sc-trust-compliance",
+        "lessonId": "sc-purview-compliance-manager-score",
+        "sectionIds": ["manager-score-meaning", "manager-worked-improvement"],
+        "checkpointIds": ["manager-check-score"],
+        "evidence": "Teaches risk-weighted progress, baseline and aggregation qualifications, prioritization, and limits of scope; the worked improvement reports a limited result and the check rejects certification and legal-guarantee interpretations."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-06",
+      "lessons": [{
+        "moduleId": "sc-information-lifecycle",
+        "lessonId": "sc-classification-labels-and-explorers",
+        "sectionIds": ["classification-purpose-and-patterns", "classification-edm", "classification-worked-school"],
+        "checkpointIds": ["classification-check-edm", "classification-check-classifier"],
+        "evidence": "Compares manual context, pattern-based sensitive information types, trainable classifiers, and qualified Exact Data Match; the invented document selection applies each method and checks assess structured matching versus category recognition."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-07",
+      "lessons": [{
+        "moduleId": "sc-information-lifecycle",
+        "lessonId": "sc-classification-labels-and-explorers",
+        "sectionIds": ["classification-explorers", "classification-worked-school"],
+        "checkpointIds": ["classification-check-explorers"],
+        "evidence": "Bridges the announced Content explorer name to current classification Data explorer, contrasts inventory with activity history, and explains sensitive-content permissions; the worked downgrade investigation and check select the correct evidence view."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-08",
+      "lessons": [{
+        "moduleId": "sc-information-lifecycle",
+        "lessonId": "sc-classification-labels-and-explorers",
+        "sectionIds": ["classification-label-protection", "classification-publication-and-auto", "classification-worked-school"],
+        "checkpointIds": ["classification-check-publication", "classification-check-container"],
+        "evidence": "Explains persistent metadata, configured encryption and markings, publication versus eligible automatic application, and container versus item scope; the worked school labeling plan and checks expose availability and inheritance misconceptions."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-09",
+      "lessons": [{
+        "moduleId": "sc-information-lifecycle",
+        "lessonId": "sc-data-loss-prevention",
+        "sectionIds": ["dlp-question-and-rule", "dlp-locations-and-endpoints", "dlp-actions-and-overrides", "dlp-test-and-boundaries", "dlp-worked-sending"],
+        "checkpointIds": ["dlp-check-context", "dlp-check-endpoint", "dlp-check-override", "dlp-check-recovery"],
+        "evidence": "Teaches contextual DLP detection, workload and endpoint prerequisites, supported responses, configured overrides, testing, and recovery limits; the fictional external-email rule demonstrates why scope and content together determine the expected result."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-10",
+      "lessons": [{
+        "moduleId": "sc-information-lifecycle",
+        "lessonId": "sc-retention-records-and-lifecycle",
+        "sectionIds": ["retention-records-restrictions", "retention-disposition-and-proof"],
+        "checkpointIds": ["retention-check-regulatory", "retention-check-disposition"],
+        "evidence": "Explains file plans, record declaration, workload-specific restrictions, regulatory records, disposition review, and proof; the worked records-officer decision checks preservation obligations and distinguishes accountable disposal from backup."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-11",
+      "lessons": [{
+        "moduleId": "sc-information-lifecycle",
+        "lessonId": "sc-retention-records-and-lifecycle",
+        "sectionIds": ["retention-purpose-and-scope", "retention-clocks-and-preservation", "retention-precedence", "retention-worked-timeline"],
+        "checkpointIds": ["retention-check-policy-label", "retention-check-timeline", "retention-check-delete-precedence"],
+        "evidence": "Distinguishes location policies, item labels, publication and application, clock origins, holds, and ordered precedence; the dated worked timeline explicitly excludes Priority Cleanup and checks actual end dates rather than duration names."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-12",
+      "lessons": [{
+        "moduleId": "sc-insider-discovery-audit",
+        "lessonId": "sc-insider-risk-and-investigations",
+        "sectionIds": ["insider-risk-not-guilt", "insider-policies-indicators", "insider-privacy-permissions", "insider-alert-to-case", "insider-worked-triage"],
+        "checkpointIds": ["insider-check-indicator", "insider-check-pseudonym", "insider-check-policy-scope", "insider-check-triage"],
+        "evidence": "Teaches supported indicators, policy scope, pseudonymization, reviewer permissions, triage, and evidence uncertainty; the fictional batch-download investigation tests legitimate explanations before deciding whether a scoped case is justified."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-13",
+      "lessons": [{
+        "moduleId": "sc-insider-discovery-audit",
+        "lessonId": "sc-ediscovery-audit-and-evidence",
+        "sectionIds": ["evidence-current-experience", "evidence-ediscovery-lifecycle", "evidence-permissions-and-interpretation", "evidence-worked-case"],
+        "checkpointIds": ["evidence-check-tool", "evidence-check-unified", "evidence-check-premium", "evidence-check-hold"],
+        "evidence": "Explains current unified eDiscovery, dated classic retirement, case scope, preservation, search, licensed review sets, and controlled export; the disputed-letter case and checks distinguish content evidence from activity and separate lifecycle decisions."
+      }]
+    },
+    {
+      "objectiveId": "sc-c-14",
+      "lessons": [{
+        "moduleId": "sc-insider-discovery-audit",
+        "lessonId": "sc-ediscovery-audit-and-evidence",
+        "sectionIds": ["evidence-two-questions", "evidence-audit-standard-premium", "evidence-permissions-and-interpretation", "evidence-worked-case"],
+        "checkpointIds": ["evidence-check-tool", "evidence-check-audit-duration", "evidence-check-hold"],
+        "evidence": "Compares Audit Standard and Premium activity evidence, user and workload-qualified retention, custom policies, and nonretroactive limits; the worked case queries a supported sharing operation and checks reject universal tenant-wide duration claims."
+      }]
+    }
+  ]
+}

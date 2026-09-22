@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-insider-discovery-audit",
+  "title": "Investigate carefully: risk, content, and activity evidence",
+  "summary": "Use Insider Risk Management, eDiscovery, and Audit for their distinct purposes while protecting privacy and avoiding conclusions that the evidence cannot support.",
+  "priority": "core",
+  "priorityReason": "The three investigation objectives require more than recognizing product names: students must distinguish risk indicators, preserved content, and audit events, including licensing and authorization limits.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/purview/insider-risk-management",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe insider risk management.",
+    "Describe eDiscovery solutions in Microsoft Purview.",
+    "Describe audit solutions in Microsoft Purview."
+  ],
+  "lessons": [
+    {
+      "id": "sc-insider-risk-and-investigations",
+      "title": "A risky pattern is a reason to review, not a verdict",
+      "summary": "Understand how policies and indicators focus a privacy-conscious investigation without treating unusual activity as proof of wrongdoing.",
+      "objectives": [
+        "Describe insider risk and distinguish malicious, accidental, and legitimate activity.",
+        "Explain policy templates, indicators, alerts, triage, and cases.",
+        "Explain pseudonymization, scoped permissions, and proportionate review.",
+        "Select an appropriate investigation step without making an unsupported accusation."
+      ],
+      "sections": [
+        {
+          "id": "insider-risk-not-guilt",
+          "title": "Start with an uncertain observation",
+          "blocks": [
+            { "type": "paragraph", "text": "The fictional school notices many scholarship documents being downloaded through one staff account. Several explanations are possible. An authorized reviewer might be preparing an approved offline meeting pack. Someone might have misunderstood a sharing rule. An account might be compromised, or a person might be deliberately taking information. The observation alone does not select the explanation. Insider risk concerns potentially harmful activity associated with people who have legitimate access or a trusted relationship. It includes inadvertent harm, not only malicious insiders. An investigation must preserve that uncertainty until evidence supports a conclusion." },
+            { "type": "paragraph", "text": "Microsoft Purview Insider Risk Management helps identify, investigate, and respond to potential internal risks by correlating signals. A signal is an observation from an available source. An indicator is a type of activity or condition used in risk evaluation, such as an unusual volume of downloads or a supported transfer activity. Correlation brings relevant observations together so an authorized reviewer can see a pattern rather than isolated events. The service can help prioritize attention, but it does not read a person's mind, establish criminal intent, or issue a legal judgment." },
+            { "type": "callout", "tone": "caution", "title": "Fictional people, real privacy principles", "text": "All people and events here are invented. Do not inspect classmates, staff accounts, real records, or device activity for practice. This module was reviewed September 22, 2026 against current product guidance and the announced October 21, 2026 SC-900 outline; it does not claim that future outline is already effective." }
+          ]
+        },
+        {
+          "id": "insider-policies-indicators",
+          "title": "Policies define which risks to examine",
+          "blocks": [
+            { "type": "paragraph", "text": "An insider risk policy uses a template and configured conditions to define the scenario, included users, relevant indicators, triggers, and detection period. Templates can support scenarios such as data leaks or potential data theft by departing users. A departure-based scenario needs appropriate departure information and supporting configuration; a product name does not automatically supply an accurate human-resources event. Different indicators can require different data sources, device preparation, connectors, or integration with other security services. A policy can only evaluate what its supported signals and scope make available." },
+            { "type": "paragraph", "text": "A triggering event can focus attention on a period of relevant activity rather than treating every ordinary action as suspicious forever. Thresholds and priority content help distinguish routine work from patterns that merit review. Consider a staff member who normally reads a few applications and suddenly downloads a large batch of highly sensitive documents. That pattern may warrant attention, especially with additional relevant indicators. It still needs context: the school might have assigned a legitimate batch-review task. Quantity helps prioritize; it does not turn correlation into proof." },
+            { "type": "paragraph", "text": "Data loss prevention and insider risk are related but not interchangeable. A DLP rule can detect or restrict a particular supported activity involving sensitive information. Insider Risk Management brings signals into a broader risk-review workflow over time. One DLP event might be useful evidence in that workflow, but neither every DLP event nor every policy match requires a disciplinary case. The organization defines proportionate conditions, review procedures, and escalation criteria. Licensing, service availability, permissions, and source readiness must all be checked before claiming a real environment is covered." }
+          ]
+        },
+        {
+          "id": "insider-privacy-permissions",
+          "title": "Protect the person while assessing the risk",
+          "blocks": [
+            { "type": "paragraph", "text": "Insider Risk Management uses privacy-by-design safeguards, including pseudonymized users by default, role-based access, and auditing of relevant operations. Pseudonymization substitutes an identifier in the review experience so analysts need not immediately see a person's ordinary identity. It is not anonymization: authorized workflows and permissions can still connect evidence to a person. A pseudonymized activity history can remain sensitive. Do not export it into an unrestricted school presentation or assume that a hidden display name removes privacy obligations." },
+            { "type": "paragraph", "text": "Separate the authority to configure policies, triage alerts, investigate cases, inspect content, and oversee reviewer activity. The appropriate role group and scope depend on the task. Broad administrative access should not be the default way to solve a missing permission. A reviewer also needs an approved reason to investigate, not merely a technically successful sign-in. For a real school, designated privacy, legal, security, and organizational decision-makers determine the lawful and proportionate process. A fundamentals student learns the distinctions without exercising these powers." },
+            { "type": "paragraph", "text": "Collect only what the approved question requires. If the immediate question concerns an authorized batch download, start with the event, time period, affected data category, and relevant work approval. Opening every private document or revealing identity to a wider audience may be unnecessary. Where a genuine need for content review or identity disclosure emerges, it should follow the authorized process with appropriate permissions and an auditable explanation. Privacy safeguards strengthen investigation quality by limiting speculation, unnecessary disclosure, and uncontrolled reuse of evidence." }
+          ]
+        },
+        {
+          "id": "insider-alert-to-case",
+          "title": "Triage before deeper investigation",
+          "blocks": [
+            { "type": "paragraph", "text": "When supported activity meets policy conditions, an alert can enter a review queue. Triage means deciding what should happen next: dismiss a benign or irrelevant alert with a reason, associate it with an existing case, or open a case for deeper investigation. A case organizes related activity, notes, and review context. Severity helps prioritize work, but a high severity does not replace evidence. Keep separate the time an action occurred, the time it was detected, and the time a reviewer examined it, because delays and different clocks can confuse a timeline." },
+            { "type": "paragraph", "text": "Reviewers examine the pattern, affected information, policy conditions, and legitimate explanations. They should document evidence that weakens a concern as well as evidence that strengthens it. If a download occurred during an approved migration, that context matters. If the account's activity conflicts with the staff member's known work and other security signals suggest compromise, the response might need the security team rather than an accusation against the account owner. An event associated with an account is not always proof of which human controlled the session." },
+            { "type": "paragraph", "text": "Possible outcomes include closing the concern, providing approved guidance or training, coordinating a security response, or escalating for a formally authorized investigation. Integration with eDiscovery can support deeper preservation and content review when required and licensed. Insider risk detection does not automatically authorize legal action, employee monitoring beyond policy, or deletion of evidence. A good resolution states what was established, what remains uncertain, who approved the next step, and how sensitive case material will be handled after the review." }
+          ]
+        },
+        {
+          "id": "insider-worked-triage",
+          "title": "Explain the next action before taking it",
+          "blocks": [
+            { "type": "example", "title": "Two explanations for one download pattern", "scenario": "On paper, a pseudonymized staff account generates an alert for a large download of fictional scholarship records. The invented policy covers this activity and the reviewer has an approved triage role. There is no assumption that the person is guilty or that the alert includes every relevant event.", "steps": [
+              { "action": "Record the alert's policy, time range, affected data category, and observed activity.", "why": "A reproducible observation is more useful than writing 'suspicious teacher' in a note." },
+              { "action": "Check the fictional batch-review approval and compare its scope with the download pattern.", "why": "An authorized task is a plausible alternative explanation that must be evaluated rather than ignored." },
+              { "action": "Keep the pseudonym and limit the case audience unless an authorized need for identity or content review emerges.", "why": "The immediate question can often be assessed without wider disclosure of personal information." },
+              { "action": "If the approval fully explains the activity, document that conclusion; if significant unexplained activity remains, refer it for a scoped case.", "why": "Triage distinguishes an explained alert from a concern needing additional evidence. Neither path requires declaring guilt." },
+              { "action": "Seek authorized preservation and eDiscovery review only if the case needs content evidence or a formal investigation.", "why": "A risk alert, a hold, and a content-review workflow have different purposes and permission requirements." }
+            ], "result": "The review produces a justified next step and preserves uncertainty. It does not turn an account's risk indicator into a judgment about a person's character." },
+            { "type": "diagram", "title": "Signals lead to review, not directly to guilt", "description": "A scoped policy produces alerts for triage. Authorized reviewers decide whether a case and further evidence are necessary.", "nodes": [
+              { "id": "risk-signals", "label": "Supported signals", "detail": "Activity and contextual indicators", "column": 0, "row": 1 },
+              { "id": "risk-triage", "label": "Policy and triage", "detail": "Check scope and explanations", "column": 1, "row": 1 },
+              { "id": "risk-close", "label": "Close with reason", "detail": "Evidence explains the concern", "column": 2, "row": 0 },
+              { "id": "risk-case", "label": "Scoped case", "detail": "Further authorized review needed", "column": 2, "row": 2 }
+            ], "edges": [
+              { "from": "risk-signals", "to": "risk-triage", "label": "Potential risk" },
+              { "from": "risk-triage", "to": "risk-close", "label": "Explained or not relevant" },
+              { "from": "risk-triage", "to": "risk-case", "label": "Unresolved concern" }
+            ] }
+          ]
+        },
+        {
+          "id": "insider-predict-and-distinguish",
+          "title": "Predict what an alert actually establishes",
+          "blocks": [
+            { "type": "prediction", "id": "insider-predict-intent", "prompt": "A high-severity insider risk alert concerns a staff account. No reviewer has examined the approved work schedule or possible account compromise. Has intentional theft been established?", "answer": "No. The alert identifies potential risk under configured conditions.", "explanation": "Authorized review must consider scope, legitimate explanations, account attribution, and supporting evidence. Severity prioritizes review; it does not prove intent." },
+            { "type": "callout", "tone": "exam", "title": "Choose the investigation purpose", "text": "Insider Risk Management correlates indicators and organizes potential internal-risk review. DLP governs supported risky data actions. eDiscovery preserves and reviews relevant content. Audit records supported activities. None of these product names alone supplies a legal verdict or permission to investigate anyone." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "insider-check-indicator", "kind": "single", "prompt": "A large download matches a configured insider risk policy. What is the strongest justified conclusion before review?", "choices": [
+          { "id": "insider-potential-risk", "text": "The activity merits review as a potential risk under the policy.", "explanation": "A policy match is evidence for triage, not a complete explanation of intent or authorization." },
+          { "id": "insider-guilt", "text": "The account owner has definitely stolen data.", "explanation": "Legitimate work, mistakes, and account compromise remain possible explanations." },
+          { "id": "insider-delete-evidence", "text": "The reviewer should immediately delete the source records.", "explanation": "An alert does not authorize destructive action and deletion could damage necessary evidence." }
+        ], "correctIds": ["insider-potential-risk"], "explanation": "Separate observation, interpretation, and authorized action." },
+        { "id": "insider-check-pseudonym", "kind": "single", "prompt": "What does default pseudonymization accomplish?", "choices": [
+          { "id": "insider-anonymous-forever", "text": "It makes reidentification impossible under all circumstances.", "explanation": "Authorized investigation can still associate evidence with a person." },
+          { "id": "insider-privacy-layer", "text": "It reduces immediate identity exposure while allowing authorized investigation workflows.", "explanation": "Pseudonymization is a privacy safeguard, not irreversible anonymity." },
+          { "id": "insider-public-safe", "text": "It makes all activity records safe to publish publicly.", "explanation": "Activity and contextual data can remain sensitive even when ordinary names are hidden." }
+        ], "correctIds": ["insider-privacy-layer"], "explanation": "Protect identity and context throughout the review, not only the display name." },
+        { "id": "insider-check-policy-scope", "kind": "single", "prompt": "The school selects a departure-related risk template. Which assumption is unsafe?", "choices": [
+          { "id": "insider-check-sources", "text": "The team must confirm which indicators and data sources are available.", "explanation": "This is a necessary check, not an unsafe assumption." },
+          { "id": "insider-check-rights", "text": "Licensing, permissions, and privacy authorization must be verified.", "explanation": "These are distinct requirements for a legitimate production use." },
+          { "id": "insider-automatic-hr", "text": "The template alone supplies accurate departure data and every required signal.", "explanation": "Templates need appropriate scope, conditions, and source prerequisites; they do not invent reliable HR information." }
+        ], "correctIds": ["insider-automatic-hr"], "explanation": "A scenario template organizes detection; it does not satisfy all operational prerequisites." },
+        { "id": "insider-check-triage", "kind": "single", "prompt": "The fictional batch-review approval explains the entire download pattern. What is a proportionate triage outcome?", "choices": [
+          { "id": "insider-close-reason", "text": "Document the explanation and close the alert through the approved process.", "explanation": "Triage can resolve an explained concern without unnecessary escalation or disclosure." },
+          { "id": "insider-share-identity", "text": "Publish the person's identity to warn all students.", "explanation": "The evidence does not support an accusation, and broad disclosure is not justified." },
+          { "id": "insider-ignore-context", "text": "Ignore the approval because the alert has a high severity.", "explanation": "Severity helps prioritize review but cannot override relevant evidence." }
+        ], "correctIds": ["insider-close-reason"], "explanation": "Evidence-based review must allow a benign explanation to change the conclusion." }
+      ],
+      "takeaways": [
+        "Insider risk can be malicious or inadvertent, and an alert is not proof of intent.",
+        "Policies combine supported indicators, scope, triggers, and thresholds.",
+        "Pseudonymization reduces identity exposure but is not irreversible anonymity.",
+        "Reviewer roles and legitimate purpose constrain what may be investigated.",
+        "Triage can close an explained concern or lead to a scoped case and authorized escalation."
+      ],
+      "sourceIds": ["risk-guide", "risk-insider", "risk-setup", "risk-ediscovery", "risk-license"]
+    },
+    {
+      "id": "sc-ediscovery-audit-and-evidence",
+      "title": "Preserve content and reconstruct activity without mixing them",
+      "summary": "Describe the current unified eDiscovery lifecycle and distinguish content evidence from Audit Standard and Premium activity records.",
+      "objectives": [
+        "Explain case, hold, search, review, and export in current Purview eDiscovery.",
+        "Distinguish core eDiscovery capabilities from premium review and analysis.",
+        "Explain Audit Standard and Premium with qualified retention and licensing.",
+        "Choose content search or activity search for the question being asked.",
+        "Preserve role, privacy, and legal-approval boundaries throughout evidence handling."
+      ],
+      "sections": [
+        {
+          "id": "evidence-two-questions",
+          "title": "A message and an event about a message are different",
+          "blocks": [
+            { "type": "paragraph", "text": "Suppose the fictional school receives an authorized request to examine a disputed scholarship decision. One question asks what the decision letter said. Another asks whether a supported sharing operation occurred and when. The first needs content evidence. The second needs activity evidence. An email containing the decision is not the same thing as an audit record about sending, accessing, or changing something. A useful investigation might need both, but choosing a tool starts by naming the question and the relevant period, sources, and permissions." },
+            { "type": "paragraph", "text": "Electronic discovery, usually called eDiscovery, identifies and manages electronically stored information for investigations and legal matters. Microsoft Purview eDiscovery supports searches across supported Microsoft 365 sources, organized around cases. Audit records supported user and administrative activities from Microsoft services in a unified audit log. Neither tool guarantees that every possible action or every physical conversation is captured. An investigation must consider coverage, ingestion, indexing, retention, and evidential context. An empty search is not automatically proof that an event or document never existed." }
+          ]
+        },
+        {
+          "id": "evidence-current-experience",
+          "title": "Use the unified experience, not a classic deployment plan",
+          "blocks": [
+            { "type": "paragraph", "text": "As verified on September 22, 2026, the current Microsoft Purview portal provides a unified eDiscovery experience with core and premium features depending on licensing. Content Search capabilities are integrated into eDiscovery, including a system-provided Content Search case for relevant searches. Older lessons often describe Content Search, eDiscovery Standard, and eDiscovery Premium as three separate classic experiences. Those names help interpret historical material, but the current design should not direct a new commercial deployment to those old surfaces." },
+            { "type": "paragraph", "text": "Microsoft's legacy eDiscovery page states that classic experiences retired on August 31, 2025 and limits its remaining legacy guidance to Microsoft 365 operated by 21Vianet. This is a dated, scoped distinction, not a claim that every cloud environment follows identical migration timing. The fundamentals capabilities remain important: search, case management, holds, export, and, where eligible, richer review and analysis. A changed portal experience does not make the eDiscovery objective obsolete." },
+            { "type": "paragraph", "text": "Core capabilities include content search, query conditions, statistics or samples, case management, holds, and export with appropriate rights. Premium capabilities add tools such as review sets, advanced indexing, tagging, and analytics to process and examine larger or more complex collections. A review set holds a known collected copy for controlled review, while a search over a live source can change as content changes. Licensing is feature-specific and must cover the benefiting users and relevant scenario; one investigator's premium subscription is not a blanket entitlement for the whole organization." }
+          ]
+        },
+        {
+          "id": "evidence-ediscovery-lifecycle",
+          "title": "Case, preserve, search, review, deliver",
+          "blocks": [
+            { "type": "paragraph", "text": "A case is an organizing boundary for an investigation's members, data sources, searches, holds, and review work. Start by defining an authorized purpose and the smallest reasonable scope. An eDiscovery hold preserves relevant content in supported locations against ordinary permanent deletion while the investigation needs it. It is not a backup job or a verdict against the people whose content is preserved. Holds require appropriate authority and careful scope, and they must not be created or released as classroom experiments. These examples do not use exceptional Priority Cleanup." },
+            { "type": "paragraph", "text": "Search narrows the content to relevant locations, dates, terms, or other supported conditions. Search statistics and samples help estimate relevance, but a matching keyword is not itself proof that a document answers the case. Reviewers need to consider indexing limitations, protected or unsupported content, and whether the scope was correct. Premium workflows can collect results into a review set, tag relevant items, and use analytics to reduce repetitive review. Analysis assists judgment; it does not replace an authorized person's evaluation of context and relevance." },
+            { "type": "paragraph", "text": "Export delivers a selected package for an approved purpose and recipient. That package creates another sensitive copy, so access, transfer, storage, and later disposal must be controlled. Preserve appropriate records of scope, filters, collection, review, and export so someone can explain where evidence came from and what transformations occurred. Closing a case is also a lifecycle decision: hold release and evidence handling require approval and consideration of other preservation obligations. Searching does not itself preserve the source forever, and exporting does not automatically end the hold." }
+          ]
+        },
+        {
+          "id": "evidence-audit-standard-premium",
+          "title": "Audit answers supported activity questions",
+          "blocks": [
+            { "type": "paragraph", "text": "Microsoft Purview Audit Standard provides searchable records of supported activities, with filters such as date, user, operation, and service, and supports exporting audit results. With an appropriate subscription, auditing is generally enabled by default, but a real investigation must confirm collection and permissions instead of assuming every event is available. Audit events often identify an account, operation, time, and affected object. The exact properties depend on the event and service. An event about accessing an item does not necessarily contain the item's full text or prove what the person understood." },
+            { "type": "paragraph", "text": "The current default for Audit Standard user activity records is 180 days, not the old 90-day default that applied to records generated before October 17, 2023. Audit Premium includes Standard capabilities and adds longer retention, audit retention policies, additional high-value insights or event properties, and higher-bandwidth access to the Office 365 Management Activity API. Do not translate 'Premium' into 'every event from everyone is kept for one year'. The user's assigned entitlement, workload, event category, and applicable retention policy matter." },
+            { "type": "paragraph", "text": "For qualifying licensed users, the Premium default retains audit records from Microsoft Entra ID, Exchange, SharePoint, and OneDrive for one year. Other activity normally remains at the 180-day default unless an applicable supported retention policy changes it. Users without qualifying Premium entitlement and guest users do not acquire that one-year user-activity entitlement merely by belonging to a tenant with some Premium licenses. Custom audit retention policies can take precedence, including shorter retention. Non-user and system-generated categories can have separate rules, so these user examples must not be applied blindly to every record type." },
+            { "type": "paragraph", "text": "Ten-year audit retention is not included automatically in ordinary Premium use. It requires the relevant additional per-user retention entitlement and appropriate policy configuration. Retention decisions are made when records enter the audit pipeline under the applicable licensing and policies. Buying a license today cannot recover an event that has already expired, and changed settings do not retroactively rewrite previously committed items' lifetimes. Audit retention is also not the same as a document's retention label: preserving a letter for years does not automatically preserve every audit event about it for the same period." }
+          ]
+        },
+        {
+          "id": "evidence-permissions-and-interpretation",
+          "title": "Access to evidence is itself sensitive",
+          "blocks": [
+            { "type": "paragraph", "text": "eDiscovery roles govern operations such as searching, reviewing, and exporting; case membership further constrains normal case access. eDiscovery managers and broader administrators are not interchangeable assignments. Audit search also requires appropriate audit permissions. A tenant administrator should not casually grant broad investigation rights merely to help a student learn. Product permission determines technical capability, while legal authority and organizational approval determine whether using it for this purpose is legitimate. Both questions must be answered before real evidence is searched or disclosed." },
+            { "type": "paragraph", "text": "Interpret a log carefully. A recorded operation may reflect an application acting for a user, a compromised account, or an authorized action, depending on the event. Event time, time zone, ingestion delay, and the query's date boundaries affect the result. Missing events can reflect unsupported operations, configuration, expiration, or an incorrect query. Content search has its own limits, including source selection and indexing. Use corroboration and preserve uncertainty rather than converting 'not found in this search' into 'never happened'." },
+            { "type": "paragraph", "text": "An audit query filters events. An eDiscovery content query finds documents, messages, and other supported information. A classification explorer summarizes sensitive or labeled items, while Activity explorer focuses on supported content-related activities within its view window. These tools can overlap in the evidence they use, but their purposes are not identical. A person looking for the wording of a decision should not be sent only to an activity log, and a person asking who performed a supported operation should not be told that a matching document alone supplies that history." }
+          ]
+        },
+        {
+          "id": "evidence-worked-case",
+          "title": "Answer two questions with two evidence paths",
+          "blocks": [
+            { "type": "example", "title": "The disputed fictional decision", "scenario": "An invented authorized school panel asks what a scholarship letter said and whether a supported external-sharing operation occurred during a specified week. Assume relevant supported content and audit records are still available, the case and roles are approved, premium review features are licensed if used, and Priority Cleanup is not used.", "steps": [
+              { "action": "Create a paper case description with the question, time period, relevant sources, members, and approval.", "why": "A case organizes an investigation around a justified scope instead of unrestricted access to everyone's information." },
+              { "action": "Identify the relevant locations for an authorized hold and a content search for the decision letter.", "why": "Preservation and search are different operations. The hold protects relevant source content; the search locates candidate evidence." },
+              { "action": "Review candidate content for relevance, using a premium review set only where eligible, and record the selected evidence.", "why": "A keyword hit is not sufficient judgment, and a collected review set has different properties from a live search." },
+              { "action": "Search Audit for the supported sharing operation within the approved week and inspect the event's account, object, and time.", "why": "The activity question requires event evidence rather than only the text of the letter." },
+              { "action": "Record the users' qualifying audit entitlement, workload, applicable retention, and any gaps before stating the conclusion.", "why": "The existence of Premium somewhere in the tenant does not establish that every user's event remains available." },
+              { "action": "Deliver only the approved content and event evidence through a controlled export process, keeping the hold decision separate.", "why": "Export creates a sensitive copy, and delivering evidence does not automatically authorize hold release or deletion." }
+            ], "result": "The panel can distinguish what the letter said from what a supported activity record shows. Its conclusion states scope and gaps rather than claiming omniscient surveillance or automatic legal proof." }
+          ]
+        },
+        {
+          "id": "evidence-predict-retention",
+          "title": "Predict what an upgrade cannot repair",
+          "blocks": [
+            { "type": "prediction", "id": "evidence-predict-expired", "prompt": "A relevant user's audit record expired under its applicable retention. The school now buys a qualifying Premium entitlement. Does that purchase restore the expired event?", "answer": "No. A new entitlement cannot recreate an expired audit record.", "explanation": "Retention depends on the record's applicable processing-time conditions. Plan coverage and preservation before an investigation needs old evidence." },
+            { "type": "callout", "tone": "exam", "title": "Content, activity, and duration are separate", "text": "eDiscovery supports the case lifecycle for content. Audit supports activity evidence. Standard and Premium differ in retention and advanced capabilities, but user license, workload, policy, and generation time qualify the numbers. A document hold is not automatically an audit-log retention policy." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "evidence-check-tool", "kind": "single", "prompt": "The panel needs the letter's wording and evidence of a supported sharing operation. Which pairing fits?", "choices": [
+          { "id": "evidence-audit-text", "text": "Audit alone must contain the complete letter and every version.", "explanation": "An activity record is not guaranteed to include the full underlying content." },
+          { "id": "evidence-content-and-events", "text": "eDiscovery for relevant content and Audit for the supported activity record.", "explanation": "Content evidence and activity evidence answer different questions." },
+          { "id": "evidence-score-history", "text": "Compliance score proves both the letter's wording and who shared it.", "explanation": "A progress score is neither a content repository nor an event history." }
+        ], "correctIds": ["evidence-content-and-events"], "explanation": "Begin with the requested evidence, then select the appropriate solution." },
+        { "id": "evidence-check-unified", "kind": "single", "prompt": "Which approach matches current commercial eDiscovery guidance reviewed September 22, 2026?", "choices": [
+          { "id": "evidence-classic-new", "text": "Deploy three new classic experiences as the default commercial starting point.", "explanation": "Classic eDiscovery experiences retired August 31, 2025; legacy guidance has a specific 21Vianet scope." },
+          { "id": "evidence-objective-gone", "text": "Ignore eDiscovery because a portal changed.", "explanation": "The capabilities and announced objective remain relevant even though the experience changed." },
+          { "id": "evidence-current-unified", "text": "Use unified eDiscovery in the Purview portal, with features governed by licensing and permissions.", "explanation": "Content Search is integrated, and premium capabilities extend the current case workflow." }
+        ], "correctIds": ["evidence-current-unified"], "explanation": "Bridge historical names to current capabilities rather than teaching a retired deployment." },
+        { "id": "evidence-check-premium", "kind": "single", "prompt": "The case needs a known collected copy for tagging and analytics. Which statement fits?", "choices": [
+          { "id": "evidence-review-set", "text": "A premium review set can support that workflow when appropriately licensed and authorized.", "explanation": "Review sets and richer analysis are premium features distinct from core search and export." },
+          { "id": "evidence-live-static", "text": "Every live-source search is automatically a permanent immutable review set.", "explanation": "Live search results and collected review copies have different behavior." },
+          { "id": "evidence-role-license", "text": "Adding a role automatically purchases premium entitlement for all affected users.", "explanation": "Authorization and licensing are separate requirements." }
+        ], "correctIds": ["evidence-review-set"], "explanation": "Choose the feature needed, then verify entitlement, role, and case scope." },
+        { "id": "evidence-check-audit-duration", "kind": "single", "prompt": "A user has qualifying Audit Premium entitlement. The record is a covered SharePoint user activity, and no custom policy changes the default. Which expectation is correct?", "choices": [
+          { "id": "evidence-ten-universal", "text": "Every event in the tenant is automatically retained for ten years.", "explanation": "Ten-year retention requires additional entitlement and policy, and does not automatically apply to every event." },
+          { "id": "evidence-year-qualified", "text": "The Premium default provides one-year retention for this qualified record.", "explanation": "The question deliberately supplies both the covered workload and qualifying user's entitlement." },
+          { "id": "evidence-all-year", "text": "All guests and unlicensed users now receive the same one-year default.", "explanation": "A tenant having Premium does not remove user-level licensing qualifications." }
+        ], "correctIds": ["evidence-year-qualified"], "explanation": "Retention numbers are meaningful only when the relevant user, workload, and policy assumptions are stated." },
+        { "id": "evidence-check-hold", "kind": "single", "prompt": "The panel exports the approved letter. Does that action alone end the case hold and preserve all related audit events for the document's retention period?", "choices": [
+          { "id": "evidence-export-release", "text": "Yes; every export automatically releases all case holds.", "explanation": "Delivery of evidence is not permission to end preservation." },
+          { "id": "evidence-label-audit", "text": "Yes; the document's retention label automatically controls every audit record about it.", "explanation": "Content lifecycle and audit-record retention are different configurations." },
+          { "id": "evidence-separate-lifecycles", "text": "No. Hold release and audit retention remain separate authorized lifecycle decisions.", "explanation": "Content export neither releases preservation automatically nor changes audit-log retention." }
+        ], "correctIds": ["evidence-separate-lifecycles"], "explanation": "Do not collapse case preservation, content delivery, and event retention into one operation." }
+      ],
+      "takeaways": [
+        "eDiscovery manages relevant content through case, preservation, search, review, and export.",
+        "The current unified experience replaces classic commercial surfaces without removing the underlying concepts.",
+        "Premium features add review and analysis capabilities, not unrestricted authority.",
+        "Audit records supported activities rather than guaranteeing complete content or human intent.",
+        "Audit retention depends on user entitlement, workload, policy, event category, and timing.",
+        "Evidence handling, export, hold release, and privacy approval remain separate responsibilities."
+      ],
+      "sourceIds": ["risk-guide", "risk-ediscovery", "risk-legacy", "risk-ediscovery-permissions", "risk-audit", "risk-audit-retention", "risk-license"]
+    }
+  ],
+  "glossary": [
+    { "term": "Insider risk", "definition": "Potential harm associated with trusted access, including inadvertent and malicious activity." },
+    { "term": "Indicator", "definition": "A supported activity or condition used as evidence in risk evaluation, not proof of intent." },
+    { "term": "Triage", "definition": "Initial review that determines whether to close a concern, associate it with a case, or investigate further." },
+    { "term": "Pseudonymization", "definition": "Replacing ordinary identity display with a substitute identifier while preserving authorized investigation paths." },
+    { "term": "eDiscovery case", "definition": "An organizing boundary for investigation members, sources, searches, preservation, and review." },
+    { "term": "Hold", "definition": "Preservation of relevant content against ordinary permanent deletion during an authorized investigation." },
+    { "term": "Review set", "definition": "A known collected copy used for premium eDiscovery review, tagging, filtering, and analysis." },
+    { "term": "Audit record", "definition": "Evidence of a supported activity with service-specific properties such as account, time, operation, and object." },
+    { "term": "Audit retention policy", "definition": "A policy for event-record lifetime under applicable licensing, distinct from a document's retention label." },
+    { "term": "Evidence provenance", "definition": "The recorded origin, collection scope, and handling history needed to interpret evidence responsibly." }
+  ],
+  "sources": [
+    { "id": "risk-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "Fetched September 22, 2026: announced October 21, 2026 objectives, not an already-effective or verified prior outline." },
+    { "id": "risk-insider", "url": "https://learn.microsoft.com/en-us/purview/insider-risk-management", "title": "Learn about Insider Risk Management", "supports": "Indicators, policies, alerts, triage, cases, privacy-by-design, pseudonymization, and potential malicious or inadvertent risk." },
+    { "id": "risk-setup", "url": "https://learn.microsoft.com/en-us/purview/insider-risk-management-configure", "title": "Get started with Insider Risk Management", "supports": "Subscription, permissions, audit collection, connector, indicator, and policy prerequisites." },
+    { "id": "risk-ediscovery", "url": "https://learn.microsoft.com/en-us/purview/edisc", "title": "Learn about eDiscovery", "supports": "Current unified experience, integrated Content Search, case-centered workflow, core and premium features, and review sets." },
+    { "id": "risk-legacy", "url": "https://learn.microsoft.com/en-us/purview/ediscovery", "title": "Microsoft Purview eDiscovery legacy solutions", "supports": "Explicit August 31, 2025 classic retirement and 21Vianet-specific legacy guidance; not a current commercial deployment manual." },
+    { "id": "risk-ediscovery-permissions", "url": "https://learn.microsoft.com/en-us/purview/edisc-permissions", "title": "Assign permissions in eDiscovery", "supports": "Task-specific roles, case access, and distinction between eDiscovery managers and broader administrators." },
+    { "id": "risk-audit", "url": "https://learn.microsoft.com/en-us/purview/audit-solutions-overview", "title": "Auditing solutions in Microsoft Purview", "supports": "Standard and Premium capabilities, 180-day default, qualifying one-year workloads, ten-year add-on, and non-user category qualifications." },
+    { "id": "risk-audit-retention", "url": "https://learn.microsoft.com/en-us/purview/audit-log-retention-policies", "title": "Manage audit log retention policies", "supports": "User-license qualifications, guest and nonqualifying-user defaults, custom policy precedence, and nonretroactive record lifetimes." },
+    { "id": "risk-license", "url": "https://learn.microsoft.com/en-us/office365/servicedescriptions/microsoft-365-service-descriptions/microsoft-365-tenantlevel-services-licensing-guidance/microsoft-purview-service-description", "title": "Microsoft Purview service description", "supports": "Benefiting-user and feature-specific licensing rather than assumed tenant-wide Premium entitlement." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: two evidence paths and a fair conclusion",
+    "purpose": "Practice triage, preservation reasoning, and content-versus-activity selection without investigating anyone.",
+    "prerequisites": ["Paper or an offline blank document.", "Invented account identifiers, document titles, approvals, and activity times only.", "No real account, tenant, user data, investigation role, or legal operation."],
+    "costWarning": "This paper-only lab has no cloud charges and requires no license or portal access. It does not authorize monitoring, searching, exporting, holding, or deleting real information, and it requires no trial activation.",
+    "steps": [
+      "Invent a batch-download alert for an account called Reviewer-Example, without linking it to a real person.",
+      "Write one legitimate explanation and one unresolved concern that could fit the same observation.",
+      "Document a triage decision and explain why pseudonymization does not make the evidence public.",
+      "Write a fictional case question about a decision letter and identify the content search and preservation steps.",
+      "Write a different question about a supported sharing event and identify the audit filters needed.",
+      "Compare a qualifying Premium user's covered SharePoint event with a guest user's ordinary event under their stated defaults.",
+      "Sketch an approved export package and keep its handling separate from hold release and audit retention.",
+      "State one limitation of the evidence and refuse to infer guilt from the alert alone."
+    ],
+    "expectedResults": ["The risk observation leads to an evidence-based next step, not an accusation.", "Content evidence and activity evidence use separate appropriate tools.", "Retention expectations state their licensing, workload, and policy assumptions."],
+    "cleanup": ["Keep or discard only the invented notes.", "Do not query real logs, disclose identities, activate trials, assign roles, export content, or create or release holds."]
+  }
+}

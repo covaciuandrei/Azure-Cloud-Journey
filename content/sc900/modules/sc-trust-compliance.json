@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "id": "sc-trust-compliance",
+  "title": "Trust and compliance: explain the evidence",
+  "summary": "Separate a provider's assurance evidence from the school's responsibilities, then use Microsoft Purview Compliance Manager to organize improvement rather than promise legal compliance.",
+  "priority": "core",
+  "priorityReason": "The compliance domain requires describing trust, privacy, the Purview portal, Compliance Manager, and compliance score. These concepts explain why a product feature alone cannot make an organization compliant.",
+  "sourceModuleUrl": "https://learn.microsoft.com/en-us/purview/purview",
+  "reviewedAt": "2026-09-22",
+  "officialObjectives": [
+    "Describe the Service Trust Portal offerings.",
+    "Describe the privacy principles of Microsoft.",
+    "Describe the Microsoft Purview portal.",
+    "Describe Compliance Manager.",
+    "Describe the uses and benefits of compliance score."
+  ],
+  "lessons": [
+    {
+      "id": "sc-trust-privacy-and-evidence",
+      "title": "Who controls the school records, and what proves it?",
+      "summary": "Understand privacy commitments and use assurance reports without confusing Microsoft's controls with the school's legal duties.",
+      "objectives": [
+        "Explain ownership, control, transparency, security, and protection against inappropriate third-party access.",
+        "Choose Service Trust Portal evidence for a specific service and time period.",
+        "Separate provider assurance, customer implementation, and legal judgment.",
+        "Recognize that permission to view evidence is different from permission to share it."
+      ],
+      "sections": [
+        {
+          "id": "trust-school-obligations",
+          "title": "Start with a responsibility, not a logo",
+          "blocks": [
+            { "type": "paragraph", "text": "Imagine a Romanian secondary school preparing an online scholarship application. Ana is a student helping draw a proposed system on paper, not an administrator handling real records. Applicants would submit names, contact details, and supporting documents. A teacher needs enough information to assess eligibility. That does not mean every teacher needs every document, or that the school should keep unsuccessful applications forever. Before choosing technology, ask what information is necessary, who may use it, for what purpose, and for how long. These are decisions about people and responsibilities, not just files." },
+            { "type": "paragraph", "text": "Compliance means meeting applicable obligations. Some obligations come from law, others from contracts, standards, or the school's own policies. Security controls can help meet them, but security and compliance are not synonyms. A strongly encrypted archive can still contain information the school had no proper reason to collect. A written privacy policy can sound excellent while a shared folder is open to everyone. Good reasoning connects an obligation to a control, an accountable person, and evidence that the control operates. A certificate without scope cannot replace that chain." },
+            { "type": "callout", "tone": "caution", "title": "Dates and legal boundaries", "text": "This original course was reviewed on September 22, 2026. It maps the announced English SC-900 outline effective October 21, 2026, which is still a future date. No prior English outline snapshot is claimed. The school examples teach product concepts, not Romanian or EU legal advice; authorized legal and privacy staff determine real obligations." }
+          ]
+        },
+        {
+          "id": "trust-ownership-control",
+          "title": "Ownership is not the same as unrestricted use",
+          "blocks": [
+            { "type": "paragraph", "text": "Moving a document into a cloud service does not mean the cloud provider becomes free to use it for any purpose. Microsoft's commercial privacy approach emphasizes customer control of data. The customer chooses supported settings, determines authorized users, and issues instructions within the service agreement. Microsoft processes data to supply and operate the agreed service. The relevant Product Terms and Data Protection Addendum define commitments and processing conditions. A statement such as 'you control your data' belongs within that commercial relationship; it is not a promise that every technical setting or jurisdictional outcome is under the customer's absolute control." },
+            { "type": "paragraph", "text": "The school's control also does not remove the rights of the people described in the records. Owning a spreadsheet is not permission to publish a student's personal circumstances. In a typical school service scenario, the school decides why information is collected and how it is used, while a provider processes information for the agreed service. Exact legal roles depend on the activity and terms. A student's request to correct or remove information must follow the school's approved process, including any applicable preservation obligations, rather than an enthusiastic helper deleting files." },
+            { "type": "paragraph", "text": "Turn control into questions you can answer: who can grant access, who can export records, which sharing options are enabled, and which approved process handles requests? A teacher who can read an application need not be able to change the retention schedule. Similarly, being able to sign in to Microsoft 365 establishes an identity, not authority to view every student's documents. These boundaries let the school use a provider's service without handing every local decision to the provider or every local administrator." }
+          ]
+        },
+        {
+          "id": "trust-privacy-principles",
+          "title": "Make privacy principles concrete",
+          "blocks": [
+            { "type": "paragraph", "text": "Transparency means the customer can understand important facts about collection, processing, location, and access. For the scholarship service, staff should be able to explain which service stores applications, what its contractual location commitments cover, and how access is governed. 'Stored in Europe' by itself does not answer every question about processing, support access, or a person exporting a copy elsewhere. Read the commitment for the named service and data category. An understandable explanation of boundaries is more useful than a sweeping promise that nobody can ever access the data." },
+            { "type": "paragraph", "text": "Security protects confidentiality, integrity, and availability through controls such as access restrictions and encryption in transit and at rest. Confidentiality limits who can read; integrity protects against unauthorized alteration; availability keeps an authorized service usable. Privacy asks additional questions about appropriate collection and use. Encryption is valuable if someone intercepts a transfer, but it does not stop a permitted teacher from intentionally sharing unnecessary information through another route. Provider security and customer decisions must therefore support each other." },
+            { "type": "paragraph", "text": "Strong legal protections and defending data against inappropriate third-party access are also part of Microsoft's privacy approach. Commercial commitments are expressed in enforceable contractual terms, not just a reassuring portal banner. Microsoft's assurance guidance describes sharing when authorized by the customer or required by applicable law and says governments are not given direct, unrestricted access. That is not a claim that lawful disclosure is impossible. Actual handling depends on the request, applicable law, contract, service, and circumstances. The school needs competent privacy and legal advice for a real disclosure decision." },
+            { "type": "paragraph", "text": "Purpose limits matter too. Microsoft's commercial assurance guidance distinguishes processing for service delivery and related operations from using customer data for advertising or user profiling. Do not generalize a commercial service commitment to every consumer product, every optional connected feature, or a separate third-party app. The practical lesson is to identify the precise service and terms. A useful privacy explanation states what the provider commits to, what the customer must configure, and what the customer remains responsible for telling affected people." }
+          ]
+        },
+        {
+          "id": "trust-portal-artifacts",
+          "title": "The Service Trust Portal supplies evidence",
+          "blocks": [
+            { "type": "paragraph", "text": "Microsoft Service Trust Portal is a source of assurance material about Microsoft cloud services. It offers independent audit reports, certifications and related artifacts, Microsoft explanations and whitepapers, and industry or regional resources. Examples include SOC reports, ISO-related documents, and material about business continuity, disaster recovery, penetration-test attestations, and privacy. A SOC report examines specified controls in a defined scope; an ISO certificate also has a defined scope. Neither is a live scan of the school's accounts, and neither says that the school configured its own sharing correctly." },
+            { "type": "paragraph", "text": "Choose evidence by the question it answers. If a procurement reviewer asks how the provider's controls were examined, locate the relevant assurance report. If a teacher asks which student downloaded a file yesterday, the Service Trust Portal is the wrong tool: that needs appropriately authorized activity evidence from the school's environment. Search and filter assurance material by service, subject, and date. Record the report version, period, and limitations. A report for another service or an old period might be useful context but cannot silently become evidence for this purchase." },
+            { "type": "paragraph", "text": "Some material is public; other material requires an organizational sign-in and acceptance of a confidentiality agreement, and restricted documents require suitable permissions. Access to a portal does not grant permission to redistribute its contents to a public class website. An authorized reviewer can use My Library to organize relevant documents and receive update notifications. Reports are periodically replaced, so a good evidence register remembers which version supported a decision. This course needs no report downloads, trial subscription, privileged role, or acceptance of legal terms." }
+          ]
+        },
+        {
+          "id": "trust-worked-evidence",
+          "title": "Build a small evidence chain",
+          "blocks": [
+            { "type": "example", "title": "A scholarship service review on paper", "scenario": "A fictional school board asks two questions: does the proposed provider have relevant assurance evidence, and will scholarship applications be handled appropriately? Ana has only invented document titles and a blank evidence register. No real report or student record is needed.", "steps": [
+              { "action": "Write the proposed service, the information categories, and the decision being assessed.", "why": "A cloud-brand name is too broad. Scope prevents an assurance report for a different service from being mistaken for relevant evidence." },
+              { "action": "Add a placeholder for a current Service Trust Portal report and record its service scope, reporting period, issuer, and restrictions.", "why": "These details explain what the report could establish about Microsoft-managed controls and whether the reviewer may use it." },
+              { "action": "Add a separate school control: only authorized scholarship reviewers may access application evidence.", "why": "The provider's report cannot establish the school's membership decisions. Customer controls need their own owner and evidence." },
+              { "action": "Write a privacy explanation covering purpose, access, storage commitments, and the approved request route.", "why": "Control and transparency concern people as well as technology. Security settings do not by themselves explain why collection is appropriate." },
+              { "action": "Send unresolved legal and contractual questions to the school's designated reviewers in the fictional plan.", "why": "A student can identify missing evidence without making a legal conclusion or authorizing production processing." }
+            ], "result": "The board receives a scoped provider-evidence requirement plus a customer-control plan. It does not receive a claim that Microsoft's certification automatically certifies the school." },
+            { "type": "diagram", "title": "Three different parts of a defensible decision", "description": "Provider assurance and customer evidence support a scoped human review. Neither input independently creates a legal guarantee.", "nodes": [
+              { "id": "trust-provider", "label": "Provider evidence", "detail": "Reports and contractual commitments", "column": 0, "row": 0 },
+              { "id": "trust-customer", "label": "School evidence", "detail": "Access decisions and operating controls", "column": 0, "row": 2 },
+              { "id": "trust-review", "label": "Authorized review", "detail": "Assess obligations, scope, and remaining gaps", "column": 2, "row": 1 }
+            ], "edges": [
+              { "from": "trust-provider", "to": "trust-review", "label": "Supports provider assessment" },
+              { "from": "trust-customer", "to": "trust-review", "label": "Supports customer assessment" }
+            ] }
+          ]
+        },
+        {
+          "id": "trust-predict-boundaries",
+          "title": "Predict what the evidence cannot prove",
+          "blocks": [
+            { "type": "prediction", "id": "trust-predict-certificate", "prompt": "The board obtains a relevant provider assurance report. A teacher then shares the scholarship folder with all students. Does the report establish that this sharing is compliant?", "answer": "No. It is evidence about scoped provider controls, not approval of the school's sharing decision.", "explanation": "The school still needs correct authorization, an appropriate purpose, and evidence of its own operation. A provider's assurance report cannot repair or justify a customer-created disclosure." },
+            { "type": "callout", "tone": "exam", "title": "Evidence source versus operating control", "text": "Service Trust Portal supplies assurance reports and artifacts. It does not automatically configure customer compliance, investigate customer file activity, or issue a legal guarantee. Privacy commitments describe handling and responsibilities; actual duties remain scoped to service, terms, activity, and applicable law." },
+            { "type": "paragraph", "text": "When a question offers several attractive services, identify the requested output first. An independent audit report, a policy recommendation, and a log of a file download are different outputs. Choosing the right one does not require memorizing every portal menu. It requires noticing whether the question concerns trust in a provider, improvement of the customer's controls, or evidence of a particular activity. Keep that distinction when you move into the Purview portal in the next lesson." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "trust-check-assurance", "kind": "single", "prompt": "The fictional school needs a third-party assurance report about controls for a Microsoft cloud service. Which source best matches?", "choices": [
+          { "id": "trust-assurance-source", "text": "Service Trust Portal, checking the report's service scope and period.", "explanation": "This portal publishes assurance reports and related artifacts; scope and date determine relevance." },
+          { "id": "trust-file-history", "text": "A student's recent-file list.", "explanation": "A file list describes local activity, not independently assessed provider controls." },
+          { "id": "trust-score-proof", "text": "A compliance score screenshot alone.", "explanation": "A score summarizes improvement progress, not the contents or scope of a provider audit report." }
+        ], "correctIds": ["trust-assurance-source"], "explanation": "Match provider assurance questions to provider assurance evidence, not to customer activity or scores." },
+        { "id": "trust-check-privacy", "kind": "single", "prompt": "Which explanation best describes customer control of school data?", "choices": [
+          { "id": "trust-control-unlimited", "text": "Owning the spreadsheet permits publishing every student's personal circumstances.", "explanation": "Possession or ownership does not create unrestricted permission to disclose personal information." },
+          { "id": "trust-control-scoped", "text": "The school directs appropriate use within service terms and remains responsible for its own access and privacy decisions.", "explanation": "Control operates within a contractual and legal scope and does not remove the rights of affected people." },
+          { "id": "trust-control-transfer", "text": "Moving records to the cloud transfers all privacy decisions to Microsoft.", "explanation": "The customer still determines its purposes and configures its own use of the service." }
+        ], "correctIds": ["trust-control-scoped"], "explanation": "Customer control and customer responsibility belong together." },
+        { "id": "trust-check-transparency", "kind": "single", "prompt": "Which statement shows useful privacy transparency without overclaiming?", "choices": [
+          { "id": "trust-encryption-alone", "text": "Say only that encryption makes every use lawful.", "explanation": "Encryption helps protect data but cannot establish appropriate purpose or legal compliance." },
+          { "id": "trust-no-disclosure", "text": "Promise that applicable law can never require any disclosure.", "explanation": "Strong protections against inappropriate access are not an absolute promise against lawful disclosure." },
+          { "id": "trust-transparency-scoped", "text": "Explain the named service's processing and location commitments, access controls, and request process.", "explanation": "This gives people meaningful information while preserving the limits of each commitment." }
+        ], "correctIds": ["trust-transparency-scoped"], "explanation": "Clear scope is a strength, not a weakness, in privacy communication." },
+        { "id": "trust-check-report-limits", "kind": "single", "prompt": "A provider report covers the correct service. What additional evidence is needed to assess the school's reviewer-only access rule?", "choices": [
+          { "id": "trust-local-evidence", "text": "Evidence of the school's access configuration and review process.", "explanation": "The school implements and operates this customer control, so its operation needs separate evidence." },
+          { "id": "trust-report-enough", "text": "None; provider assurance automatically covers every customer setting.", "explanation": "That confuses provider-managed controls with customer decisions." },
+          { "id": "trust-public-download", "text": "Publicly upload the restricted report to demonstrate transparency.", "explanation": "Transparency does not override confidentiality restrictions, and publication would not prove customer access controls." }
+        ], "correctIds": ["trust-local-evidence"], "explanation": "Assurance evidence and operating evidence answer different parts of the review." }
+      ],
+      "takeaways": [
+        "Provider assurance supports a scoped assessment, not automatic customer compliance.",
+        "Customer control does not erase the rights of people described in records.",
+        "Privacy combines purpose and transparency with security and contractual protections.",
+        "Check the service, reporting period, and sharing restrictions of each assurance artifact.",
+        "Real legal and privacy decisions belong to authorized specialists, not this paper exercise."
+      ],
+      "sourceIds": ["trust-guide", "trust-stp", "trust-privacy"]
+    },
+    {
+      "id": "sc-purview-compliance-manager-score",
+      "title": "Turn obligations into actions, not a magic score",
+      "summary": "Use the current Microsoft Purview portal as an entry point and explain how assessments, improvement actions, and risk-weighted points support a continuing compliance process.",
+      "objectives": [
+        "Describe the Purview portal and distinguish it from retired compliance experiences.",
+        "Explain assessment templates, controls, improvement actions, and responsibilities.",
+        "Interpret compliance score without treating it as certification or legal advice.",
+        "Choose a justified next action using scope, evidence, and risk."
+      ],
+      "sections": [
+        {
+          "id": "manager-current-portal",
+          "title": "One entry point, different solutions and permissions",
+          "blocks": [
+            { "type": "paragraph", "text": "Microsoft Purview groups capabilities for governing, protecting, and managing data. The current Microsoft Purview portal at purview.microsoft.com is a unified entry point for data governance, data security, and risk and compliance solutions. Think of a school administration building: one entrance can lead to different offices, but entering the building does not authorize every activity inside. Compliance Manager organizes assessments; Information Protection helps classify and label data; Data Loss Prevention helps control risky sharing; eDiscovery supports investigations. The portal is the place to reach these solutions, not a single policy that performs all their jobs." },
+            { "type": "paragraph", "text": "As checked on September 22, 2026, Microsoft's portal documentation calls the older Microsoft Purview compliance portal retired. Do not use an old compliance.microsoft.com screenshot as a new deployment procedure. Classic governance documentation is a separate legacy surface and describes classic services in support mode, not an instruction to create a new classic environment. Likewise, classic eDiscovery experiences retired on August 31, 2025, with legacy guidance separately scoped to Microsoft 365 operated by 21Vianet. The current unified eDiscovery experience is the normal commercial starting point, not three new deployments of classic tools." },
+            { "type": "paragraph", "text": "What a person sees depends on subscription and permissions. A missing solution card can indicate unavailable rights or licensing, not absence of the concept. Roles and scopes constrain tasks and data visibility. Authentication answers who signed in; authorization answers which tasks that identity can perform; licensing answers which capabilities the organization and benefiting users are entitled to use. Neither signing in nor buying a subscription grants unrestricted access to sensitive content. For fundamentals, understand these separate gates rather than learning a fragile sequence of buttons." }
+          ]
+        },
+        {
+          "id": "manager-assessments-controls",
+          "title": "From a requirement to an assessment",
+          "blocks": [
+            { "type": "paragraph", "text": "Compliance Manager helps an organization assess and manage compliance work across its environment. An assessment groups controls for a particular regulation, standard, or policy, with defined services and scope. A control describes a requirement and the people, process, or configuration used to address it. An assessment template provides a structured starting point so the school does not begin with an empty sheet. Available regulatory templates depend on licensing, and organizations can also define custom templates. Selecting a famous standard does not prove it is the only obligation that applies to the school." },
+            { "type": "paragraph", "text": "Separate three responsibility types. Microsoft-managed controls concern what Microsoft implements for its cloud service. Customer-managed controls, called your controls in the product, concern what the organization implements. Shared controls contain responsibilities on both sides. For example, Microsoft can operate service infrastructure safeguards while the school decides which staff may access student applications. A shared responsibility is not half a responsibility that each side can ignore. Determine which part belongs to whom, what evidence already exists, and what remains to be implemented and evaluated." },
+            { "type": "paragraph", "text": "Scope keeps this practical. The school might assess its scholarship document process separately from its public events website because their information and risks differ. An assessment records applicable in-scope services; it is not automatically an examination of every system on campus. A well-chosen template helps organize questions and avoid omissions, but a human still confirms relevance and assumptions. If a requirement needs a procedure outside Microsoft 365, that procedure still matters even when no tenant setting can measure it automatically." }
+          ]
+        },
+        {
+          "id": "manager-improvement-actions",
+          "title": "Give each improvement an owner and evidence",
+          "blocks": [
+            { "type": "paragraph", "text": "An improvement action is a recommended task that helps address a control. Compliance Manager supplies guidance, allows assignment to an owner, tracks implementation and testing status, and stores evidence and notes. Some actions concern technical settings; others concern training, review, or documented procedures. In the school example, 'review scholarship access each term' needs a responsible person, a defined population, a review result, and follow-up for unnecessary access. A tick beside a task name is weak evidence if no one can explain what was actually reviewed." },
+            { "type": "paragraph", "text": "Automation can supply signals for supported actions, but a portal cannot infer every organizational fact. A configured policy might exist without covering the right users. A training document might exist without anybody having received it. Implementation asks whether the control has been put in place; testing asks whether it works for the intended scope. Microsoft-managed actions can show implementation information and audit results, while customer actions still require customer accountability. Evidence should be sufficient and proportionate, not a collection of unrelated student records copied into every assessment." },
+            { "type": "paragraph", "text": "Treat improvement as a cycle. Identify a gap, assign an action, implement it through an authorized process, test it, attach appropriate evidence, and revisit it when people, services, or requirements change. An action can stop being effective even though it was once completed. If the school opens another document location, the access review must include it or explicitly explain why it is out of scope. Compliance Manager coordinates this work; it does not replace change approval, legal interpretation, or a competent assessor." }
+          ]
+        },
+        {
+          "id": "manager-score-meaning",
+          "title": "A score measures progress, not innocence or certification",
+          "blocks": [
+            { "type": "paragraph", "text": "Compliance score combines points associated with improvement actions. Actions have different point values based on their potential to reduce risk, so the score is not simply the percentage of tasks someone clicked. An assessment has its own score, and the overall score accounts for actions across assessments with rules that avoid inappropriate double counting. Microsoft-managed actions contribute as well as customer-managed work. A tenant can therefore have an initial score before its administrators have deliberately completed a new improvement project. The initial Microsoft 365 data protection baseline is a starting assessment, not a legal opinion." },
+            { "type": "paragraph", "text": "The useful question is 'which important, applicable improvement should we do next?' A score can show progress and help prioritize, especially when combined with action details, ownership, and evidence. It cannot establish that every relevant obligation was included, that evidence is accurate, or that a regulator will agree with the organization's interpretation. A high score is not a certification, an audit pass, immunity from incidents, or a legal guarantee. The school must evaluate its controls against its actual environment rather than treating a single number as a substitute for judgment." },
+            { "type": "paragraph", "text": "For a deliberately simplified paper calculation, suppose one assessment contains three distinct applicable actions worth 20, 10, and 5 points. If only the first action meets its completion requirements, the achieved points are 20 of 35, about 57 percent. These are invented classroom weights, not published product values. Completing the five-point action would make 25 of 35, about 71 percent, assuming nothing else changed. This illustrates weighted progress, not the real product's full cross-assessment aggregation rules. Never average assessment percentages and assume the result must equal the tenant's overall score." },
+            { "type": "paragraph", "text": "A rising percentage can even require explanation. Removing an assessment changes what is being measured; it does not remove an obligation in the real world. Two schools with different assessment scopes are not necessarily comparable. Record the assessment set, services, date, and important gaps alongside the number. If a low-point gap could expose vulnerable students in this particular process, address its real risk rather than ignoring it because another action promises more points. The score is an aid to informed prioritization, not a target to manipulate." }
+          ]
+        },
+        {
+          "id": "manager-worked-improvement",
+          "title": "Improve the scholarship process with a reason",
+          "blocks": [
+            { "type": "example", "title": "A scoped assessment and one accountable action", "scenario": "The fictional school has a policy that scholarship applications are available only to appointed reviewers. It wants to organize evidence and improvement work. Ana draws a Purview plan on paper; a real administrator would need appropriate licensing and roles before making any changes.", "steps": [
+              { "action": "Choose Compliance Manager within the current Purview portal as the relevant solution in the drawing.", "why": "The desired output is a structured assessment and action workflow, not a provider report, file classification, or an audit event search." },
+              { "action": "Select an appropriate assessment template conceptually and state that the scholarship service is in scope.", "why": "The template organizes controls, while the explicit boundary prevents the result being presented as an assessment of every school system." },
+              { "action": "Separate provider safeguards from the school's reviewer membership control.", "why": "Microsoft-managed evidence can support the provider side, but cannot tell the school whom it intended to appoint." },
+              { "action": "Assign an invented action to review membership, define a test against the approved reviewer list, and record a redacted result.", "why": "A named owner and a meaningful test provide stronger evidence than a completed checkbox or an unnecessary copy of private applications." },
+              { "action": "Interpret any resulting points as scoped progress and report remaining obligations separately.", "why": "The score supports prioritization but cannot confer certification or decide whether the school's legal duties are fully met." }
+            ], "result": "The plan connects a requirement to an owner, a test, and proportionate evidence. Its conclusion is that one customer control has improved, not that the whole school is legally certified." }
+          ]
+        },
+        {
+          "id": "manager-predict-and-distinguish",
+          "title": "Choose the next question carefully",
+          "blocks": [
+            { "type": "prediction", "id": "manager-predict-score", "prompt": "The school's score rises after several improvement actions are completed. An unassessed paper archive still contains sensitive applications. Does the higher score establish that the archive meets all obligations?", "answer": "No. The archive and its controls still need an appropriate assessment.", "explanation": "Progress within the measured scope cannot prove facts outside it. The school must confirm applicable requirements and evidence for all relevant processes." },
+            { "type": "callout", "tone": "exam", "title": "Four outputs, four meanings", "text": "Purview portal is an entry point. An assessment organizes controls against a standard, regulation, or policy. An improvement action describes work to address a control. Compliance score summarizes risk-weighted progress; it is not certification, legal advice, or a guarantee." },
+            { "type": "paragraph", "text": "If a question asks for the benefit of a score, choose visibility and prioritization, not automatic compliance. If it asks for a place to assign implementation work and track evidence, choose Compliance Manager. If it asks for Microsoft assurance reports, return to Service Trust Portal. Finally, if a task would expose real student content, stop the classroom exercise at the design stage. Product availability does not create permission, and permission does not by itself establish a legitimate reason to investigate a person." }
+          ]
+        }
+      ],
+      "checkpoints": [
+        { "id": "manager-check-portal", "kind": "single", "prompt": "Which description fits the current commercial Microsoft Purview portal?", "choices": [
+          { "id": "manager-unified-entry", "text": "A unified entry point whose visible solutions depend on permissions and subscription.", "explanation": "The portal brings solutions together without removing their authorization or licensing requirements." },
+          { "id": "manager-open-content", "text": "A sign-in that grants every user access to all sensitive documents.", "explanation": "Authentication is not broad authorization to inspect content." },
+          { "id": "manager-classic-start", "text": "An instruction to deploy the retired classic compliance portal for new work.", "explanation": "Current guidance uses the Purview portal; legacy screenshots are not new deployment instructions." }
+        ], "correctIds": ["manager-unified-entry"], "explanation": "A common portal is not a common unrestricted permission." },
+        { "id": "manager-check-actions", "kind": "single", "prompt": "The school needs to assign an owner, record a test, and store evidence for its reviewer-access control. What best matches?", "choices": [
+          { "id": "manager-provider-only", "text": "Mark the provider's assurance report as the school's access review.", "explanation": "Provider evidence cannot demonstrate the school's reviewer membership decisions." },
+          { "id": "manager-action-workflow", "text": "An improvement action within a scoped Compliance Manager assessment.", "explanation": "Improvement actions support ownership, implementation, testing, and evidence." },
+          { "id": "manager-label-only", "text": "Rename the folder Compliant.", "explanation": "A name neither implements the control nor supplies evidence of operation." }
+        ], "correctIds": ["manager-action-workflow"], "explanation": "A customer-managed control needs accountable customer work and relevant evidence." },
+        { "id": "manager-check-score", "kind": "single", "prompt": "What can a higher compliance score reasonably indicate?", "choices": [
+          { "id": "manager-legal-guarantee", "text": "A legal guarantee covering every school process.", "explanation": "The score cannot validate every applicable obligation or out-of-scope process." },
+          { "id": "manager-certification", "text": "Automatic independent certification of the organization.", "explanation": "Certification requires its own applicable assessment process; a product score is not that process." },
+          { "id": "manager-progress", "text": "More progress against scored improvement actions within the assessed scope.", "explanation": "This is the intended meaning, subject to the scope and scoring rules." }
+        ], "correctIds": ["manager-progress"], "explanation": "Use the score to prioritize and track improvements, not to replace evaluation." },
+        { "id": "manager-check-responsibility", "kind": "single", "prompt": "Microsoft operates service safeguards, while the school chooses its scholarship reviewers. Which interpretation is sound?", "choices": [
+          { "id": "manager-separate-duties", "text": "Provider and customer responsibilities must each have appropriate evidence.", "explanation": "A shared outcome can depend on distinct controls operated by different parties." },
+          { "id": "manager-all-provider", "text": "All controls become Microsoft-managed because the files are in Microsoft 365.", "explanation": "The location of files does not transfer the school's access decisions." },
+          { "id": "manager-all-customer", "text": "Provider assurance is irrelevant because the school owns the data.", "explanation": "Provider controls still affect the service and remain part of a scoped assessment." }
+        ], "correctIds": ["manager-separate-duties"], "explanation": "Responsibility follows the control and its operator, not just the product name." }
+      ],
+      "takeaways": [
+        "Use the current Purview portal and distinguish access, permission, and licensing.",
+        "Assessments organize controls within a stated scope.",
+        "Improvement actions connect implementation, testing, ownership, and evidence.",
+        "Microsoft-managed, customer-managed, and shared responsibilities remain distinct.",
+        "Compliance score is weighted progress, not certification or a legal guarantee."
+      ],
+      "sourceIds": ["trust-guide", "trust-purview", "trust-portal", "trust-manager", "trust-scoring", "trust-license", "trust-classic-governance", "trust-classic-ediscovery"]
+    }
+  ],
+  "glossary": [
+    { "term": "Assurance", "definition": "Evidence that supports confidence in specified controls within a defined scope and period." },
+    { "term": "Service Trust Portal", "definition": "Microsoft's source of cloud-service assurance reports, certifications, whitepapers, and related artifacts." },
+    { "term": "Privacy", "definition": "Appropriate handling of information about people, including purpose, transparency, control, and safeguards." },
+    { "term": "Control", "definition": "A requirement and the organizational or technical measures used to address it." },
+    { "term": "Assessment", "definition": "A scoped grouping of controls against a regulation, standard, or policy." },
+    { "term": "Improvement action", "definition": "Recommended work that can be assigned, implemented, tested, and supported with evidence." },
+    { "term": "Compliance score", "definition": "A risk-weighted measure of progress on improvement actions, not a legal verdict or certification." },
+    { "term": "Shared control", "definition": "A control whose implementation includes responsibilities for both Microsoft and the customer." }
+  ],
+  "sources": [
+    { "id": "trust-guide", "url": "https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/sc-900", "title": "SC-900 study guide", "supports": "Fetched September 22, 2026: announced objectives effective October 21, 2026, not a verified prior outline." },
+    { "id": "trust-stp", "url": "https://learn.microsoft.com/en-us/purview/get-started-with-service-trust-portal", "title": "Get started with Service Trust Portal", "supports": "Assurance reports, artifacts, service/date filtering, My Library, sign-in, confidentiality, and restricted access." },
+    { "id": "trust-privacy", "url": "https://learn.microsoft.com/en-us/compliance/assurance/assurance-privacy", "title": "Privacy and data management overview", "supports": "Commercial customer control, transparency, security, processing purposes, contractual scope, and third-party access protections." },
+    { "id": "trust-purview", "url": "https://learn.microsoft.com/en-us/purview/purview", "title": "Learn about Microsoft Purview", "supports": "Governance, security, and compliance solution families in the current unified platform." },
+    { "id": "trust-portal", "url": "https://learn.microsoft.com/en-us/purview/purview-portal", "title": "Microsoft Purview portal", "supports": "Current entry point, relocated features, retired compliance portal, permissions and subscriptions." },
+    { "id": "trust-manager", "url": "https://learn.microsoft.com/en-us/purview/compliance-manager", "title": "Microsoft Purview Compliance Manager", "supports": "Assessments, regulatory templates, responsibility types, improvement actions, and baseline score." },
+    { "id": "trust-scoring", "url": "https://learn.microsoft.com/en-us/purview/compliance-manager-scoring", "title": "Compliance Manager scoring", "supports": "Risk-weighted progress, assessment and overall aggregation distinctions, and explicit no-guarantee warning." },
+    { "id": "trust-license", "url": "https://learn.microsoft.com/en-us/office365/servicedescriptions/microsoft-365-service-descriptions/microsoft-365-tenantlevel-services-licensing-guidance/microsoft-purview-service-description", "title": "Microsoft Purview service description", "supports": "Feature-specific and benefiting-user licensing qualifications; portal access is not universal entitlement." },
+    { "id": "trust-classic-governance", "url": "https://learn.microsoft.com/en-us/purview/legacy/use-microsoft-purview-governance-portal", "title": "Classic Microsoft Purview governance portal", "supports": "Classic governance services in support mode and current-portal guidance for new customers; no invented universal retirement date." },
+    { "id": "trust-classic-ediscovery", "url": "https://learn.microsoft.com/en-us/purview/ediscovery", "title": "Microsoft Purview eDiscovery legacy solutions", "supports": "August 31, 2025 classic eDiscovery retirement and the explicit 21Vianet scope of legacy guidance." }
+  ],
+  "lab": {
+    "title": "Optional paper lab: a defensible scholarship decision",
+    "purpose": "Connect an invented obligation to provider evidence, customer work, and a limited progress claim.",
+    "prerequisites": ["Paper or an offline blank document.", "Only invented school names and document titles; no real records, accounts, or assurance downloads."],
+    "costWarning": "The paper exercise costs nothing and needs no tenant or privileged role. No portal visit, trial, subscription, legal agreement, or production change is required or authorized.",
+    "steps": [
+      "Draw a school scholarship service and list three invented information categories.",
+      "Write one privacy question and one provider-assurance question, keeping them separate.",
+      "Create a report placeholder with fields for service, period, issuer, and sharing restrictions.",
+      "Write a customer control about reviewer access and name an imaginary accountable owner.",
+      "Describe a test using invented reviewer names and a redacted evidence summary.",
+      "Calculate 20 of 35 paper points, then write why this is neither a product score formula nor legal certification.",
+      "Explain how the conclusion changes if another archive is outside the assessment scope."
+    ],
+    "expectedResults": ["Provider assurance and customer evidence are not mixed.", "The action has an owner, test, and limited conclusion.", "The score statement describes scoped progress rather than guaranteed compliance."],
+    "cleanup": ["Discard or keep only the invented paper example.", "Do not upload real reports or student information, and do not create trials or grant roles."]
+  }
+}
